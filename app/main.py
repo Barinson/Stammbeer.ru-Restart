@@ -17,9 +17,12 @@ from app.integrations.moysklad.settings_service import (
     serialize_settings,
     test_saved_connection,
 )
-from app.modules.admin.views import dashboard, login_page, moysklad_settings_page, page, placeholder
+from app.modules.admin.views import dashboard, login_page, moysklad_settings_page, page, placeholder, profile_page
+from app.modules.catalog.service import public_catalog
+from app.modules.public_views import business_storefront_page
 from app.modules.auth.service import (
     authenticate,
+    change_password,
     cookie_header,
     create_session,
     current_user,
@@ -94,7 +97,15 @@ class StammApp:
                     self.send_json({"ok": True, "app": app.settings.app_name})
                     return
                 if path == "/":
-                    self.send_html(page("Stamm Brewing", "<main class='login'><div class='card'><h1>Stamm Brewing</h1><p>Public frontend foundation. B2B catalog will read only local DB/read-model.</p><p><a class='button' href='/admin'>Admin</a></p></div></main>"))
+                    self.send_html(page("Stamm Brewing", "<main class='login'><div class='card'><h1>Stamm Brewing</h1><p>Public frontend foundation. B2B catalog reads only local DB/read-model.</p><p><a class='button' href='/business'>Бизнес-каталог</a> <a class='button' href='/admin'>Admin</a></p></div></main>"))
+                    return
+                if path in {"/business", "/business/catalog"}:
+                    self.send_html(business_storefront_page())
+                    return
+                if path == "/api/public/business/catalog":
+                    query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                    catalog = public_catalog(app.conn, query.get("containerType", [None])[0])
+                    self.send_json(catalog)
                     return
                 if path == "/admin/login":
                     self.send_html(login_page())
@@ -130,6 +141,10 @@ class StammApp:
                         return
                     if path == "/admin/users":
                         self.send_html(placeholder("Пользователи и роли", "Здесь будут пользователи, роли, permissions и журнал действий.", user["email"]))
+                        return
+                    if path == "/admin/profile":
+                        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                        self.send_html(profile_page(user["email"], result=query.get("result", [None])[0], error=query.get("error", [None])[0]))
                         return
                 self.send_html(page("404", "<main class='login'><div class='card'>Страница не найдена.</div></main>"), HTTPStatus.NOT_FOUND)
 
@@ -171,6 +186,20 @@ class StammApp:
                             self.redirect("/admin/moysklad?error=" + urllib.parse.quote(result.message))
                         return
                     self.redirect("/admin/moysklad?result=" + urllib.parse.quote("Настройки сохранены"))
+                    return
+                if path == "/admin/profile/password":
+                    user = self.require_admin()
+                    if user is None:
+                        return
+                    form = self.read_form()
+                    new_password = form.get("new_password", "")
+                    confirm = form.get("new_password_confirm", "")
+                    if new_password != confirm:
+                        self.redirect("/admin/profile?error=" + urllib.parse.quote("Новый пароль и подтверждение не совпадают"))
+                        return
+                    ok, message = change_password(app.conn, user["id"], form.get("current_password", ""), new_password)
+                    query_key = "result" if ok else "error"
+                    self.redirect(f"/admin/profile?{query_key}=" + urllib.parse.quote(message))
                     return
                 self.send_json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
 

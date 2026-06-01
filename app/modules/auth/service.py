@@ -3,9 +3,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from http.cookies import SimpleCookie
-from typing import Any
-
-from app.modules.auth.security import new_session_id, verify_password
+from app.modules.auth.security import hash_password, new_session_id, verify_password
 
 SESSION_COOKIE = "stamm_admin_session"
 SESSION_DAYS = 7
@@ -29,6 +27,17 @@ def authenticate(conn: sqlite3.Connection, email: str, password: str) -> sqlite3
     conn.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (iso(utc_now()), user["id"]))
     conn.commit()
     return user
+
+
+def change_password(conn: sqlite3.Connection, user_id: int, current_password: str, new_password: str) -> tuple[bool, str]:
+    user = conn.execute("SELECT * FROM users WHERE id = ? AND status = 'active'", (user_id,)).fetchone()
+    if not user or not verify_password(current_password, user["password_hash"]):
+        return False, "Текущий пароль указан неверно"
+    if len(new_password) < 1:
+        return False, "Новый пароль не может быть пустым"
+    conn.execute("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", (hash_password(new_password), iso(utc_now()), user_id))
+    conn.commit()
+    return True, "Пароль обновлён"
 
 
 def create_session(conn: sqlite3.Connection, user_id: int) -> str:

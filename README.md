@@ -21,12 +21,20 @@ python3 -m app.main
 Dev admin credentials задаются переменными окружения:
 
 ```bash
-export ADMIN_EMAIL=admin@stamm.local
-export ADMIN_PASSWORD=change-me
+export ADMIN_EMAIL=admin
+export ADMIN_PASSWORD=1
 python3 -m app.main
 ```
 
-Если переменные не заданы, используются dev-only значения `admin@stamm.local` / `stamm-admin`.
+Если переменные не заданы, используются dev-only значения `admin` / `1`. Сменить пароль можно в админке: `Профиль` → `Смена пароля`.
+
+
+## Первый публичный storefront
+
+- Страница магазина: `http://127.0.0.1:8000/business` или `/business/catalog`.
+- Локальный API каталога: `GET /api/public/business/catalog`.
+- Фильтры: `containerType=all|keg|can`; публичная страница использует только локальную read-model `business_catalog_items` и не делает live-запросы в МойСклад.
+- Если локальная read-model пустая, storefront показывает пустое состояние без предложения пользователю запускать синхронизацию.
 
 ## Проверки
 

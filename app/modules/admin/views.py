@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from html import escape
-from typing import Iterable
-
 NAV_ITEMS = [
     ("/admin", "Dashboard"),
     ("/admin/catalog", "Каталог"),
@@ -10,6 +8,7 @@ NAV_ITEMS = [
     ("/admin/b2b-orders", "B2B-заявки"),
     ("/admin/content", "Контент"),
     ("/admin/users", "Пользователи и роли"),
+    ("/admin/profile", "Профиль"),
 ]
 
 
@@ -68,8 +67,8 @@ def login_page(error: str | None = None) -> str:
             <p class="muted">Защищённая зона управления сайтом.</p>
             {message}
             <form method="post" action="/admin/login">
-              <label>Email</label>
-              <input name="email" type="email" required autofocus>
+              <label>Логин</label>
+              <input name="email" type="text" required autofocus>
               <label>Пароль</label>
               <input name="password" type="password" required>
               <p><button type="submit">Войти</button></p>
@@ -132,6 +131,34 @@ def moysklad_settings_page(user_email: str, settings: dict[str, object], result:
           <p>Последняя успешная синхронизация: <strong>{escape(str(settings.get('lastSuccessAt') or 'ещё не выполнялась'))}</strong></p>
           <p>Последняя ошибка: <strong>{escape(str(settings.get('lastErrorAt') or 'нет'))}</strong></p>
           <p class="muted">Публичный раздел «Бизнес» не использует эти настройки напрямую и будет читать только локальную read-model.</p>
+        </div>
+        """,
+        user_email,
+    )
+
+
+def profile_page(user_email: str, result: str | None = None, error: str | None = None) -> str:
+    notice = ""
+    if result:
+        notice = f"<div class='success'>{escape(result)}</div>"
+    if error:
+        notice = f"<div class='error'>{escape(error)}</div>"
+    return page(
+        "Профиль",
+        f"""
+        <div class="card">
+          <h3>Смена пароля</h3>
+          <p class="muted">Локальный dev-admin может сменить пароль без изменения переменных окружения.</p>
+          {notice}
+          <form method="post" action="/admin/profile/password">
+            <label>Текущий пароль</label>
+            <input name="current_password" type="password" required>
+            <label>Новый пароль</label>
+            <input name="new_password" type="password" required>
+            <label>Подтверждение нового пароля</label>
+            <input name="new_password_confirm" type="password" required>
+            <p><button type="submit">Сохранить пароль</button></p>
+          </form>
         </div>
         """,
         user_email,

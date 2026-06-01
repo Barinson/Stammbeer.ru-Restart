@@ -34,8 +34,8 @@ def load_settings() -> Settings:
         port=int(os.getenv("PORT", "8000")),
         database_url=os.getenv("DATABASE_URL", default_db),
         session_secret=os.getenv("SESSION_SECRET", "dev-session-secret-change-me"),
-        admin_email=os.getenv("ADMIN_EMAIL", "admin@stamm.local"),
-        admin_password=os.getenv("ADMIN_PASSWORD", "stamm-admin"),
+        admin_email=os.getenv("ADMIN_EMAIL", "admin"),
+        admin_password=os.getenv("ADMIN_PASSWORD", "1"),
         moysklad_api_base_url=os.getenv(
             "MOYSKLAD_API_BASE_URL",
             "https://api.moysklad.ru/api/remap/1.2",
