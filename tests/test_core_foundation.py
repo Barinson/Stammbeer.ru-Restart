@@ -1,0 +1,582 @@
+from __future__ import annotations
+
+import gzip
+import json
+import tempfile
+import threading
+import unittest
+import urllib.error
+import urllib.request
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+
+from app.config import Settings, load_settings
+from app.integrations.moysklad.catalog_sync import latest_sync_diagnostics, run_manual_catalog_sync
+from app.integrations.moysklad.client import MoyskladClient
+from app.integrations.moysklad.settings_service import get_settings, refresh_integration_references, save_settings, serialize_settings
+from app.main import StammApp, admin_stats
+from app.modules.catalog.service import admin_catalog_items, public_catalog, publish_product
+from app.modules.public_views import business_storefront_page
+from app.modules.auth.service import authenticate, change_password, create_session, current_user
+
+
+class FakeMoyskladResponse:
+    def __init__(self, payload: bytes, content_encoding: str | None = None):
+        self._payload = payload
+        self.headers = {}
+        if content_encoding:
+            self.headers["Content-Encoding"] = content_encoding
+
+    def read(self) -> bytes:
+        return self._payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def open_without_redirects(url: str):
+    opener = urllib.request.build_opener(NoRedirect)
+    try:
+        return opener.open(url, timeout=5)
+    except urllib.error.HTTPError as exc:
+        return exc
+
+
+class CoreFoundationTest(unittest.TestCase):
+
+    def add_catalog_item(self, app: StammApp, name: str, container_type: str, slug: str, image_url: str | None = None) -> int:
+        cursor = app.conn.execute(
+            """
+            INSERT INTO products (accounting_name, article, stock_quantity, availability_status, sync_state, image_url)
+            VALUES (?, ?, 10, 'available', 'active', ?)
+            """,
+            (name, slug.upper(), image_url),
+        )
+        product_id = cursor.lastrowid
+        app.conn.execute(
+            """
+            INSERT INTO product_overrides (product_id, short_description, is_published)
+            VALUES (?, ?, 1)
+            """,
+            (product_id, f"{name} для B2B-партнёров"),
+        )
+        app.conn.execute(
+            """
+            INSERT INTO business_catalog_items (
+                product_id, slug, public_name, image_url, price_minor, currency, container_type,
+                volume_liters, availability_status, sort_order, search_text, last_catalog_sync_at
+            ) VALUES (?, ?, ?, ?, 12300, 'RUB', ?, 30, 'available', 10, ?, '2026-06-01T08:00:00Z')
+            """,
+            (product_id, slug, name, image_url, container_type, name),
+        )
+        app.conn.commit()
+        return product_id
+
+    def make_app(self) -> StammApp:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        db_path = Path(tmp.name) / "test.sqlite3"
+        settings = Settings(
+            app_name="test",
+            env="test",
+            host="127.0.0.1",
+            port=0,
+            database_url=str(db_path),
+            session_secret="test-secret",
+            admin_email="admin",
+            admin_password="1",
+            moysklad_api_base_url="https://api.moysklad.ru/api/remap/1.2",
+        )
+        return StammApp(settings)
+
+    def test_migrations_seed_admin_and_core_tables(self) -> None:
+        app = self.make_app()
+        tables = {row[0] for row in app.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        self.assertIn("users", tables)
+        self.assertIn("moysklad_sync_settings", tables)
+        self.assertIn("products", tables)
+        self.assertIn("business_catalog_items", tables)
+        self.assertIn("b2b_orders", tables)
+        self.assertEqual(admin_stats(app.conn)["Статус sync"], "foundation ready")
+
+    def test_admin_auth_session(self) -> None:
+        app = self.make_app()
+        user = authenticate(app.conn, "admin", "1")
+        self.assertIsNotNone(user)
+        session_id = create_session(app.conn, user["id"])
+        loaded = current_user(app.conn, f"stamm_admin_session={session_id}")
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded["email"], "admin")
+
+    def test_default_local_admin_credentials_are_simple(self) -> None:
+        settings = load_settings()
+        self.assertEqual(settings.admin_email, "admin")
+        self.assertEqual(settings.admin_password, "1")
+
+    def test_admin_password_change_replaces_old_password(self) -> None:
+        app = self.make_app()
+        user = authenticate(app.conn, "admin", "1")
+        self.assertIsNotNone(user)
+        ok, message = change_password(app.conn, user["id"], "1", "new-local-password")
+        self.assertTrue(ok, message)
+        self.assertIsNone(authenticate(app.conn, "admin", "1"))
+        self.assertIsNotNone(authenticate(app.conn, "admin", "new-local-password"))
+
+
+    def test_public_catalog_reads_local_read_model_and_filters(self) -> None:
+        app = self.make_app()
+        self.add_catalog_item(app, "Stamm IPA Keg", "keg", "stamm-ipa-keg", "https://cdn.example.test/ipa.jpg")
+        self.add_catalog_item(app, "Stamm Pale Ale Can", "can", "stamm-pale-ale-can")
+        stale_id = app.conn.execute(
+            """
+            INSERT INTO products (accounting_name, article, stock_quantity, availability_status, sync_state)
+            VALUES ('Reserved old SKU', 'RES-OLD', 0, 'unavailable', 'out_of_stock')
+            """
+        ).lastrowid
+        app.conn.execute(
+            """
+            INSERT INTO business_catalog_items (product_id, slug, public_name, price_minor, currency, container_type, availability_status, search_text)
+            VALUES (?, 'reserved-old', 'Reserved old SKU', 10000, 'RUB', 'can', 'unavailable', 'Reserved old SKU')
+            """,
+            (stale_id,),
+        )
+        app.conn.commit()
+
+        all_items = public_catalog(app.conn)
+        self.assertEqual(all_items["meta"]["source"], "local_read_model")
+        self.assertEqual(all_items["meta"]["totalLocalItems"], 2)
+        self.assertEqual(len(all_items["items"]), 2)
+
+        kegs = public_catalog(app.conn, "keg")
+        self.assertEqual(len(kegs["items"]), 1)
+        self.assertEqual(kegs["items"][0]["containerType"], "keg")
+        self.assertEqual(kegs["items"][0]["imageUrl"], "https://cdn.example.test/ipa.jpg")
+        self.assertNotEqual(kegs["items"][0]["subtitle"], "Позиция локального B2B-каталога Stamm Brewing")
+
+        cans = public_catalog(app.conn, "can")
+        self.assertEqual(len(cans["items"]), 1)
+        self.assertEqual(cans["items"][0]["containerType"], "can")
+
+    def test_public_storefront_page_has_local_api_loading_and_empty_states(self) -> None:
+        html = business_storefront_page()
+        self.assertIn("/api/public/business/catalog", html)
+        self.assertIn("Загружаем каталог", html)
+        self.assertIn("Каталог скоро появится", html)
+        self.assertIn("Ничего не найдено", html)
+        self.assertIn("Не удалось загрузить каталог сайта", html)
+        self.assertIn("data-filter=\"keg\"", html)
+        self.assertIn("data-filter=\"can\"", html)
+        self.assertIn("product__image-fallback", html)
+        self.assertIn("quantity__button", html)
+        self.assertNotIn("Позиция локального B2B-каталога Stamm Brewing", html)
+        self.assertNotIn("api.moysklad.ru", html)
+
+    def test_public_storefront_routes_open_and_trailing_slashes_redirect(self) -> None:
+        app = self.make_app()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        for path in ("/business", "/business/catalog"):
+            response = urllib.request.urlopen(base + path, timeout=5)
+            self.assertEqual(response.status, 200)
+            self.assertIn("Каталог для баров", response.read().decode("utf-8"))
+
+        redirects = {"/business/": "/business", "/business/catalog/": "/business/catalog"}
+        for path, expected_location in redirects.items():
+            response = open_without_redirects(base + path)
+            self.assertEqual(response.status, 303)
+            self.assertEqual(response.headers["Location"], expected_location)
+
+    def test_public_catalog_api_endpoint_returns_local_data(self) -> None:
+        app = self.make_app()
+        self.add_catalog_item(app, "Stamm IPA Keg", "keg", "stamm-ipa-keg")
+        server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        url = f"http://127.0.0.1:{server.server_port}/api/public/business/catalog?containerType=keg"
+        payload = urllib.request.urlopen(url, timeout=5).read().decode("utf-8")
+        data = json.loads(payload)
+        self.assertEqual(data["meta"]["source"], "local_read_model")
+        self.assertEqual(len(data["items"]), 1)
+        self.assertEqual(data["items"][0]["name"], "Stamm IPA Keg")
+
+    def test_moysklad_settings_are_saved_masked_and_serialized(self) -> None:
+        app = self.make_app()
+        user = authenticate(app.conn, "admin", "1")
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "secret-token-1234",
+                "source_product_folder_href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-id",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "360",
+                "stock_sync_interval_minutes": "120",
+                "is_enabled": True,
+            },
+            user["id"],
+        )
+        settings = serialize_settings(get_settings(app.conn))
+        self.assertTrue(settings["hasToken"])
+        self.assertEqual(settings["tokenMasked"], "••••1234")
+        self.assertTrue(settings["includeChildFolders"])
+        self.assertTrue(settings["isEnabled"])
+
+
+
+    def test_manual_catalog_sync_imports_updates_and_keeps_items_unpublished(self) -> None:
+        app = self.make_app()
+        user = authenticate(app.conn, "admin", "1")
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "secret-token-1234",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "360",
+                "stock_sync_interval_minutes": "120",
+                "is_enabled": True,
+            },
+            user["id"],
+        )
+        app.conn.execute(
+            """
+            UPDATE moysklad_sync_settings
+            SET store_id = 'store-1', store_href = 'https://api.moysklad.ru/api/remap/1.2/entity/store/store-1', store_name = 'Основной склад',
+                source_product_folder_id = 'folder-1', source_product_folder_href = 'https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1', source_product_folder_name = 'Пиво'
+            WHERE id = 1
+            """
+        )
+        app.conn.commit()
+        original_urlopen = urllib.request.urlopen
+        stock_urls: list[str] = []
+
+        def fake_urlopen(request, timeout=0):
+            if "/entity/productfolder" in request.full_url:
+                payload = {"rows": [{"id": "folder-1", "name": "Пиво", "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1"}}]}
+                return FakeMoyskladResponse(json.dumps(payload).encode("utf-8"))
+            if "/entity/assortment" in request.full_url:
+                payload = {
+                    "rows": [
+                        {
+                            "id": "sku-1",
+                            "name": "Stamm IPA keg",
+                            "article": "IPA-30",
+                            "code": "IPA30",
+                            "externalCode": "ext-1",
+                            "updated": "2026-06-01T08:00:00Z",
+                            "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/product/sku-1"},
+                            "productFolder": {"meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1"}},
+                            "salePrices": [
+                                {"value": 999, "priceType": {"name": "Закупочная цена"}},
+                                {"value": 12345, "priceType": {"name": "Цена продажи"}},
+                            ],
+                            "images": {"rows": [{"miniature": {"downloadHref": "https://cdn.example.test/moysklad/ipa-mini.jpg"}}]},
+                        },
+                        {
+                            "id": "sku-zero",
+                            "name": "Zero stock can",
+                            "article": "ZERO-CAN",
+                            "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/product/sku-zero"},
+                            "productFolder": {"meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1"}},
+                            "salePrices": [{"value": 5555, "priceType": {"name": "Цена продажи"}}],
+                        },
+                        {
+                            "id": "sku-reserved",
+                            "name": "Reserved lager can",
+                            "article": "RES-CAN",
+                            "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/product/sku-reserved"},
+                            "productFolder": {"meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1"}},
+                            "salePrices": [{"value": 7777, "priceType": {"name": "Цена продажи"}}],
+                        }
+                    ]
+                }
+                return FakeMoyskladResponse(json.dumps(payload).encode("utf-8"))
+            if "/report/stock/bystore" in request.full_url:
+                stock_urls.append(request.full_url)
+                payload = {
+                    "rows": [
+                        {
+                            "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/product/sku-1?expand=supplier"},
+                            "stockByStore": [{
+                                "stock": 7,
+                                "reserve": 1,
+                                "inTransit": 0,
+                                "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/store/store-1"},
+                            }],
+                        },
+                        {
+                            "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/product/sku-zero"},
+                            "stockByStore": [{
+                                "quantity": 0,
+                                "reserve": 0,
+                                "inTransit": 0,
+                                "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/store/store-1"},
+                            }],
+                        },
+                        {
+                            "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/product/sku-reserved"},
+                            "stockByStore": [{
+                                "stock": 5,
+                                "reserve": 5,
+                                "inTransit": 0,
+                                "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/store/store-1"},
+                            }],
+                        }
+                    ]
+                }
+                return FakeMoyskladResponse(json.dumps(payload).encode("utf-8"))
+            raise AssertionError(request.full_url)
+
+        urllib.request.urlopen = fake_urlopen
+        try:
+            first = run_manual_catalog_sync(app.conn, user["id"], diagnostic_mode=True)
+            second = run_manual_catalog_sync(app.conn, user["id"])
+        finally:
+            urllib.request.urlopen = original_urlopen
+
+        self.assertTrue(stock_urls)
+        self.assertNotIn("filter=", stock_urls[0])
+        self.assertIn("stockMode=positiveOnly", stock_urls[0])
+        self.assertEqual(first["stats"]["folderMatched"], 3)
+        self.assertEqual(first["stats"]["found"], 1)
+        self.assertEqual(first["stats"]["skippedNoPositiveAvailability"], 2)
+        self.assertEqual(first["stats"]["created"], 1)
+        self.assertEqual(first["stats"]["updated"], 0)
+        self.assertEqual(second["stats"]["created"], 0)
+        self.assertEqual(second["stats"]["updated"], 1)
+        products = admin_catalog_items(app.conn)
+        self.assertEqual(len(products), 1)
+        self.assertEqual(products[0]["accounting_name"], "Stamm IPA keg")
+        self.assertEqual(products[0]["container_type"], "keg")
+        self.assertEqual(products[0]["price_minor"], 12345)
+        self.assertEqual(products[0]["image_url"], "https://cdn.example.test/moysklad/ipa-mini.jpg")
+        self.assertEqual(products[0]["stock_quantity"], 6)
+        self.assertEqual(products[0]["available_quantity"], 6)
+        self.assertEqual(products[0]["latest_stock"], 7)
+        self.assertEqual(products[0]["latest_reserve"], 1)
+        self.assertTrue(first["stats"]["diagnosticSample"][0]["matched"])
+        self.assertEqual(first["stats"]["diagnosticSample"][0]["available"], 6)
+        self.assertEqual(first["stats"]["diagnosticSample"][0]["savedAvailabilityStatus"], "available")
+        diagnostics = latest_sync_diagnostics(app.conn)
+        self.assertIsNotNone(diagnostics)
+        self.assertEqual(diagnostics["folderCandidates"][0]["name"], "Stamm IPA keg")
+        self.assertEqual(diagnostics["stockReportRows"][0]["available"], 6)
+        self.assertTrue(diagnostics["matching"][0]["matched"])
+        self.assertEqual(diagnostics["dbWrites"][0]["savedAvailable"], 6)
+        self.assertEqual(diagnostics["localCatalogAfterSync"][0]["stock_quantity"], 6)
+        self.assertFalse(products[0]["is_published"])
+        unavailable_id = app.conn.execute(
+            """
+            INSERT INTO products (accounting_name, external_href, stock_quantity, availability_status, sync_state)
+            VALUES ('Unavailable stale SKU', 'stale-zero', 0, 'unavailable', 'out_of_stock')
+            """
+        ).lastrowid
+        with self.assertRaises(ValueError):
+            publish_product(app.conn, unavailable_id, True)
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 0)
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_jobs WHERE status = 'success'").fetchone()[0], 2)
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_logs").fetchone()[0], 5)
+
+        publish_product(app.conn, products[0]["id"], True)
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 1)
+        public_item = public_catalog(app.conn)["items"][0]
+        self.assertEqual(public_item["imageUrl"], "https://cdn.example.test/moysklad/ipa-mini.jpg")
+
+
+    def test_manual_catalog_sync_recursively_includes_child_product_folders(self) -> None:
+        app = self.make_app()
+        user = authenticate(app.conn, "admin", "1")
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "secret-token-1234",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "360",
+                "stock_sync_interval_minutes": "120",
+                "is_enabled": True,
+            },
+            user["id"],
+        )
+        root_href = "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/root"
+        child_href = "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/child"
+        grandchild_href = "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/grandchild"
+        sku_href = "https://api.moysklad.ru/api/remap/1.2/entity/product/sku-child"
+        app.conn.execute(
+            """
+            UPDATE moysklad_sync_settings
+            SET store_id = 'store-1', store_href = 'https://api.moysklad.ru/api/remap/1.2/entity/store/store-1', store_name = 'Основной склад',
+                source_product_folder_id = 'root', source_product_folder_href = ?, source_product_folder_name = 'Продукция'
+            WHERE id = 1
+            """,
+            (root_href,),
+        )
+        app.conn.commit()
+        original_urlopen = urllib.request.urlopen
+
+        def fake_urlopen(request, timeout=0):
+            if "/entity/productfolder" in request.full_url:
+                payload = {
+                    "rows": [
+                        {"id": "root", "name": "Продукция", "meta": {"href": root_href}},
+                        {"id": "child", "name": "Линейка", "meta": {"href": child_href}, "parent": {"meta": {"href": root_href}}},
+                        {"id": "grandchild", "name": "IPA", "meta": {"href": grandchild_href}, "parent": {"meta": {"href": child_href}}},
+                    ]
+                }
+                return FakeMoyskladResponse(json.dumps(payload).encode("utf-8"))
+            if "/entity/assortment" in request.full_url:
+                payload = {
+                    "rows": [
+                        {
+                            "id": "sku-child",
+                            "name": "Nested IPA can",
+                            "article": "IPA-CAN",
+                            "meta": {"href": sku_href},
+                            "productFolder": {"meta": {"href": grandchild_href}},
+                            "salePrices": [{"value": 9900, "priceType": {"name": "Цена продажи"}}],
+                        }
+                    ]
+                }
+                return FakeMoyskladResponse(json.dumps(payload).encode("utf-8"))
+            if "/report/stock/bystore" in request.full_url:
+                return FakeMoyskladResponse(json.dumps({"rows": [{"meta": {"href": sku_href}, "stockByStore": [{"stock": 2, "reserve": 0, "inTransit": 0, "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/store/store-1"}}]}]}).encode("utf-8"))
+            raise AssertionError(request.full_url)
+
+        urllib.request.urlopen = fake_urlopen
+        try:
+            result = run_manual_catalog_sync(app.conn, user["id"])
+        finally:
+            urllib.request.urlopen = original_urlopen
+
+        self.assertEqual(result["stats"]["folderScopeCount"], 3)
+        self.assertEqual(result["stats"]["assortmentRowsScanned"], 1)
+        self.assertEqual(result["stats"]["found"], 1)
+        product = admin_catalog_items(app.conn)[0]
+        self.assertEqual(product["source_folder_href"], grandchild_href)
+        self.assertEqual(product["container_type"], "can")
+
+    def test_moysklad_reference_refresh_and_selection_persist_api_entities(self) -> None:
+        app = self.make_app()
+        user = authenticate(app.conn, "admin", "1")
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "secret-token-1234",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "360",
+                "stock_sync_interval_minutes": "120",
+                "is_enabled": True,
+            },
+            user["id"],
+        )
+        original_urlopen = urllib.request.urlopen
+
+        def fake_urlopen(request, timeout=0):
+            if "/entity/store" in request.full_url:
+                payload = {
+                    "rows": [
+                        {
+                            "id": "store-1",
+                            "name": "Основной склад",
+                            "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/store/store-1"},
+                        }
+                    ]
+                }
+                return FakeMoyskladResponse(json.dumps(payload).encode("utf-8"))
+            if "/entity/productfolder" in request.full_url:
+                payload = {
+                    "rows": [
+                        {
+                            "id": "folder-1",
+                            "name": "Пиво",
+                            "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1"},
+                        }
+                    ]
+                }
+                return FakeMoyskladResponse(json.dumps(payload).encode("utf-8"))
+            raise AssertionError(request.full_url)
+
+        urllib.request.urlopen = fake_urlopen
+        try:
+            counts = refresh_integration_references(app.conn)
+        finally:
+            urllib.request.urlopen = original_urlopen
+
+        self.assertEqual(counts, {"stores": 1, "folders": 1})
+        settings = serialize_settings(get_settings(app.conn))
+        self.assertEqual(settings["availableStores"][0]["name"], "Основной склад")
+        self.assertEqual(settings["availableProductFolders"][0]["name"], "Пиво")
+
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "store_href": "https://api.moysklad.ru/api/remap/1.2/entity/store/store-1",
+                "source_product_folder_href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "360",
+                "stock_sync_interval_minutes": "120",
+                "is_enabled": True,
+            },
+            user["id"],
+        )
+        selected = serialize_settings(get_settings(app.conn))
+        self.assertEqual(selected["selectedStore"]["id"], "store-1")
+        self.assertEqual(selected["selectedStore"]["name"], "Основной склад")
+        self.assertEqual(selected["sourceProductFolder"]["id"], "folder-1")
+        self.assertEqual(selected["sourceProductFolder"]["name"], "Пиво")
+        self.assertTrue(selected["includeChildFolders"])
+
+    def test_moysklad_test_connection_uses_get_without_content_type_body(self) -> None:
+        captured = {}
+        original_urlopen = urllib.request.urlopen
+
+        def fake_urlopen(request, timeout=0):
+            captured["request"] = request
+            captured["timeout"] = timeout
+            payload = gzip.compress(json.dumps({"rows": [{"name": "Stamm Test"}]}).encode("utf-8"))
+            return FakeMoyskladResponse(payload, content_encoding="gzip")
+
+        urllib.request.urlopen = fake_urlopen
+        try:
+            client = MoyskladClient("token-123", timeout=7)
+            result = client.test_connection()
+        finally:
+            urllib.request.urlopen = original_urlopen
+
+        request = captured["request"]
+        self.assertTrue(result.ok)
+        self.assertEqual(result.account_name, "Stamm Test")
+        self.assertEqual(captured["timeout"], 7)
+        self.assertEqual(request.get_method(), "GET")
+        self.assertIn("/entity/organization?limit=1", request.full_url)
+        self.assertEqual(request.get_header("Authorization"), "Bearer token-123")
+        self.assertEqual(request.get_header("Accept"), "application/json;charset=utf-8")
+        self.assertEqual(request.get_header("Accept-encoding"), "gzip")
+        self.assertFalse(request.has_header("Content-type"))
+        self.assertIsNone(getattr(request, "data", None))
+
+    def test_moysklad_source_folder_href_guard(self) -> None:
+        client = MoyskladClient("token", api_base_url="https://api.moysklad.ru/api/remap/1.2")
+        with self.assertRaises(ValueError):
+            client.fetch_source_folder("https://example.test/entity/productfolder/1")
+
+
+if __name__ == "__main__":
+    unittest.main()
