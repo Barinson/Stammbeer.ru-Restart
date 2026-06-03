@@ -1,0 +1,9 @@
+[project]
+name = "stamm-brewing-core"
+version = "0.1.0"
+description = "Stamm Brewing website foundation: admin auth, MoySklad settings, DB schema skeleton."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
