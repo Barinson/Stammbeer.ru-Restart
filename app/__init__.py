@@ -1,0 +1,1 @@
+"""Stamm Brewing application package."""
