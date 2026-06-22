@@ -185,6 +185,14 @@ def css_map_height(value: object, fallback: int = 240) -> str:
     return f"{number}px"
 
 
+def css_map_width(value: object, fallback: int = 420) -> str:
+    try:
+        number = max(280, min(640, int(str(value or "").strip())))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
+
+
 def css_text_color(value: object, fallback: str) -> str:
     raw = str(value or "").strip()
     if len(raw) == 7 and raw.startswith("#") and all(char in "0123456789abcdefABCDEF" for char in raw[1:]):
@@ -600,6 +608,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     zoom = str(contacts.get("contacts_map_zoom") or "13")
     title = str(contacts.get("contacts_map_title") or "Stamm Brewing")
     map_height = css_map_height(contacts.get("contacts_map_height_px"), 240)
+    map_width = css_map_width(contacts.get("contacts_map_width_px"), 420)
     visible_emails = sorted(
         (item for item in emails if item.get("value") and item.get("is_visible", True)),
         key=lambda item: (int(item.get("sort_order") or 100), str(item.get("label") or "")),
@@ -638,12 +647,12 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     .contact-list span {{ color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); }}
     .contact-list__address {{ white-space:pre-line; }}
-    .map-card {{ overflow:hidden; padding:0; display:grid; align-self:start; }}
+    .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:grid; align-self:start; justify-self:end; }}
     .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; }}
     .map-info {{ padding:18px 20px 20px; border-top:1px solid rgba(199,177,102,.18); background:rgba(11,63,64,.34); }}
     .map-info span {{ display:block; margin-bottom:6px; color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .map-info strong {{ display:block; color:var(--foam); font-size:var(--stamm-contact-text-font-size,18px); line-height:1.35; white-space:pre-line; }}
-    @media (max-width:880px) {{ .contacts-hero {{ grid-template-columns:1fr; }} }}
+    @media (max-width:880px) {{ .contacts-hero {{ grid-template-columns:1fr; }} .map-card {{ width:100%; justify-self:stretch; }} }}
   </style>
 </head>
 <body>
@@ -656,7 +665,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
         <ul class="contact-list">{phone_cards}</ul>
         {address_markup}
       </div>
-      <div class="contacts-card map-card" style="--contacts-map-height:{map_height}">
+      <div class="contacts-card map-card" style="--contacts-map-height:{map_height}; --contacts-map-width:{map_width}">
         <iframe title="Яндекс.Карта: {escape(title)}" src="{map_src}" loading="lazy" allowfullscreen></iframe>
         <div class="map-info"><span>{escape(title)}</span>{map_info_address}</div>
       </div>
