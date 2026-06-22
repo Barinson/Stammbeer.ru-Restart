@@ -587,6 +587,29 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("about:blank", html)
         self.assertIn("stamm_age_confirmed", html)
 
+    def test_public_cms_text_preserves_line_breaks_without_raw_html(self) -> None:
+        app = self.make_app()
+        save_public_content(
+            app.conn,
+            {
+                "home_news_text": "Строка 1\nСтрока 2\n<script>alert(1)</script>",
+                "contacts_description": "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>",
+            },
+        )
+        content = get_public_site_content(app.conn)
+        self.assertEqual(content["home"]["home_news_text"], "Строка 1\nСтрока 2\n<script>alert(1)</script>")
+        self.assertEqual(content["contacts"]["contacts_description"], "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>")
+        home_html = home_page(content)
+        contacts_html = contacts_page(content)
+        self.assertIn("white-space:pre-line", home_html)
+        self.assertIn("Строка 1\nСтрока 2", home_html)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", home_html)
+        self.assertNotIn("<script>alert(1)</script>", home_html)
+        self.assertIn("white-space:pre-line", contacts_html)
+        self.assertIn("Контакты 1\r\nКонтакты 2", contacts_html)
+        self.assertIn("&lt;strong&gt;не html&lt;/strong&gt;", contacts_html)
+
+
     def test_admin_content_uploads_logo_and_nav_icon_assets(self) -> None:
         app = self.make_app()
         user = authenticate(app.conn, "admin", "1")
