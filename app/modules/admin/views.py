@@ -408,7 +408,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     contacts_map_lat = str(contacts.get("contacts_map_lat") or "")
     contacts_map_lng = str(contacts.get("contacts_map_lng") or "")
     contacts_map_zoom = str(contacts.get("contacts_map_zoom") or "13")
-    contacts_map_height_px = str(contacts.get("contacts_map_height_px") or "300")
+    contacts_map_height_px = str(contacts.get("contacts_map_height_px") or "240")
     contacts_map_title = str(contacts.get("contacts_map_title") or "Stamm Brewing")
     map_preview_src = f"https://yandex.ru/map-widget/v1/?ll={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}&z={escape(contacts_map_zoom)}&pt={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}%2Cpm2goldm"
     typography_tokens = [
@@ -586,7 +586,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <textarea name="contacts_description" rows="4">{escape(contacts_description)}</textarea>
               <div class="grid">
                 <label>Zoom карты<input id="contacts-map-zoom" name="contacts_map_zoom" type="number" min="1" max="20" value="{escape(contacts_map_zoom)}"></label>
-                <label>Высота карты, px<input name="contacts_map_height_px" type="number" min="220" max="520" step="10" value="{escape(contacts_map_height_px)}"></label>
+                <label>Высота карты, px<input name="contacts_map_height_px" type="number" min="180" max="420" step="10" value="{escape(contacts_map_height_px)}"></label>
                 <label>Подпись точки<input name="contacts_map_title" value="{escape(contacts_map_title)}"></label>
               </div>
               <input id="contacts-map-lat" type="hidden" name="contacts_map_lat" value="{escape(contacts_map_lat)}">
