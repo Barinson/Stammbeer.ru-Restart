@@ -171,6 +171,19 @@ def css_gap_px(value: object, fallback: int = 0) -> str:
         number = fallback
     return f"{number}px"
 
+
+def cms_text(value: object) -> str:
+    """Safely render CMS-managed plain text while preserving admin-entered line breaks."""
+    return escape(str(value or ""))
+
+
+def css_map_height(value: object, fallback: int = 240) -> str:
+    try:
+        number = max(180, min(420, int(str(value or "").strip())))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
+
 def home_page(content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
     home = site_content["home"]
@@ -184,7 +197,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
     content_bg_style = f' style="--home-content-bg:url(\'{escape(content_bg_url)}\');"' if content_bg_url else ""
     logo_markup = f'<img class="home-logo" src="{escape(logo_url)}" alt="Stamm Brewing logo">' if logo_url else '<div class="home-logo-mark" aria-hidden="true"></div>'
     news_title = escape(str(home.get("home_news_title") or ""))
-    news_text = escape(str(home.get("home_news_text") or ""))
+    news_text = cms_text(home.get("home_news_text"))
     news_image_url = str(home.get("home_news_image_url") or "")
     news_link_url = str(home.get("home_news_link_url") or "")
     news_link_label = escape(str(home.get("home_news_link_label") or ""))
@@ -215,7 +228,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
     .news-card__image {{ width:100%; aspect-ratio:16/10; max-height:420px; object-fit:cover; border-radius:24px; background:rgba(246,241,227,.08); display:block; }}
     .news-card__image--fallback {{ background:radial-gradient(circle at 50% 40%, rgba(199,177,102,.35), transparent 35%), linear-gradient(135deg, rgba(246,241,227,.08), rgba(16,88,89,.4)); }}
     .news-card h2 {{ margin:0 0 14px; color:var(--white); font-size:var(--stamm-section-title-font-size,26px); line-height:1.08; }}
-    .news-card p {{ margin:0; color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-body-font-size,16px); }}
+    .news-card p {{ margin:0; color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-body-font-size,16px); white-space:pre-line; }}
     @media (max-width:760px) {{ .home-content {{ background-attachment:scroll; }} .news-card {{ grid-template-columns:1fr; padding:20px; }} .home-logo {{ max-width:130px; max-height:130px; }} }}
   </style>
 </head>
@@ -569,6 +582,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     lng = str(contacts.get("contacts_map_lng") or "37.6173")
     zoom = str(contacts.get("contacts_map_zoom") or "13")
     title = str(contacts.get("contacts_map_title") or "Stamm Brewing")
+    map_height = css_map_height(contacts.get("contacts_map_height_px"), 240)
     visible_emails = sorted(
         (item for item in emails if item.get("value") and item.get("is_visible", True)),
         key=lambda item: (int(item.get("sort_order") or 100), str(item.get("label") or "")),
@@ -595,16 +609,20 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
 {BASE_CSS}
 {typography_style(site_content)}
     .contacts-page {{ min-height:calc(100vh - 74px); padding:42px min(6vw,72px) 64px; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
-    .contacts-hero {{ max-width:1180px; margin:0 auto; display:grid; grid-template-columns:minmax(0,420px) minmax(0,1fr); gap:24px; align-items:stretch; }}
+    .contacts-hero {{ max-width:1000px; margin:0 auto; display:grid; grid-template-columns:minmax(0,430px) minmax(280px,.72fr); gap:24px; align-items:start; }}
     .contacts-card {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:24px; padding:28px; box-shadow:0 18px 44px rgba(0,0,0,.18); }}
-    .contacts-card h1 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
-    .contacts-card p {{ color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-lead-font-size,18px); }}
+    .contacts-info-card {{ border:0; background:transparent; box-shadow:none; padding:10px 0; }}
+    .contacts-card p {{ color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-lead-font-size,18px); white-space:pre-line; }}
     .contact-list {{ list-style:none; margin:22px 0 0; padding:0; display:grid; gap:12px; }}
     .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; gap:4px; }}
     .contact-list span {{ color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); }}
-    .map-card {{ overflow:hidden; min-height:420px; padding:0; display:block; }}
-    .map-card iframe {{ width:100%; height:100%; min-height:420px; border:0; filter:saturate(.92); display:block; }}
+    .contact-list__address {{ white-space:pre-line; }}
+    .map-card {{ overflow:hidden; padding:0; display:grid; align-self:start; }}
+    .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; }}
+    .map-info {{ padding:18px 20px 20px; border-top:1px solid rgba(199,177,102,.18); background:rgba(11,63,64,.34); }}
+    .map-info span {{ display:block; margin-bottom:6px; color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
+    .map-info strong {{ display:block; color:var(--foam); font-size:var(--stamm-contact-text-font-size,18px); line-height:1.35; white-space:pre-line; }}
     @media (max-width:880px) {{ .contacts-hero {{ grid-template-columns:1fr; }} }}
   </style>
 </head>
@@ -612,15 +630,15 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
 {public_nav("contacts", site_content)}
   <main class="contacts-page">
     <section class="contacts-hero">
-      <div class="contacts-card">
-        <h1>Контакты</h1>
-        <p>{escape(description)}</p>
+      <div class="contacts-card contacts-info-card">
+        <p>{cms_text(description)}</p>
         <ul class="contact-list">{email_cards}</ul>
         <ul class="contact-list">{phone_cards}</ul>
-        <ul class="contact-list"><li><span>Адрес</span><strong>{escape(address)}</strong></li></ul>
+        <ul class="contact-list"><li><span>Адрес</span><strong class="contact-list__address">{cms_text(address)}</strong></li></ul>
       </div>
-      <div class="contacts-card map-card">
+      <div class="contacts-card map-card" style="--contacts-map-height:{map_height}">
         <iframe title="Яндекс.Карта: {escape(title)}" src="{map_src}" loading="lazy" allowfullscreen></iframe>
+        <div class="map-info"><span>{escape(title)}</span><strong>{cms_text(address)}</strong></div>
       </div>
     </section>
   </main>
