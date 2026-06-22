@@ -7,7 +7,8 @@ from pathlib import Path
 from app.config import Settings
 from app.integrations.moysklad.client import MoyskladClient
 from app.integrations.moysklad.settings_service import get_settings, save_settings, serialize_settings
-from app.main import StammApp, admin_stats
+from app.main import StammApp, admin_stats, parse_form
+from app.modules.admin.views import render_cms_text
 from app.modules.auth.service import authenticate, create_session, current_user
 
 
@@ -47,6 +48,17 @@ class CoreFoundationTest(unittest.TestCase):
         loaded = current_user(app.conn, f"stamm_admin_session={session_id}")
         self.assertIsNotNone(loaded)
         self.assertEqual(loaded["email"], "admin@example.test")
+
+    def test_form_parsing_preserves_admin_line_breaks(self) -> None:
+        form = parse_form("body=Строка+1%0D%0AСтрока+2%0AСтрока+3".encode("utf-8"))
+        self.assertEqual(form["body"], "Строка 1\r\nСтрока 2\nСтрока 3")
+
+    def test_cms_text_renderer_is_safe_and_preserves_line_breaks(self) -> None:
+        rendered = render_cms_text("Строка 1\n<script>alert(1)</script>\nСтрока 3")
+        self.assertIn('class="cms-text"', rendered)
+        self.assertIn("Строка 1\n", rendered)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", rendered)
+        self.assertNotIn("<script>", rendered)
 
     def test_moysklad_settings_are_saved_masked_and_serialized(self) -> None:
         app = self.make_app()
