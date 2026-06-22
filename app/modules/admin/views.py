@@ -404,10 +404,15 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         for index, item in enumerate(contact_phones[:6])
     )
     contacts_address = str(contacts.get("contacts_address") or "")
+    contacts_address_is_visible = str(contacts.get("contacts_address_is_visible") or "1") != "0"
+    contacts_address_color = str(contacts.get("contacts_address_color") or "")
     contacts_description = str(contacts.get("contacts_description") or "")
+    contacts_description_is_visible = str(contacts.get("contacts_description_is_visible") or "1") != "0"
+    contacts_description_color = str(contacts.get("contacts_description_color") or "")
     contacts_map_lat = str(contacts.get("contacts_map_lat") or "")
     contacts_map_lng = str(contacts.get("contacts_map_lng") or "")
     contacts_map_zoom = str(contacts.get("contacts_map_zoom") or "13")
+    contacts_map_height_px = str(contacts.get("contacts_map_height_px") or "240")
     contacts_map_title = str(contacts.get("contacts_map_title") or "Stamm Brewing")
     map_preview_src = f"https://yandex.ru/map-widget/v1/?ll={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}&z={escape(contacts_map_zoom)}&pt={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}%2Cpm2goldm"
     typography_tokens = [
@@ -440,7 +445,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-preview-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; align-items:stretch; }}
           .contact-row {{ display:grid; grid-template-columns:minmax(140px,1fr) minmax(220px,1.5fr) 110px 140px; gap:10px; align-items:end; padding:10px 0; border-top:1px solid rgba(16,88,89,.12); }}
           .contact-row__visible {{ display:flex; gap:8px; align-items:center; padding-bottom:12px; }}
-          .contacts-map-picker {{ height:320px; border-radius:18px; overflow:hidden; border:1px solid rgba(16,88,89,.16); background:#eef3ef; }}
+          .contacts-map-picker {{ height:240px; border-radius:18px; overflow:hidden; border:1px solid rgba(16,88,89,.16); background:#eef3ef; }}
           .typography-preview {{ display:grid; gap:6px; padding:16px; border-radius:16px; background:#f6f1e3; border:1px solid rgba(16,88,89,.12); }}
           .typography-preview h4 {{ margin:0; color:#105859; font-size:24px; }}
           .typography-preview p {{ margin:0; color:#172625; }}
@@ -461,7 +466,8 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-news-preview__image {{ width:100%; aspect-ratio:16/10; border-radius:18px; object-fit:cover; background:rgba(246,241,227,.08); display:block; }}
           .cms-news-preview__image--fallback {{ background:radial-gradient(circle, rgba(199,177,102,.32), transparent 38%), linear-gradient(135deg, rgba(246,241,227,.1), rgba(16,88,89,.45)); }}
           .cms-news-preview h4 {{ margin:0 0 8px; font-size:26px; }}
-          .cms-news-preview p {{ margin:0; color:rgba(246,241,227,.78); }}
+          .cms-news-preview p {{ margin:0; color:rgba(246,241,227,.78); white-space:pre-line; }}
+          .cms-text-preview {{ white-space:pre-line; }}
           @media (max-width:760px) {{ .cms-news-preview {{ grid-template-columns:1fr; }} }}
         </style>
         {notice}
@@ -563,7 +569,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
                 {news_image_preview}
                 <div>
                   <h4>{escape(news_title)}</h4>
-                  <p>{escape(news_text)}</p>
+                  <p class="cms-text-preview">{escape(news_text)}</p>
                 </div>
               </article>
             </div>
@@ -579,16 +585,25 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <h4>Телефоны</h4>
               {phone_rows}
               <label>Текстовый адрес</label>
-              <input id="contacts-address-input" name="contacts_address" value="{escape(contacts_address)}">
+              <textarea id="contacts-address-input" name="contacts_address" rows="3">{escape(contacts_address)}</textarea>
+              <div class="grid">
+                <input type="hidden" name="contacts_address_is_visible" value="0"><label><input name="contacts_address_is_visible" type="checkbox" value="1" {'checked' if contacts_address_is_visible else ''}> Показывать текстовый адрес</label>
+                <label>Цвет адреса<input name="contacts_address_color" type="color" value="{escape(contacts_address_color or '#F6F1E3')}"></label>
+              </div>
               <label>Описание расположения</label>
               <textarea name="contacts_description" rows="4">{escape(contacts_description)}</textarea>
               <div class="grid">
+                <input type="hidden" name="contacts_description_is_visible" value="0"><label><input name="contacts_description_is_visible" type="checkbox" value="1" {'checked' if contacts_description_is_visible else ''}> Показывать описание расположения</label>
+                <label>Цвет описания<input name="contacts_description_color" type="color" value="{escape(contacts_description_color or '#F6F1E3')}"></label>
+              </div>
+              <div class="grid">
                 <label>Zoom карты<input id="contacts-map-zoom" name="contacts_map_zoom" type="number" min="1" max="20" value="{escape(contacts_map_zoom)}"></label>
+                <label>Высота карты, px<input name="contacts_map_height_px" type="number" min="180" max="420" step="10" value="{escape(contacts_map_height_px)}"></label>
                 <label>Подпись точки<input name="contacts_map_title" value="{escape(contacts_map_title)}"></label>
               </div>
               <input id="contacts-map-lat" type="hidden" name="contacts_map_lat" value="{escape(contacts_map_lat)}">
               <input id="contacts-map-lng" type="hidden" name="contacts_map_lng" value="{escape(contacts_map_lng)}">
-              <p class="muted">Основной способ выбора точки — клик по карте или перетаскивание маркера. Координаты сохраняются скрыто; текстовый адрес можно отредактировать вручную.</p>
+              <p class="muted">Основной способ выбора точки — клик по карте или перетаскивание маркера. Координаты сохраняются скрыто; текстовый адрес можно отредактировать вручную. Preview карты в админке компактный; публичная высота берётся из поля выше.</p>
               <div id="contacts-map-picker" class="contacts-map-picker" data-lat="{escape(contacts_map_lat)}" data-lng="{escape(contacts_map_lng)}" data-zoom="{escape(contacts_map_zoom)}"></div>
               <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU"></script>
               <script>
