@@ -473,7 +473,7 @@ class CoreFoundationTest(unittest.TestCase):
                 "contact_phone_value_0": "+7 999 111-22-33",
                 "contact_phone_sort_order_0": "10",
                 "contact_phone_visible_0": "on",
-                "contacts_address": "Москва, тестовый завод",
+                "contacts_address": "Москва, тестовый завод\nстроение 2",
                 "contacts_description": "Контакты производства Stamm",
                 "contacts_map_lat": "55.7001",
                 "contacts_map_lng": "37.6002",
@@ -535,7 +535,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("hello@stamm.test", contacts_html)
         self.assertNotIn("hidden@stamm.test", contacts_html)
         self.assertIn("+7 999 111-22-33", contacts_html)
-        self.assertIn("Москва, тестовый завод", contacts_html)
+        self.assertIn("Москва, тестовый завод\nстроение 2", contacts_html)
+        self.assertIn("contact-list__address", contacts_html)
         self.assertIn("Stamm Test Brewery", contacts_html)
         self.assertIn("yandex.ru/map-widget", contacts_html)
         self.assertIn("55.7001", contacts_html)
@@ -593,11 +594,13 @@ class CoreFoundationTest(unittest.TestCase):
             app.conn,
             {
                 "home_news_text": "Строка 1\nСтрока 2\n<script>alert(1)</script>",
+                "contacts_address": "Адрес 1\nАдрес 2\n<em>не html</em>",
                 "contacts_description": "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>",
             },
         )
         content = get_public_site_content(app.conn)
         self.assertEqual(content["home"]["home_news_text"], "Строка 1\nСтрока 2\n<script>alert(1)</script>")
+        self.assertEqual(content["contacts"]["contacts_address"], "Адрес 1\nАдрес 2\n<em>не html</em>")
         self.assertEqual(content["contacts"]["contacts_description"], "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>")
         home_html = home_page(content)
         contacts_html = contacts_page(content)
@@ -606,6 +609,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", home_html)
         self.assertNotIn("<script>alert(1)</script>", home_html)
         self.assertIn("white-space:pre-line", contacts_html)
+        self.assertIn("Адрес 1\nАдрес 2", contacts_html)
+        self.assertIn("&lt;em&gt;не html&lt;/em&gt;", contacts_html)
         self.assertIn("Контакты 1\r\nКонтакты 2", contacts_html)
         self.assertIn("&lt;strong&gt;не html&lt;/strong&gt;", contacts_html)
 
@@ -669,7 +674,7 @@ class CoreFoundationTest(unittest.TestCase):
             field("contact_email_label_0", "Основной"), field("contact_email_value_0", "admin@stamm.test"), field("contact_email_sort_order_0", "10"), field("contact_email_visible_0", "on"),
             field("contact_email_label_1", "Скрытая почта"), field("contact_email_value_1", "hidden-admin@stamm.test"), field("contact_email_sort_order_1", "20"),
             field("contact_phone_label_0", "Отдел продаж"), field("contact_phone_value_0", "+7 999 000-00-00"), field("contact_phone_sort_order_0", "10"), field("contact_phone_visible_0", "on"),
-            field("contacts_address", "Админский адрес завода"),
+            field("contacts_address", "Админский адрес завода\nкорпус 1"),
             field("contacts_description", "Описание контактов из админки"),
             field("contacts_map_lat", "55.7100"), field("contacts_map_lng", "37.6100"),
             field("contacts_map_zoom", "14"), field("contacts_map_title", "Админская точка Stamm"),

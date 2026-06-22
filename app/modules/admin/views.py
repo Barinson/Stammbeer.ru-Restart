@@ -580,7 +580,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <h4>Телефоны</h4>
               {phone_rows}
               <label>Текстовый адрес</label>
-              <input id="contacts-address-input" name="contacts_address" value="{escape(contacts_address)}">
+              <textarea id="contacts-address-input" name="contacts_address" rows="3">{escape(contacts_address)}</textarea>
               <label>Описание расположения</label>
               <textarea name="contacts_description" rows="4">{escape(contacts_description)}</textarea>
               <div class="grid">

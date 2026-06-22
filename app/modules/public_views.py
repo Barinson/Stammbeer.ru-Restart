@@ -608,6 +608,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; gap:4px; }}
     .contact-list span {{ color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); }}
+    .contact-list__address {{ white-space:pre-line; }}
     .map-card {{ overflow:hidden; min-height:420px; padding:0; display:block; }}
     .map-card iframe {{ width:100%; height:100%; min-height:420px; border:0; filter:saturate(.92); display:block; }}
     @media (max-width:880px) {{ .contacts-hero {{ grid-template-columns:1fr; }} }}
@@ -622,7 +623,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
         <p>{cms_text(description)}</p>
         <ul class="contact-list">{email_cards}</ul>
         <ul class="contact-list">{phone_cards}</ul>
-        <ul class="contact-list"><li><span>Адрес</span><strong>{escape(address)}</strong></li></ul>
+        <ul class="contact-list"><li><span>Адрес</span><strong class="contact-list__address">{cms_text(address)}</strong></li></ul>
       </div>
       <div class="contacts-card map-card">
         <iframe title="Яндекс.Карта: {escape(title)}" src="{map_src}" loading="lazy" allowfullscreen></iframe>
