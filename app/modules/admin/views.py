@@ -461,7 +461,8 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-news-preview__image {{ width:100%; aspect-ratio:16/10; border-radius:18px; object-fit:cover; background:rgba(246,241,227,.08); display:block; }}
           .cms-news-preview__image--fallback {{ background:radial-gradient(circle, rgba(199,177,102,.32), transparent 38%), linear-gradient(135deg, rgba(246,241,227,.1), rgba(16,88,89,.45)); }}
           .cms-news-preview h4 {{ margin:0 0 8px; font-size:26px; }}
-          .cms-news-preview p {{ margin:0; color:rgba(246,241,227,.78); }}
+          .cms-news-preview p {{ margin:0; color:rgba(246,241,227,.78); white-space:pre-line; }}
+          .cms-text-preview {{ white-space:pre-line; }}
           @media (max-width:760px) {{ .cms-news-preview {{ grid-template-columns:1fr; }} }}
         </style>
         {notice}
@@ -563,7 +564,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
                 {news_image_preview}
                 <div>
                   <h4>{escape(news_title)}</h4>
-                  <p>{escape(news_text)}</p>
+                  <p class="cms-text-preview">{escape(news_text)}</p>
                 </div>
               </article>
             </div>
