@@ -177,9 +177,9 @@ def cms_text(value: object) -> str:
     return escape(str(value or ""))
 
 
-def css_map_height(value: object, fallback: int = 300) -> str:
+def css_map_height(value: object, fallback: int = 240) -> str:
     try:
-        number = max(220, min(520, int(str(value or "").strip())))
+        number = max(180, min(420, int(str(value or "").strip())))
     except (TypeError, ValueError):
         number = fallback
     return f"{number}px"
@@ -582,7 +582,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     lng = str(contacts.get("contacts_map_lng") or "37.6173")
     zoom = str(contacts.get("contacts_map_zoom") or "13")
     title = str(contacts.get("contacts_map_title") or "Stamm Brewing")
-    map_height = css_map_height(contacts.get("contacts_map_height_px"), 300)
+    map_height = css_map_height(contacts.get("contacts_map_height_px"), 240)
     visible_emails = sorted(
         (item for item in emails if item.get("value") and item.get("is_visible", True)),
         key=lambda item: (int(item.get("sort_order") or 100), str(item.get("label") or "")),
@@ -609,9 +609,9 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
 {BASE_CSS}
 {typography_style(site_content)}
     .contacts-page {{ min-height:calc(100vh - 74px); padding:42px min(6vw,72px) 64px; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
-    .contacts-hero {{ max-width:1080px; margin:0 auto; display:grid; grid-template-columns:minmax(0,430px) minmax(320px,0.86fr); gap:24px; align-items:start; }}
+    .contacts-hero {{ max-width:1000px; margin:0 auto; display:grid; grid-template-columns:minmax(0,430px) minmax(280px,.72fr); gap:24px; align-items:start; }}
     .contacts-card {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:24px; padding:28px; box-shadow:0 18px 44px rgba(0,0,0,.18); }}
-    .contacts-card h1 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
+    .contacts-info-card {{ border:0; background:transparent; box-shadow:none; padding:10px 0; }}
     .contacts-card p {{ color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-lead-font-size,18px); white-space:pre-line; }}
     .contact-list {{ list-style:none; margin:22px 0 0; padding:0; display:grid; gap:12px; }}
     .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; gap:4px; }}
@@ -619,7 +619,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); }}
     .contact-list__address {{ white-space:pre-line; }}
     .map-card {{ overflow:hidden; padding:0; display:grid; align-self:start; }}
-    .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:220px; max-height:520px; border:0; filter:saturate(.92); display:block; }}
+    .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; }}
     .map-info {{ padding:18px 20px 20px; border-top:1px solid rgba(199,177,102,.18); background:rgba(11,63,64,.34); }}
     .map-info span {{ display:block; margin-bottom:6px; color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .map-info strong {{ display:block; color:var(--foam); font-size:var(--stamm-contact-text-font-size,18px); line-height:1.35; white-space:pre-line; }}
@@ -630,8 +630,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
 {public_nav("contacts", site_content)}
   <main class="contacts-page">
     <section class="contacts-hero">
-      <div class="contacts-card">
-        <h1>Контакты</h1>
+      <div class="contacts-card contacts-info-card">
         <p>{cms_text(description)}</p>
         <ul class="contact-list">{email_cards}</ul>
         <ul class="contact-list">{phone_cards}</ul>

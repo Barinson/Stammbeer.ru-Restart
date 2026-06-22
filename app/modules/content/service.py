@@ -29,7 +29,7 @@ CONTACT_DEFAULTS = {
     "contacts_map_lat": "55.7558",
     "contacts_map_lng": "37.6173",
     "contacts_map_zoom": "13",
-    "contacts_map_height_px": "300",
+    "contacts_map_height_px": "240",
     "contacts_map_title": "Stamm Brewing",
 }
 
