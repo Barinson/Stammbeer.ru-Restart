@@ -478,6 +478,7 @@ class CoreFoundationTest(unittest.TestCase):
                 "contacts_map_lat": "55.7001",
                 "contacts_map_lng": "37.6002",
                 "contacts_map_zoom": "15",
+                "contacts_map_height_px": "280",
                 "contacts_map_title": "Stamm Test Brewery",
                 "typography_nav_font_size_px": "18",
                 "typography_page_title_font_size_px": "52",
@@ -538,6 +539,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Москва, тестовый завод\nстроение 2", contacts_html)
         self.assertIn("contact-list__address", contacts_html)
         self.assertIn("Stamm Test Brewery", contacts_html)
+        self.assertIn("map-info", contacts_html)
+        self.assertIn("--contacts-map-height:280px", contacts_html)
         self.assertIn("yandex.ru/map-widget", contacts_html)
         self.assertIn("55.7001", contacts_html)
         self.assertIn("37.6002", contacts_html)
@@ -643,6 +646,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('for="cms-tab-contacts"', admin_content_html)
         self.assertIn("Контакты", admin_content_html)
         self.assertIn("contacts-map-picker", admin_content_html)
+        self.assertIn("contacts_map_height_px", admin_content_html)
+        self.assertIn("Высота карты, px", admin_content_html)
         self.assertIn("api-maps.yandex.ru", admin_content_html)
         self.assertNotIn("Широта<input", admin_content_html)
         self.assertNotIn("Долгота<input", admin_content_html)
@@ -677,7 +682,7 @@ class CoreFoundationTest(unittest.TestCase):
             field("contacts_address", "Админский адрес завода\nкорпус 1"),
             field("contacts_description", "Описание контактов из админки"),
             field("contacts_map_lat", "55.7100"), field("contacts_map_lng", "37.6100"),
-            field("contacts_map_zoom", "14"), field("contacts_map_title", "Админская точка Stamm"),
+            field("contacts_map_zoom", "14"), field("contacts_map_height_px", "260"), field("contacts_map_title", "Админская точка Stamm"),
             field("typography_nav_font_size_px", "19"), field("typography_page_title_font_size_px", "54"),
             field("typography_body_font_size_px", "18"), field("typography_contact_text_font_size_px", "22"),
             field("typography_product_title_font_size_px", "20"), field("typography_price_font_size_px", "24"),
