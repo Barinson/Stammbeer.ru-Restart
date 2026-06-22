@@ -30,6 +30,7 @@ def business_storefront_page() -> str:
     .badge { font-size:12px; padding:6px 9px; border-radius:999px; background:rgba(16,88,89,.09); color:var(--noble-hop); font-weight:800; }
     .badge--availability { background:rgba(199,177,102,.28); color:#4b3f14; }
     h2 { margin:0; font-size:21px; line-height:1.1; }
+    .cms-text { white-space:pre-line; }
     .subtitle { margin:0; color:var(--muted); line-height:1.45; min-height:42px; }
     .meta { display:flex; justify-content:space-between; gap:12px; font-weight:800; }
     .cta { margin-top:auto; border:0; background:var(--noble-hop); color:white; border-radius:14px; padding:12px 14px; font-weight:900; cursor:pointer; }
@@ -92,7 +93,7 @@ def business_storefront_page() -> str:
           <div class="product__body">
             <div class="badges"><span class="badge">${safeContainer}</span><span class="badge badge--availability">${safeAvailability}</span></div>
             <h2>${safeName}</h2>
-            <p class="subtitle">${safeSubtitle}</p>
+            <p class="subtitle cms-text">${safeSubtitle}</p>
             <div class="meta"><span>${safeVolume}</span><span>${safePrice}</span></div>
             <button class="cta" ${item.ctaLabel === 'Недоступно' ? 'disabled' : ''}>${safeCta}</button>
           </div>

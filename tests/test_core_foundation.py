@@ -11,7 +11,7 @@ from pathlib import Path
 from app.config import Settings, load_settings
 from app.integrations.moysklad.client import MoyskladClient
 from app.integrations.moysklad.settings_service import get_settings, save_settings, serialize_settings
-from app.main import StammApp, admin_stats
+from app.main import StammApp, admin_stats, parse_form
 from app.modules.catalog.service import public_catalog
 from app.modules.public_views import business_storefront_page
 from app.modules.auth.service import authenticate, change_password, create_session, current_user
@@ -116,6 +116,23 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(len(cans["items"]), 1)
         self.assertEqual(cans["items"][0]["containerType"], "can")
 
+
+    def test_parse_form_preserves_admin_text_newlines(self) -> None:
+        form = parse_form("description=Строка+1%0D%0AСтрока+2%0AСтрока+3".encode("utf-8"))
+        self.assertEqual(form["description"], "Строка 1\r\nСтрока 2\nСтрока 3")
+
+    def test_public_catalog_preserves_multiline_cms_text_in_payload(self) -> None:
+        app = self.make_app()
+        product_id = self.add_catalog_item(app, "Stamm Multiline", "keg", "stamm-multiline")
+        app.conn.execute(
+            "UPDATE product_overrides SET short_description = ? WHERE product_id = ?",
+            ("Строка 1\nСтрока 2\nСтрока 3", product_id),
+        )
+        app.conn.commit()
+
+        catalog = public_catalog(app.conn)
+        self.assertEqual(catalog["items"][0]["subtitle"], "Строка 1\nСтрока 2\nСтрока 3")
+
     def test_public_storefront_page_has_local_api_loading_and_empty_states(self) -> None:
         html = business_storefront_page()
         self.assertIn("/api/public/business/catalog", html)
@@ -125,6 +142,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Не удалось загрузить каталог сайта", html)
         self.assertIn("data-filter=\"keg\"", html)
         self.assertIn("data-filter=\"can\"", html)
+        self.assertIn(".cms-text { white-space:pre-line; }", html)
+        self.assertIn("<p class=\"subtitle cms-text\">${safeSubtitle}</p>", html)
         self.assertNotIn("api.moysklad.ru", html)
 
     def test_public_catalog_api_endpoint_returns_local_data(self) -> None:

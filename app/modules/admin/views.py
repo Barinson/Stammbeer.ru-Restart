@@ -39,7 +39,9 @@ def page(title: str, body: str, user_email: str | None = None) -> str:
     .card {{ background:white; border:1px solid rgba(16,88,89,.14); border-radius:20px; padding:24px; box-shadow:0 14px 40px rgba(16,88,89,.08); margin-bottom:18px; }}
     .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:18px; }}
     label {{ display:block; font-weight:700; margin:14px 0 6px; }}
-    input, select {{ width:100%; padding:12px 14px; border:1px solid rgba(16,88,89,.25); border-radius:12px; font:inherit; }}
+    input, select, textarea {{ width:100%; padding:12px 14px; border:1px solid rgba(16,88,89,.25); border-radius:12px; font:inherit; }}
+    textarea {{ min-height:140px; resize:vertical; white-space:pre-wrap; }}
+    .cms-text {{ white-space:pre-line; }}
     input[type=checkbox] {{ width:auto; }}
     button, .button {{ border:0; background:var(--noble-hop); color:white; padding:12px 16px; border-radius:12px; font-weight:800; cursor:pointer; text-decoration:none; display:inline-block; }}
     button.secondary {{ background:var(--golden-malt); color:#172625; }}
@@ -88,7 +90,7 @@ def dashboard(user_email: str, stats: dict[str, object]) -> str:
 
 
 def placeholder(title: str, description: str, user_email: str) -> str:
-    return page(title, f"<div class='card'><p>{escape(description)}</p><p class='muted'>Каркас раздела готов для следующего этапа реализации.</p></div>", user_email)
+    return page(title, f"<div class='card'><p class='cms-text'>{escape(description)}</p><p class='muted'>Каркас раздела готов для следующего этапа реализации.</p></div>", user_email)
 
 
 def moysklad_settings_page(user_email: str, settings: dict[str, object], result: str | None = None, error: str | None = None) -> str:
