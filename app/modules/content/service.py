@@ -25,7 +25,11 @@ CONTACT_DEFAULTS = {
     "contacts_emails_json": '[{"label":"Основной","value":"info@stammbeer.ru","sort_order":10,"is_visible":true},{"label":"Заказы","value":"order@stammbeer.ru","sort_order":20,"is_visible":true}]',
     "contacts_phones_json": '[{"label":"Офис","value":"+7 (000) 000-00-00","sort_order":10,"is_visible":true},{"label":"Отдел продаж","value":"+7 (000) 000-00-01","sort_order":20,"is_visible":true}]',
     "contacts_address": "Адрес завода Stamm Brewing",
+    "contacts_address_is_visible": "1",
+    "contacts_address_color": "",
     "contacts_description": "Свяжитесь с нами по вопросам заказов, сотрудничества и визитов на производство.",
+    "contacts_description_is_visible": "1",
+    "contacts_description_color": "",
     "contacts_map_lat": "55.7558",
     "contacts_map_lng": "37.6173",
     "contacts_map_zoom": "13",
@@ -184,9 +188,11 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
             "contacts_emails_json": json.dumps(contact_emails, ensure_ascii=False),
             "contacts_phones_json": json.dumps(contact_phones, ensure_ascii=False),
         }
-        for key in ("contacts_address", "contacts_description", "contacts_map_lat", "contacts_map_lng", "contacts_map_zoom", "contacts_map_height_px", "contacts_map_title"):
+        for key in ("contacts_address", "contacts_address_color", "contacts_description", "contacts_description_color", "contacts_map_lat", "contacts_map_lng", "contacts_map_zoom", "contacts_map_height_px", "contacts_map_title"):
             if key in data:
                 contact_values[key] = str(data.get(key) or "")
+        contact_values["contacts_address_is_visible"] = "1" if str(data.get("contacts_address_is_visible", "1")).strip().lower() not in {"0", "false", "off", "no"} else "0"
+        contact_values["contacts_description_is_visible"] = "1" if str(data.get("contacts_description_is_visible", "1")).strip().lower() not in {"0", "false", "off", "no"} else "0"
         for key, value in contact_values.items():
             conn.execute(
                 """
