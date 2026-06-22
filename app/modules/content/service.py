@@ -29,6 +29,7 @@ CONTACT_DEFAULTS = {
     "contacts_map_lat": "55.7558",
     "contacts_map_lng": "37.6173",
     "contacts_map_zoom": "13",
+    "contacts_map_height_px": "300",
     "contacts_map_title": "Stamm Brewing",
 }
 
@@ -183,7 +184,7 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
             "contacts_emails_json": json.dumps(contact_emails, ensure_ascii=False),
             "contacts_phones_json": json.dumps(contact_phones, ensure_ascii=False),
         }
-        for key in ("contacts_address", "contacts_description", "contacts_map_lat", "contacts_map_lng", "contacts_map_zoom", "contacts_map_title"):
+        for key in ("contacts_address", "contacts_description", "contacts_map_lat", "contacts_map_lng", "contacts_map_zoom", "contacts_map_height_px", "contacts_map_title"):
             if key in data:
                 contact_values[key] = str(data.get(key) or "")
         for key, value in contact_values.items():

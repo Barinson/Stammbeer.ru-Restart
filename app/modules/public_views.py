@@ -176,6 +176,14 @@ def cms_text(value: object) -> str:
     """Safely render CMS-managed plain text while preserving admin-entered line breaks."""
     return escape(str(value or ""))
 
+
+def css_map_height(value: object, fallback: int = 300) -> str:
+    try:
+        number = max(220, min(520, int(str(value or "").strip())))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
+
 def home_page(content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
     home = site_content["home"]
@@ -574,6 +582,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     lng = str(contacts.get("contacts_map_lng") or "37.6173")
     zoom = str(contacts.get("contacts_map_zoom") or "13")
     title = str(contacts.get("contacts_map_title") or "Stamm Brewing")
+    map_height = css_map_height(contacts.get("contacts_map_height_px"), 300)
     visible_emails = sorted(
         (item for item in emails if item.get("value") and item.get("is_visible", True)),
         key=lambda item: (int(item.get("sort_order") or 100), str(item.get("label") or "")),
@@ -600,7 +609,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
 {BASE_CSS}
 {typography_style(site_content)}
     .contacts-page {{ min-height:calc(100vh - 74px); padding:42px min(6vw,72px) 64px; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
-    .contacts-hero {{ max-width:1180px; margin:0 auto; display:grid; grid-template-columns:minmax(0,420px) minmax(0,1fr); gap:24px; align-items:stretch; }}
+    .contacts-hero {{ max-width:1080px; margin:0 auto; display:grid; grid-template-columns:minmax(0,430px) minmax(320px,0.86fr); gap:24px; align-items:start; }}
     .contacts-card {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:24px; padding:28px; box-shadow:0 18px 44px rgba(0,0,0,.18); }}
     .contacts-card h1 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
     .contacts-card p {{ color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-lead-font-size,18px); white-space:pre-line; }}
@@ -609,8 +618,11 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     .contact-list span {{ color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); }}
     .contact-list__address {{ white-space:pre-line; }}
-    .map-card {{ overflow:hidden; min-height:420px; padding:0; display:block; }}
-    .map-card iframe {{ width:100%; height:100%; min-height:420px; border:0; filter:saturate(.92); display:block; }}
+    .map-card {{ overflow:hidden; padding:0; display:grid; align-self:start; }}
+    .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:220px; max-height:520px; border:0; filter:saturate(.92); display:block; }}
+    .map-info {{ padding:18px 20px 20px; border-top:1px solid rgba(199,177,102,.18); background:rgba(11,63,64,.34); }}
+    .map-info span {{ display:block; margin-bottom:6px; color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
+    .map-info strong {{ display:block; color:var(--foam); font-size:var(--stamm-contact-text-font-size,18px); line-height:1.35; white-space:pre-line; }}
     @media (max-width:880px) {{ .contacts-hero {{ grid-template-columns:1fr; }} }}
   </style>
 </head>
@@ -625,8 +637,9 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
         <ul class="contact-list">{phone_cards}</ul>
         <ul class="contact-list"><li><span>Адрес</span><strong class="contact-list__address">{cms_text(address)}</strong></li></ul>
       </div>
-      <div class="contacts-card map-card">
+      <div class="contacts-card map-card" style="--contacts-map-height:{map_height}">
         <iframe title="Яндекс.Карта: {escape(title)}" src="{map_src}" loading="lazy" allowfullscreen></iframe>
+        <div class="map-info"><span>{escape(title)}</span><strong>{cms_text(address)}</strong></div>
       </div>
     </section>
   </main>

@@ -408,6 +408,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     contacts_map_lat = str(contacts.get("contacts_map_lat") or "")
     contacts_map_lng = str(contacts.get("contacts_map_lng") or "")
     contacts_map_zoom = str(contacts.get("contacts_map_zoom") or "13")
+    contacts_map_height_px = str(contacts.get("contacts_map_height_px") or "300")
     contacts_map_title = str(contacts.get("contacts_map_title") or "Stamm Brewing")
     map_preview_src = f"https://yandex.ru/map-widget/v1/?ll={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}&z={escape(contacts_map_zoom)}&pt={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}%2Cpm2goldm"
     typography_tokens = [
@@ -440,7 +441,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-preview-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; align-items:stretch; }}
           .contact-row {{ display:grid; grid-template-columns:minmax(140px,1fr) minmax(220px,1.5fr) 110px 140px; gap:10px; align-items:end; padding:10px 0; border-top:1px solid rgba(16,88,89,.12); }}
           .contact-row__visible {{ display:flex; gap:8px; align-items:center; padding-bottom:12px; }}
-          .contacts-map-picker {{ height:320px; border-radius:18px; overflow:hidden; border:1px solid rgba(16,88,89,.16); background:#eef3ef; }}
+          .contacts-map-picker {{ height:240px; border-radius:18px; overflow:hidden; border:1px solid rgba(16,88,89,.16); background:#eef3ef; }}
           .typography-preview {{ display:grid; gap:6px; padding:16px; border-radius:16px; background:#f6f1e3; border:1px solid rgba(16,88,89,.12); }}
           .typography-preview h4 {{ margin:0; color:#105859; font-size:24px; }}
           .typography-preview p {{ margin:0; color:#172625; }}
@@ -585,11 +586,12 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <textarea name="contacts_description" rows="4">{escape(contacts_description)}</textarea>
               <div class="grid">
                 <label>Zoom карты<input id="contacts-map-zoom" name="contacts_map_zoom" type="number" min="1" max="20" value="{escape(contacts_map_zoom)}"></label>
+                <label>Высота карты, px<input name="contacts_map_height_px" type="number" min="220" max="520" step="10" value="{escape(contacts_map_height_px)}"></label>
                 <label>Подпись точки<input name="contacts_map_title" value="{escape(contacts_map_title)}"></label>
               </div>
               <input id="contacts-map-lat" type="hidden" name="contacts_map_lat" value="{escape(contacts_map_lat)}">
               <input id="contacts-map-lng" type="hidden" name="contacts_map_lng" value="{escape(contacts_map_lng)}">
-              <p class="muted">Основной способ выбора точки — клик по карте или перетаскивание маркера. Координаты сохраняются скрыто; текстовый адрес можно отредактировать вручную.</p>
+              <p class="muted">Основной способ выбора точки — клик по карте или перетаскивание маркера. Координаты сохраняются скрыто; текстовый адрес можно отредактировать вручную. Preview карты в админке компактный; публичная высота берётся из поля выше.</p>
               <div id="contacts-map-picker" class="contacts-map-picker" data-lat="{escape(contacts_map_lat)}" data-lng="{escape(contacts_map_lng)}" data-zoom="{escape(contacts_map_zoom)}"></div>
               <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU"></script>
               <script>
