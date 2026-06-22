@@ -404,7 +404,11 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         for index, item in enumerate(contact_phones[:6])
     )
     contacts_address = str(contacts.get("contacts_address") or "")
+    contacts_address_is_visible = str(contacts.get("contacts_address_is_visible") or "1") != "0"
+    contacts_address_color = str(contacts.get("contacts_address_color") or "")
     contacts_description = str(contacts.get("contacts_description") or "")
+    contacts_description_is_visible = str(contacts.get("contacts_description_is_visible") or "1") != "0"
+    contacts_description_color = str(contacts.get("contacts_description_color") or "")
     contacts_map_lat = str(contacts.get("contacts_map_lat") or "")
     contacts_map_lng = str(contacts.get("contacts_map_lng") or "")
     contacts_map_zoom = str(contacts.get("contacts_map_zoom") or "13")
@@ -582,8 +586,16 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               {phone_rows}
               <label>Текстовый адрес</label>
               <textarea id="contacts-address-input" name="contacts_address" rows="3">{escape(contacts_address)}</textarea>
+              <div class="grid">
+                <input type="hidden" name="contacts_address_is_visible" value="0"><label><input name="contacts_address_is_visible" type="checkbox" value="1" {'checked' if contacts_address_is_visible else ''}> Показывать текстовый адрес</label>
+                <label>Цвет адреса<input name="contacts_address_color" type="color" value="{escape(contacts_address_color or '#F6F1E3')}"></label>
+              </div>
               <label>Описание расположения</label>
               <textarea name="contacts_description" rows="4">{escape(contacts_description)}</textarea>
+              <div class="grid">
+                <input type="hidden" name="contacts_description_is_visible" value="0"><label><input name="contacts_description_is_visible" type="checkbox" value="1" {'checked' if contacts_description_is_visible else ''}> Показывать описание расположения</label>
+                <label>Цвет описания<input name="contacts_description_color" type="color" value="{escape(contacts_description_color or '#F6F1E3')}"></label>
+              </div>
               <div class="grid">
                 <label>Zoom карты<input id="contacts-map-zoom" name="contacts_map_zoom" type="number" min="1" max="20" value="{escape(contacts_map_zoom)}"></label>
                 <label>Высота карты, px<input name="contacts_map_height_px" type="number" min="180" max="420" step="10" value="{escape(contacts_map_height_px)}"></label>

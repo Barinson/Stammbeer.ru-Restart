@@ -184,6 +184,19 @@ def css_map_height(value: object, fallback: int = 240) -> str:
         number = fallback
     return f"{number}px"
 
+
+def css_text_color(value: object, fallback: str) -> str:
+    raw = str(value or "").strip()
+    if len(raw) == 7 and raw.startswith("#") and all(char in "0123456789abcdefABCDEF" for char in raw[1:]):
+        return raw
+    return fallback
+
+
+def is_enabled(value: object, default: bool = True) -> bool:
+    if value is None or value == "":
+        return default
+    return str(value).strip().lower() not in {"0", "false", "off", "no"}
+
 def home_page(content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
     home = site_content["home"]
@@ -577,7 +590,11 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
         except json.JSONDecodeError:
             phones = []
     address = str(contacts.get("contacts_address") or "")
+    address_is_visible = is_enabled(contacts.get("contacts_address_is_visible"), True)
+    address_color = css_text_color(contacts.get("contacts_address_color"), "var(--foam)")
     description = str(contacts.get("contacts_description") or "")
+    description_is_visible = is_enabled(contacts.get("contacts_description_is_visible"), True)
+    description_color = css_text_color(contacts.get("contacts_description_color"), "rgba(246,241,227,.78)")
     lat = str(contacts.get("contacts_map_lat") or "55.7558")
     lng = str(contacts.get("contacts_map_lng") or "37.6173")
     zoom = str(contacts.get("contacts_map_zoom") or "13")
@@ -600,6 +617,9 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
         for item in visible_phones
     ) or "<li><span>Телефон</span><strong>Скоро появится</strong></li>"
     map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
+    description_markup = f'<p style="color:{escape(description_color)}">{cms_text(description)}</p>' if description_is_visible and description else ""
+    address_markup = f'<ul class="contact-list"><li><span>Адрес</span><strong class="contact-list__address" style="color:{escape(address_color)}">{cms_text(address)}</strong></li></ul>' if address_is_visible and address else ""
+    map_info_address = f'<strong style="color:{escape(address_color)}">{cms_text(address)}</strong>' if address_is_visible and address else ""
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -608,7 +628,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .contacts-page {{ min-height:calc(100vh - 74px); padding:42px min(6vw,72px) 64px; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .contacts-page {{ min-height:calc(100vh - 64px); padding:78px min(6vw,72px) 64px; display:grid; align-items:center; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
     .contacts-hero {{ max-width:1000px; margin:0 auto; display:grid; grid-template-columns:minmax(0,430px) minmax(280px,.72fr); gap:24px; align-items:start; }}
     .contacts-card {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:24px; padding:28px; box-shadow:0 18px 44px rgba(0,0,0,.18); }}
     .contacts-info-card {{ border:0; background:transparent; box-shadow:none; padding:10px 0; }}
@@ -631,14 +651,14 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
   <main class="contacts-page">
     <section class="contacts-hero">
       <div class="contacts-card contacts-info-card">
-        <p>{cms_text(description)}</p>
+        {description_markup}
         <ul class="contact-list">{email_cards}</ul>
         <ul class="contact-list">{phone_cards}</ul>
-        <ul class="contact-list"><li><span>Адрес</span><strong class="contact-list__address">{cms_text(address)}</strong></li></ul>
+        {address_markup}
       </div>
       <div class="contacts-card map-card" style="--contacts-map-height:{map_height}">
         <iframe title="Яндекс.Карта: {escape(title)}" src="{map_src}" loading="lazy" allowfullscreen></iframe>
-        <div class="map-info"><span>{escape(title)}</span><strong>{cms_text(address)}</strong></div>
+        <div class="map-info"><span>{escape(title)}</span>{map_info_address}</div>
       </div>
     </section>
   </main>
