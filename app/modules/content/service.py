@@ -62,9 +62,11 @@ BEER_DEFAULTS = {
     "beer_partners_json": "[]",
     "beer_products_title": "Наша продукция",
     "beer_new_title": "Новинки",
+    "beer_core_title": "Постоянная линейка",
     "beer_seasonal_title": "Сезонные сорта",
     "beer_products_is_visible": "1",
     "beer_new_is_visible": "1",
+    "beer_core_is_visible": "1",
     "beer_seasonal_is_visible": "1",
     "beer_products_json": "[]",
 }
@@ -245,13 +247,16 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
             "beer_partners_is_visible": "1" if str(data.get("beer_partners_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
             "beer_products_title": str(data.get("beer_products_title") or BEER_DEFAULTS["beer_products_title"]),
             "beer_new_title": str(data.get("beer_new_title") or BEER_DEFAULTS["beer_new_title"]),
+            "beer_core_title": str(data.get("beer_core_title") or BEER_DEFAULTS["beer_core_title"]),
             "beer_seasonal_title": str(data.get("beer_seasonal_title") or BEER_DEFAULTS["beer_seasonal_title"]),
             "beer_products_is_visible": "1" if str(data.get("beer_products_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
             "beer_new_is_visible": "1" if str(data.get("beer_new_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_core_is_visible": "1" if str(data.get("beer_core_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
             "beer_seasonal_is_visible": "1" if str(data.get("beer_seasonal_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
         }
         partners = []
-        for index in range(8):
+        partner_indices = sorted({int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_partner_name_") and key.rsplit("_", 1)[1].isdigit()} | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_partner_logo_url_") and key.rsplit("_", 1)[1].isdigit()})
+        for index in partner_indices:
             name = str(data.get(f"beer_partner_name_{index}") or "").strip()
             logo = str(data.get(f"beer_partner_logo_url_{index}") or "").strip()
             if name or logo:
@@ -262,7 +267,8 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
                     "is_visible": str(data.get(f"beer_partner_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
                 })
         products = []
-        for index in range(12):
+        product_indices = sorted({int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_product_name_") and key.rsplit("_", 1)[1].isdigit()} | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_product_image_url_") and key.rsplit("_", 1)[1].isdigit()})
+        for index in product_indices:
             name = str(data.get(f"beer_product_name_{index}") or "").strip()
             image = str(data.get(f"beer_product_image_url_{index}") or "").strip()
             if name or image:

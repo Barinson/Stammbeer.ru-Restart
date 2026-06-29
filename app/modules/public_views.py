@@ -693,13 +693,16 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
         return f'<button class="beer-can {"beer-can--featured" if featured else "beer-can--seasonal"}" type="button" data-product="{payload}" aria-label="{name}">{image_html}</button>'
 
     new_cards = "".join(product_card(item, True) for item in [p for p in products if p.get("category") == "new"][:3])
-    seasonal_cards = "".join(product_card(item, False) for item in [p for p in products if p.get("category") != "new"])
+    core_cards = "".join(product_card(item, False) for item in [p for p in products if p.get("category") == "core"])
+    seasonal_cards = "".join(product_card(item, False) for item in [p for p in products if p.get("category") not in {"new", "core"}])
     partners_section = ""
     if is_enabled(beer.get("beer_partners_is_visible"), True):
         partners_section = f'<section class="beer-section"><h1>{escape(str(beer.get("beer_partners_title") or "Где найти Stamm Brewing"))}</h1><p>{cms_text(beer.get("beer_partners_description") or "")}</p><div class="partners-grid">{"".join(partner_cards)}</div></section>'
     products_inner = ""
     if is_enabled(beer.get("beer_new_is_visible"), True):
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_new_title") or "Новинки"))}</h3><div class="new-grid">{new_cards}</div></div>'
+    if is_enabled(beer.get("beer_core_is_visible"), True):
+        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_core_title") or "Постоянная линейка"))}</h3><div class="seasonal-grid">{core_cards}</div></div>'
     if is_enabled(beer.get("beer_seasonal_is_visible"), True):
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_seasonal_title") or "Сезонные сорта"))}</h3><div class="seasonal-grid">{seasonal_cards}</div></div>'
     products_section = f'<section class="beer-section"><h2>{escape(str(beer.get("beer_products_title") or "Наша продукция"))}</h2>{products_inner}</section>' if is_enabled(beer.get("beer_products_is_visible"), True) else ""
