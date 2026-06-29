@@ -523,6 +523,11 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-news-preview p {{ margin:0; color:rgba(246,241,227,.78); white-space:pre-line; }}
           .cms-text-preview {{ white-space:pre-line; }}
           .beer-admin-row {{ display:grid; gap:8px; padding:9px 0; border-top:1px solid rgba(16,88,89,.12); }}
+          .cms-panel-beer h4 {{ margin:22px 0 10px; color:#105859; font-size:24px; line-height:1.15; letter-spacing:.02em; }}
+          .beer-admin-row label {{ margin:0; font-size:11px; font-weight:600; color:#52615f; }}
+          .beer-admin-row input:not([type=checkbox]), .beer-admin-row select, .beer-admin-row textarea {{ padding:6px 8px; border-radius:8px; font-size:11px; font-weight:400; line-height:1.25; }}
+          .beer-admin-row input[type=file] {{ max-width:138px; color:transparent; font-size:0; padding:0; border:0; background:transparent; }}
+          .beer-admin-row input[type=file]::file-selector-button {{ margin:0; border:1px solid rgba(16,88,89,.24); border-radius:8px; background:#f6f1e3; color:#172625; padding:6px 9px; font-size:11px; font-weight:700; cursor:pointer; }}
           .beer-product-fields {{ display:grid; grid-template-columns:1.2fr 1fr .7fr 1fr 1.2fr .65fr auto auto; gap:8px; align-items:end; }}
           .beer-asset-fields {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; align-items:end; }}
           .beer-row-check {{ white-space:nowrap; }}
