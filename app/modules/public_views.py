@@ -755,7 +755,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
 {BASE_CSS}
 {typography_style(site_content)}
     .beer-page {{ min-height:calc(100vh - 88px); padding:120px min(6vw,72px) 72px; background-image:linear-gradient(180deg, rgba(16,88,89,.78), rgba(11,63,64,.86)), var(--beer-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
-    .beer-shell {{ max-width:1180px; margin:0 auto; display:grid; gap:72px; justify-items:center; text-align:center; }}
+    .beer-shell {{ width:100%; max-width:1440px; margin:0 auto; display:grid; gap:72px; justify-items:center; text-align:center; }}
     .beer-section {{ width:100%; display:grid; justify-items:center; }}
     .beer-section h1, .beer-section h2 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
     .beer-section p {{ margin:0 auto 24px; max-width:720px; color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.55; white-space:pre-line; }}
@@ -768,7 +768,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .product-subsection {{ margin-top:28px; }}
     .product-subsection h3 {{ margin:0 0 18px; color:var(--foam); font-size:var(--stamm-section-title-font-size,28px); }}
     .new-grid {{ width:min(860px,100%); display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:28px; align-items:end; justify-items:center; margin:0 auto; }}
-    .seasonal-grid {{ width:min(920px,100%); display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:18px; justify-items:center; margin:0 auto; }}
+    .seasonal-grid {{ width:min(1320px,100%); display:grid; grid-template-columns:repeat(9,minmax(72px,1fr)); gap:16px; justify-items:center; align-items:end; margin:0 auto; }}
     .beer-can {{ border:0; background:transparent; color:var(--foam); cursor:pointer; display:grid; justify-items:center; gap:10px; font:inherit; font-weight:800; transition:transform .18s ease; }}
     .beer-can:hover {{ transform:scale(1.045); }}
     .beer-can img {{ width:100%; object-fit:contain; filter:drop-shadow(0 22px 28px rgba(0,0,0,.28)); }}
@@ -785,6 +785,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .untappd-link {{ display:inline-grid; place-items:center; margin-top:12px; text-decoration:none; }}
     .untappd-link img {{ width:42px; height:42px; object-fit:contain; transition:transform .18s ease, filter .18s ease; }}
     .untappd-link:hover img {{ transform:scale(1.06); filter:brightness(1.12); }}
+    @media (max-width:1100px) {{ .seasonal-grid {{ grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); }} }}
     @media (max-width:760px) {{ .new-grid {{ grid-template-columns:1fr; }} .beer-page {{ padding:76px 20px 54px; background-attachment:scroll; }} }}
   </style>
 </head>
