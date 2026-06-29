@@ -16,9 +16,11 @@ from app.integrations.moysklad.client import MoyskladClient, normalize_counterpa
 from app.modules.account.service import (
     DiscountRefreshError,
     authenticate_customer,
+    change_customer_password,
     create_customer_session,
     current_customer,
     customer_session_from_cookie,
+    list_customer_orders,
     register_customer,
 )
 from app.integrations.moysklad.settings_service import get_settings, refresh_integration_references, save_settings, serialize_settings
@@ -27,7 +29,7 @@ from app.main import StammApp, admin_stats
 from app.modules.catalog.service import admin_catalog_items, public_catalog, publish_product
 from app.modules.content.service import get_public_site_content, save_public_content
 from app.modules.admin.views import admin_catalog_page
-from app.modules.public_views import beer_page, business_storefront_page, contacts_page, home_page
+from app.modules.public_views import account_dashboard_page, beer_page, business_storefront_page, contacts_page, home_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
 
 
@@ -1769,6 +1771,28 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIsNotNone(loaded)
         self.assertEqual(loaded["counterparty_name"], "ООО Штамм Партнёр")
         self.assertIsNone(current_user(app.conn, cookie))
+        order_id = app.conn.execute(
+            """
+            INSERT INTO b2b_orders (
+                number, status, contact_name, company_name, inn, email, phone, city,
+                total_minor, currency, source_json, customer_account_id, counterparty_href
+            ) VALUES (
+                'B2B-LK-1', 'sent_to_moysklad', 'partner@example.com', 'ООО Штамм Партнёр',
+                '7701234567', 'partner@example.com', '—', '—', 1250000, 'RUB', '{}', ?, ?
+            )
+            """,
+            (customer["id"], customer["counterparty_href"]),
+        ).lastrowid
+        app.conn.execute(
+            """
+            INSERT INTO b2b_order_items (
+                order_id, product_id, variant_id, quantity, price_minor, line_total_minor,
+                product_snapshot_json, availability_snapshot_json
+            ) VALUES (?, NULL, NULL, 24, 50000, 1200000, ?, '{}')
+            """,
+            (order_id, json.dumps({"name": "Stamm IPA банка"}, ensure_ascii=False)),
+        )
+        app.conn.commit()
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -1780,8 +1804,37 @@ class CoreFoundationTest(unittest.TestCase):
         request = urllib.request.Request(base + "/account", headers={"Cookie": cookie})
         page_html = urllib.request.urlopen(request, timeout=5).read().decode("utf-8")
         self.assertIn("ООО Штамм Партнёр", page_html)
-        self.assertIn("Контрагент МойСклад найден", page_html)
-        self.assertIn("Диагностика скидки МойСклад", page_html)
+        self.assertIn("История заказов", page_html)
+        self.assertIn("B2B-LK-1", page_html)
+        self.assertIn("Stamm IPA банка", page_html)
+        self.assertIn("Смена пароля", page_html)
+        self.assertNotIn("Контрагент МойСклад найден", page_html)
+        self.assertNotIn("Диагностика скидки МойСклад", page_html)
+        self.assertNotIn("Персональный тип цен", page_html)
+        self.assertNotIn("Обновлена", page_html)
+        self.assertNotIn("Статус связи", page_html)
+        self.assertNotIn("2026-06-29T", page_html)
+        bad_password = open_without_redirects(
+            urllib.request.Request(
+                base + "/account/password",
+                data=urllib.parse.urlencode({"current_password": "wrong", "new_password": "newsecret123", "new_password_confirm": "newsecret123"}).encode("utf-8"),
+                headers={"Cookie": cookie},
+                method="POST",
+            )
+        )
+        self.assertEqual(bad_password.code, 303)
+        self.assertIn("password_error", bad_password.headers["Location"])
+        ok_password = open_without_redirects(
+            urllib.request.Request(
+                base + "/account/password",
+                data=urllib.parse.urlencode({"current_password": "secret123", "new_password": "newsecret123", "new_password_confirm": "newsecret123"}).encode("utf-8"),
+                headers={"Cookie": cookie},
+                method="POST",
+            )
+        )
+        self.assertEqual(ok_password.code, 303)
+        self.assertIn("password_result", ok_password.headers["Location"])
+        self.assertIsNotNone(authenticate_customer(app.conn, "partner@example.com", "newsecret123", refresh_discount=False))
 
         anonymous = open_without_redirects(base + "/account")
         self.assertEqual(anonymous.code, 303)

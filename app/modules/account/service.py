@@ -341,6 +341,70 @@ def authenticate_customer(conn: sqlite3.Connection, email: str, password: str, r
     return refresh_customer_discount(conn, refreshed, force=True)
 
 
+def change_customer_password(conn: sqlite3.Connection, account_id: int, current_password: str, new_password: str, password_confirm: str) -> tuple[bool, str]:
+    account = _account_by_id(conn, account_id)
+    if account is None or account["status"] != "active":
+        return False, "Аккаунт не найден или отключён."
+    if not verify_password(current_password, account["password_hash"]):
+        return False, "Текущий пароль указан неверно."
+    if len(new_password or "") < 8:
+        return False, "Новый пароль должен быть не короче 8 символов."
+    if new_password != password_confirm:
+        return False, "Новый пароль и подтверждение не совпадают."
+    conn.execute(
+        "UPDATE customer_accounts SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (hash_password(new_password), account_id),
+    )
+    conn.commit()
+    return True, "Пароль успешно изменён."
+
+
+def list_customer_orders(conn: sqlite3.Connection, account_id: int, limit: int = 20) -> list[dict[str, Any]]:
+    orders = conn.execute(
+        """
+        SELECT id, number, status, total_minor, currency, created_at, external_order_href
+        FROM b2b_orders
+        WHERE customer_account_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+        """,
+        (account_id, limit),
+    ).fetchall()
+    result: list[dict[str, Any]] = []
+    for order in orders:
+        item_rows = conn.execute(
+            """
+            SELECT quantity, line_total_minor, product_snapshot_json
+            FROM b2b_order_items
+            WHERE order_id = ?
+            ORDER BY id ASC
+            """,
+            (order["id"],),
+        ).fetchall()
+        items: list[dict[str, Any]] = []
+        for item in item_rows:
+            try:
+                snapshot = json.loads(item["product_snapshot_json"] or "{}")
+            except json.JSONDecodeError:
+                snapshot = {}
+            items.append({
+                "name": str(snapshot.get("name") or "Позиция заказа"),
+                "quantity": item["quantity"],
+                "line_total_minor": item["line_total_minor"],
+            })
+        result.append({
+            "id": order["id"],
+            "number": order["number"],
+            "status": order["status"],
+            "total_minor": order["total_minor"],
+            "currency": order["currency"] or "RUB",
+            "created_at": order["created_at"],
+            "external_order_href": order["external_order_href"],
+            "items": items,
+        })
+    return result
+
+
 def list_customer_accounts(conn: sqlite3.Connection, query: str | None = None) -> list[sqlite3.Row]:
     normalized = (query or "").strip().lower()
     if normalized:
