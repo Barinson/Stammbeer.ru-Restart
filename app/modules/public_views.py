@@ -325,8 +325,8 @@ ACCOUNT_CSS = """
     .account-form input { width:100%; border:1px solid rgba(199,177,102,.32); border-radius:14px; padding:10px 12px; background:rgba(11,63,64,.82); color:var(--foam); font:inherit; font-size:14px; font-weight:400; }
     .account-form input:focus { outline:2px solid rgba(199,177,102,.44); outline-offset:2px; }
     .account-actions { display:flex; gap:9px; align-items:center; flex-wrap:wrap; margin-top:6px; }
-    .account-button { border:0; border-radius:999px; padding:9px 14px; background:var(--golden-malt); color:var(--ink); font:inherit; font-size:14px; line-height:1.15; font-weight:700; cursor:pointer; text-decoration:none; }
-    .account-button--compact { padding:7px 11px; font-size:12.5px; font-weight:700; }
+    .account-button { border:0; border-radius:999px; padding:9px 14px; background:var(--golden-malt); color:var(--ink); font:inherit; font-size:14px; line-height:1.15; font-weight:700; cursor:pointer; text-decoration:none; box-shadow:0 2px 7px rgba(199,177,102,.14); }
+    .account-button--compact { padding:7px 11px; font-size:12.5px; font-weight:700; box-shadow:0 1px 4px rgba(199,177,102,.1); }
     .account-inline-form { margin:0; }
     .account-link { color:var(--golden-malt); font-weight:800; text-decoration:none; }
     .account-message { margin-top:18px; border-radius:16px; padding:12px 14px; background:rgba(199,177,102,.14); color:var(--foam); }
@@ -949,7 +949,7 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
 def business_guest_page(content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
     site_content = {**site_content, "actions": [{**item, "is_visible": False} if item.get("key") == "cart" else item for item in site_content.get("actions", [])]}
-    message = "Что бы стать нашим партнёром напишите на marketing@stammbeer.ru"
+    message = "Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru"
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -958,15 +958,14 @@ def business_guest_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .business-guest {{ min-height:calc(100vh - 88px); padding:var(--menu-offset,176px) min(6vw,72px) 72px; display:grid; place-items:start center; background:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
-    .business-guest__card {{ width:min(720px,100%); border-radius:28px; padding:34px; text-align:center; background:rgba(13,75,76,.92); border:1px solid rgba(199,177,102,.2); box-shadow:0 24px 70px rgba(0,0,0,.22); }}
-    .business-guest__card p {{ margin:0; color:var(--golden-malt); font-size:clamp(22px,3vw,34px); line-height:1.2; font-weight:800; letter-spacing:.02em; }}
+    .business-guest {{ min-height:calc(100vh - 88px); padding:var(--menu-offset,176px) min(6vw,72px) 72px; display:grid; place-items:center; background:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .business-guest__message {{ max-width:620px; margin:0 auto; text-align:center; color:var(--foam); font-size:clamp(17px,2vw,24px); line-height:1.38; font-weight:600; letter-spacing:.01em; }}
   </style>
 </head>
 <body>
 {public_nav("business", site_content)}
   <main class="business-guest" style="--menu-offset:{menu_offset_px(site_content, 'business')};">
-    <section class="business-guest__card"><p>{escape(message)}</p></section>
+    <p class="business-guest__message">{escape(message)}</p>
   </main>
 {age_gate_markup()}
 </body>
