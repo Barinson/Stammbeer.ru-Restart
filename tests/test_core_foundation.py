@@ -26,7 +26,7 @@ from app.modules.email import service as email_service
 from app.main import StammApp, admin_stats
 from app.modules.catalog.service import admin_catalog_items, public_catalog, publish_product
 from app.modules.content.service import get_public_site_content, save_public_content
-from app.modules.public_views import business_storefront_page, contacts_page, home_page
+from app.modules.public_views import beer_page, business_storefront_page, contacts_page, home_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
 
 
@@ -473,11 +473,15 @@ class CoreFoundationTest(unittest.TestCase):
                 "contact_phone_value_0": "+7 999 111-22-33",
                 "contact_phone_sort_order_0": "10",
                 "contact_phone_visible_0": "on",
-                "contacts_address": "Москва, тестовый завод",
+                "contacts_address": "Москва, тестовый завод\nстроение 2",
+                "contacts_address_color": "#C7B166",
                 "contacts_description": "Контакты производства Stamm",
+                "contacts_description_color": "#F6F1E3",
                 "contacts_map_lat": "55.7001",
                 "contacts_map_lng": "37.6002",
                 "contacts_map_zoom": "15",
+                "contacts_map_height_px": "280",
+                "contacts_map_width_px": "360",
                 "contacts_map_title": "Stamm Test Brewery",
                 "typography_nav_font_size_px": "18",
                 "typography_page_title_font_size_px": "52",
@@ -535,8 +539,18 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("hello@stamm.test", contacts_html)
         self.assertNotIn("hidden@stamm.test", contacts_html)
         self.assertIn("+7 999 111-22-33", contacts_html)
-        self.assertIn("Москва, тестовый завод", contacts_html)
+        self.assertIn("Москва, тестовый завод\nстроение 2", contacts_html)
+        self.assertIn("color:#C7B166", contacts_html)
+        self.assertIn("color:#F6F1E3", contacts_html)
+        self.assertNotIn("<span>Адрес</span>", contacts_html)
+        self.assertIn("map-info", contacts_html)
+        self.assertIn("contacts-info-card", contacts_html)
+        self.assertNotIn("<h1>Контакты</h1>", contacts_html)
+        self.assertIn("grid-template-columns:minmax(0,430px) minmax(280px,.72fr)", contacts_html)
+        self.assertIn("min-height:180px; max-height:420px", contacts_html)
         self.assertIn("Stamm Test Brewery", contacts_html)
+        self.assertIn("--contacts-map-height:280px; --contacts-map-width:360px", contacts_html)
+        self.assertIn("width:min(100%, var(--contacts-map-width))", contacts_html)
         self.assertIn("yandex.ru/map-widget", contacts_html)
         self.assertIn("55.7001", contacts_html)
         self.assertIn("37.6002", contacts_html)
@@ -587,6 +601,118 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("about:blank", html)
         self.assertIn("stamm_age_confirmed", html)
 
+    def test_beer_page_content_is_cms_managed(self) -> None:
+        app = self.make_app()
+        save_public_content(
+            app.conn,
+            {
+                "beer_partners_title": "Где найти Stamm Brewing",
+                "beer_partners_description": "Партнёры\nи бары",
+                "home_content_bg_url": "/media/taproom-bg.jpg",
+                "beer_partners_is_visible": "1",
+                "beer_partner_name_0": "Bottle Shop",
+                "beer_partner_logo_url_0": "/media/partner.svg",
+                "beer_partner_url_0": "https://partner.test",
+                "beer_partner_size_0": "large",
+                "beer_partner_sort_order_0": "10",
+                "beer_partner_visible_0": "1",
+                "beer_products_title": "Наша продукция",
+                "beer_new_title": "Новинки",
+                "beer_core_title": "Постоянная линейка",
+                "beer_seasonal_title": "Сезонные сорта",
+                "beer_products_is_visible": "1",
+                "beer_new_is_visible": "1",
+                "beer_core_is_visible": "1",
+                "beer_seasonal_is_visible": "1",
+                "menu_offset_beer_px": "232",
+                "beer_untappd_logo_url": "/media/untappd-global.svg",
+                "beer_popup_backdrop_color": "#123456",
+                "beer_popup_backdrop_opacity": "45",
+                "beer_product_name_0": "Stamm IPA",
+                "beer_product_style_0": "IPA",
+                "beer_product_abv_0": "6.5%",
+                "beer_product_image_url_0": "/media/ipa.png",
+                "beer_product_untappd_url_0": "https://untappd.com/b/stamm-ipa",
+                "beer_product_category_0": "new",
+                "beer_product_sort_order_0": "10",
+                "beer_product_visible_0": "1",
+                "beer_product_name_1": "Stamm Lager",
+                "beer_product_style_1": "Lager",
+                "beer_product_abv_1": "4.8%",
+                "beer_product_image_url_1": "/media/lager.png",
+                "beer_product_category_1": "core",
+                "beer_product_sort_order_1": "20",
+                "beer_product_visible_1": "1",
+                "beer_product_name_24": "Stamm Saison",
+                "beer_product_style_24": "Saison",
+                "beer_product_abv_24": "5.2%",
+                "beer_product_image_url_24": "/media/saison.png",
+                "beer_product_category_24": "seasonal",
+                "beer_product_sort_order_24": "30",
+                "beer_product_visible_24": "1",
+            },
+        )
+        content = get_public_site_content(app.conn)
+        self.assertEqual(content["beer"]["partners"][0]["name"], "Bottle Shop")
+        html = beer_page(content)
+        self.assertIn("Где найти Stamm Brewing", html)
+        self.assertIn("Партнёры\nи бары", html)
+        self.assertIn('target="_blank"', html)
+        self.assertIn("--logo-size:154px", html)
+        self.assertIn("width:max-content", html)
+        self.assertIn("display:flex; flex-wrap:wrap", html)
+        self.assertIn("--beer-bg:url", html)
+        self.assertIn("linear-gradient(180deg, rgba(16,88,89,.78)", html)
+        self.assertIn("--menu-offset:232px", html)
+        self.assertIn(".partner-card:hover img", html)
+        self.assertNotIn("min-height:132px", html)
+        self.assertIn("beer-can--featured", html)
+        self.assertIn("Постоянная линейка", html)
+        self.assertIn("beer-can--seasonal", html)
+        self.assertEqual(len(content["beer"]["products"]), 3)
+        self.assertIn("beer-modal", html)
+        self.assertIn("beer-modal__mockup", html)
+        self.assertIn("rgba(18,52,86,0.45)", html)
+        self.assertIn('const untappdLogoUrl = "/media/untappd-global.svg"', html)
+        self.assertNotIn("untappdLogoUrl", html.split("data-product=", 1)[1].split(" aria-label", 1)[0])
+        self.assertIn("style.textContent = data.style || ''", html)
+        self.assertNotIn(">Stamm IPA</span>", html)
+        self.assertIn("https://untappd.com/b/stamm-ipa", html)
+
+
+    def test_public_cms_text_preserves_line_breaks_without_raw_html(self) -> None:
+        app = self.make_app()
+        save_public_content(
+            app.conn,
+            {
+                "home_news_text": "Строка 1\nСтрока 2\n<script>alert(1)</script>",
+                "contacts_address": "Адрес 1\nАдрес 2\n<em>не html</em>",
+                "contacts_address_is_visible": "0",
+                "contacts_address_color": "#C7B166",
+                "contacts_description": "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>",
+                "contacts_description_is_visible": "0",
+                "contacts_description_color": "#F6F1E3",
+            },
+        )
+        content = get_public_site_content(app.conn)
+        self.assertEqual(content["home"]["home_news_text"], "Строка 1\nСтрока 2\n<script>alert(1)</script>")
+        self.assertEqual(content["contacts"]["contacts_address"], "Адрес 1\nАдрес 2\n<em>не html</em>")
+        self.assertEqual(content["contacts"]["contacts_address_is_visible"], "0")
+        self.assertEqual(content["contacts"]["contacts_description"], "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>")
+        self.assertEqual(content["contacts"]["contacts_description_is_visible"], "0")
+        home_html = home_page(content)
+        contacts_html = contacts_page(content)
+        self.assertIn("white-space:pre-line", home_html)
+        self.assertIn("Строка 1\nСтрока 2", home_html)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", home_html)
+        self.assertNotIn("<script>alert(1)</script>", home_html)
+        self.assertIn("white-space:pre-line", contacts_html)
+        self.assertNotIn("Адрес 1\nАдрес 2", contacts_html)
+        self.assertNotIn("&lt;em&gt;не html&lt;/em&gt;", contacts_html)
+        self.assertNotIn("Контакты 1\r\nКонтакты 2", contacts_html)
+        self.assertNotIn("&lt;strong&gt;не html&lt;/strong&gt;", contacts_html)
+
+
     def test_admin_content_uploads_logo_and_nav_icon_assets(self) -> None:
         app = self.make_app()
         user = authenticate(app.conn, "admin", "1")
@@ -615,6 +741,30 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('for="cms-tab-contacts"', admin_content_html)
         self.assertIn("Контакты", admin_content_html)
         self.assertIn("contacts-map-picker", admin_content_html)
+        self.assertIn('for="cms-tab-beer"', admin_content_html)
+        self.assertIn("beer_core_title", admin_content_html)
+        self.assertIn("data-add-beer-product", admin_content_html)
+        self.assertIn('data-dynamic-list="beer-products-new"', admin_content_html)
+        self.assertIn('data-dynamic-list="beer-products-core"', admin_content_html)
+        self.assertIn('data-dynamic-list="beer-products-seasonal"', admin_content_html)
+        self.assertIn("data-delete-beer-product", admin_content_html)
+        self.assertIn("beer-product-fields", admin_content_html)
+        self.assertIn("beer-asset-fields", admin_content_html)
+        self.assertIn("beer_untappd_logo_file", admin_content_html)
+        self.assertIn("beer_popup_backdrop_color", admin_content_html)
+        self.assertIn("beer_popup_backdrop_opacity", admin_content_html)
+        self.assertNotIn("beer_product_untappd_logo_file_0", admin_content_html)
+        self.assertIn("stamm_admin_content_scroll", admin_content_html)
+        self.assertIn("contacts_map_height_px", admin_content_html)
+        self.assertIn("contacts_map_width_px", admin_content_html)
+        self.assertIn("Высота карты, px", admin_content_html)
+        self.assertIn("Ширина карты, px", admin_content_html)
+        self.assertIn("contacts_address_is_visible", admin_content_html)
+        self.assertIn("contacts_description_is_visible", admin_content_html)
+        self.assertIn("contacts_address_color", admin_content_html)
+        self.assertIn("contacts_description_color", admin_content_html)
+        self.assertIn('min="180" max="420"', admin_content_html)
+        self.assertIn('min="280" max="640"', admin_content_html)
         self.assertIn("api-maps.yandex.ru", admin_content_html)
         self.assertNotIn("Широта<input", admin_content_html)
         self.assertNotIn("Долгота<input", admin_content_html)
@@ -623,6 +773,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('for="cms-tab-typography"', admin_content_html)
         self.assertIn("Типографика", admin_content_html)
         self.assertIn("typography_product_title_font_size_px", admin_content_html)
+        self.assertIn("menu_offset_home_px", admin_content_html)
+        self.assertIn("Отступ контента от меню — Пиво", admin_content_html)
 
         parts = [
             field("home_hero_title", "STAMM"),
@@ -646,14 +798,22 @@ class CoreFoundationTest(unittest.TestCase):
             field("contact_email_label_0", "Основной"), field("contact_email_value_0", "admin@stamm.test"), field("contact_email_sort_order_0", "10"), field("contact_email_visible_0", "on"),
             field("contact_email_label_1", "Скрытая почта"), field("contact_email_value_1", "hidden-admin@stamm.test"), field("contact_email_sort_order_1", "20"),
             field("contact_phone_label_0", "Отдел продаж"), field("contact_phone_value_0", "+7 999 000-00-00"), field("contact_phone_sort_order_0", "10"), field("contact_phone_visible_0", "on"),
-            field("contacts_address", "Админский адрес завода"),
+            field("contacts_address", "Админский адрес завода\nкорпус 1"),
+            field("contacts_address_is_visible", "1"), field("contacts_address_color", "#C7B166"),
             field("contacts_description", "Описание контактов из админки"),
+            field("contacts_description_is_visible", "1"), field("contacts_description_color", "#F6F1E3"),
             field("contacts_map_lat", "55.7100"), field("contacts_map_lng", "37.6100"),
-            field("contacts_map_zoom", "14"), field("contacts_map_title", "Админская точка Stamm"),
+            field("contacts_map_zoom", "14"), field("contacts_map_height_px", "260"), field("contacts_map_width_px", "380"), field("contacts_map_title", "Админская точка Stamm"),
             field("typography_nav_font_size_px", "19"), field("typography_page_title_font_size_px", "54"),
             field("typography_body_font_size_px", "18"), field("typography_contact_text_font_size_px", "22"),
             field("typography_product_title_font_size_px", "20"), field("typography_price_font_size_px", "24"),
             field("typography_cart_font_size_px", "16"),
+            field("menu_offset_home_px", "210"), field("menu_offset_beer_px", "230"),
+            field("menu_offset_visit_px", "190"), field("menu_offset_history_px", "200"),
+            field("menu_offset_business_px", "240"), field("menu_offset_contacts_px", "220"),
+            field("beer_untappd_logo_url", ""),
+            file_field("beer_untappd_logo_file", "untappd.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'></svg>"),
+            field("beer_popup_backdrop_color", "#224466"), field("beer_popup_backdrop_opacity", "35"),
             field("menu_beer_label", "Пиво"), field("menu_beer_sort_order", "10"), field("menu_beer_visible", "on"),
             field("menu_visit_label", "Посетить пивоварню"), field("menu_visit_sort_order", "20"), field("menu_visit_visible", "on"),
             field("menu_history_label", "История"), field("menu_history_sort_order", "30"), field("menu_history_visible", "on"),
@@ -694,6 +854,13 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("--stamm-page-title-font-size:54px", contacts_page(content))
         self.assertIn("--stamm-product-title-font-size:20px", business_storefront_page(content))
         self.assertIn("--stamm-price-font-size:24px", business_storefront_page(content))
+        self.assertEqual(content["layout"]["menu_offset_home_px"], "210")
+        self.assertTrue(content["beer"]["beer_untappd_logo_url"].startswith("/media/beer-untappd-"))
+        self.assertEqual(content["beer"]["beer_popup_backdrop_color"], "#224466")
+        self.assertEqual(content["beer"]["beer_popup_backdrop_opacity"], "35")
+        self.assertIn("--menu-offset:210px", home_page(content))
+        self.assertIn("--menu-offset:220px", contacts_page(content))
+        self.assertIn("--menu-offset:240px", business_storefront_page(content))
         tg = next(item for item in content["actions"] if item["key"] == "tg")
         self.assertTrue(tg["icon_url"].startswith("/media/nav-tg-"))
         self.assertIn(content["home"]["home_logo_url"], home_page(content))
