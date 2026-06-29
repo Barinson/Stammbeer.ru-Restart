@@ -27,7 +27,7 @@ BASE_CSS = """
     .nav-actions { display:flex; align-items:center; gap:9px; }
     .nav-icon { width:32px; height:32px; border:0; border-radius:999px; display:grid; place-items:center; background:var(--golden-malt); color:var(--ink); text-decoration:none; font-size:11px; font-weight:900; line-height:1; overflow:hidden; padding:0; }
     .nav-icon img { width:100%; height:100%; padding:0; object-fit:contain; display:block; border-radius:inherit; }
-    .top-nav + main { padding-top:64px; }
+    .top-nav + main { padding-top:88px; }
     body.age-gate-pending { overflow:hidden; }
     .age-gate { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at 50% 25%, rgba(199,177,102,.16), transparent 30%), rgba(11,63,64,.96); backdrop-filter:blur(14px); }
     .age-gate.is-hidden { display:none; }
@@ -280,7 +280,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
 </html>"""
 
 ACCOUNT_CSS = """
-    .account-shell { min-height:calc(100vh - 64px); padding:96px min(6vw,72px) 72px; background:radial-gradient(circle at 20% 20%, rgba(199,177,102,.14), transparent 30%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }
+    .account-shell { min-height:calc(100vh - 88px); padding:112px min(6vw,72px) 72px; background:radial-gradient(circle at 20% 20%, rgba(199,177,102,.14), transparent 30%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }
     .account-card { width:min(760px,100%); margin:0 auto; padding:34px; border-radius:28px; background:rgba(13,75,76,.94); box-shadow:0 30px 90px rgba(0,0,0,.24); }
     .account-card h1 { margin:0 0 10px; color:var(--golden-malt); font-size:var(--stamm-page-title-font-size,42px); line-height:.95; letter-spacing:.08em; text-transform:uppercase; }
     .account-card p { color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.5; }
@@ -636,7 +636,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .contacts-page {{ min-height:calc(100vh - 64px); padding:78px min(6vw,72px) 64px; display:grid; align-items:center; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .contacts-page {{ min-height:calc(100vh - 88px); padding:104px min(6vw,72px) 64px; display:grid; align-items:center; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
     .contacts-hero {{ max-width:1000px; margin:0 auto; display:grid; grid-template-columns:minmax(0,430px) minmax(280px,.72fr); gap:24px; align-items:start; }}
     .contacts-card {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:24px; padding:28px; box-shadow:0 18px 44px rgba(0,0,0,.18); }}
     .contacts-info-card {{ border:0; background:transparent; box-shadow:none; padding:10px 0; }}
@@ -714,12 +714,12 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .beer-page {{ min-height:calc(100vh - 64px); padding:86px min(6vw,72px) 72px; background:radial-gradient(circle at 18% 12%, rgba(199,177,102,.16), transparent 28%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .beer-page {{ min-height:calc(100vh - 88px); padding:120px min(6vw,72px) 72px; background-image:linear-gradient(180deg, rgba(16,88,89,.78), rgba(11,63,64,.86)), var(--beer-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .beer-shell {{ max-width:1180px; margin:0 auto; display:grid; gap:72px; justify-items:center; text-align:center; }}
     .beer-section {{ width:100%; display:grid; justify-items:center; }}
     .beer-section h1, .beer-section h2 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
     .beer-section p {{ margin:0 auto 24px; max-width:720px; color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.55; white-space:pre-line; }}
-    .partners-grid {{ width:100%; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:28px 22px; align-items:center; justify-items:center; }}
+    .partners-grid {{ width:min(920px,100%); display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:18px 28px; margin:0 auto; }}
     .partner-card {{ display:inline-grid; place-items:center; justify-self:center; width:max-content; max-width:100%; text-decoration:none; line-height:0; }}
     .partner-card img {{ max-width:var(--logo-size); max-height:86px; object-fit:contain; display:block; transition:transform .18s ease, filter .18s ease; }}
     .partner-card:hover img {{ transform:scale(1.045); filter:brightness(1.12) drop-shadow(0 8px 18px rgba(199,177,102,.18)); }}
@@ -745,12 +745,12 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .untappd-link {{ display:inline-grid; place-items:center; margin-top:12px; text-decoration:none; }}
     .untappd-link img {{ width:42px; height:42px; object-fit:contain; transition:transform .18s ease, filter .18s ease; }}
     .untappd-link:hover img {{ transform:scale(1.06); filter:brightness(1.12); }}
-    @media (max-width:760px) {{ .new-grid {{ grid-template-columns:1fr; }} .beer-page {{ padding:54px 20px; }} }}
+    @media (max-width:760px) {{ .new-grid {{ grid-template-columns:1fr; }} .beer-page {{ padding:76px 20px 54px; background-attachment:scroll; }} }}
   </style>
 </head>
 <body>
 {public_nav("beer", site_content)}
-  <main class="beer-page"><div class="beer-shell">{partners_section}{products_section}</div></main>
+  <main class="beer-page"{f' style="--beer-bg:url(\'{escape(str(site_content.get("home", {}).get("home_content_bg_url") or ""))}\')"' if site_content.get("home", {}).get("home_content_bg_url") else ""}><div class="beer-shell">{partners_section}{products_section}</div></main>
   <div class="beer-modal" id="beerModal"><div class="beer-modal__card"><button class="beer-modal__close" type="button" aria-label="Закрыть">×</button><h3 id="beerModalTitle"></h3><p id="beerModalStyle"></p><p id="beerModalAbv"></p><img class="beer-modal__mockup" id="beerModalImage" src="" alt=""><a class="untappd-link" id="beerModalUntappd" href="#" target="_blank" rel="noopener" aria-label="Untappd"></a></div></div>
   <script>
     (function () {{
@@ -795,7 +795,7 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .placeholder {{ min-height:54vh; display:grid; place-items:center; padding:72px min(6vw,72px); background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .placeholder {{ min-height:54vh; display:grid; place-items:center; padding:96px min(6vw,72px) 72px; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
     .placeholder__card {{ max-width:760px; background:var(--card-hop); border:1px solid rgba(199,177,102,.2); border-radius:24px; padding:30px; }}
     .placeholder__card h1 {{ margin:0 0 10px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
     .placeholder__card p {{ margin:0; color:rgba(246,241,227,.76); }}
@@ -819,7 +819,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .wrap {{ padding:22px min(6vw,72px) 56px; }}
+    .wrap {{ padding:58px min(6vw,72px) 56px; }}
     .toolbar {{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:16px; align-items:center; margin-bottom:18px; }}
     .filters {{ display:flex; gap:10px; flex-wrap:wrap; }}
     .filter {{ border:1px solid rgba(199,177,102,.34); background:rgba(11,63,64,.55); color:var(--foam); padding:9px 15px; border-radius:999px; font-weight:600; cursor:pointer; }}
