@@ -455,22 +455,38 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         """
         for index, item in enumerate(beer_partners)
     )
-    beer_product_rows = "".join(
-        f"""
-        <div class='beer-admin-row'>
-          <label>Название<input name='beer_product_name_{index}' value='{escape(str(item.get('name') or ''))}'></label>
-          <label>Стиль<input name='beer_product_style_{index}' value='{escape(str(item.get('style') or ''))}'></label>
-          <label>ABV<input name='beer_product_abv_{index}' value='{escape(str(item.get('abv') or ''))}'></label>
-          <label>Категория<select name='beer_product_category_{index}'><option value='new' {'selected' if item.get('category') == 'new' else ''}>новинка</option><option value='core' {'selected' if item.get('category') == 'core' else ''}>постоянная линейка</option><option value='seasonal' {'selected' if item.get('category') not in ('new', 'core') else ''}>сезонный сорт</option></select></label>
-          <label>Untappd<input name='beer_product_untappd_url_{index}' value='{escape(str(item.get('untappd_url') or ''))}'></label>
-          <label>Порядок<input name='beer_product_sort_order_{index}' type='number' value='{escape(str(item.get('sort_order') or ((index + 1) * 10)))}'></label>
-          <label><input type='hidden' name='beer_product_visible_{index}' value='0'><input name='beer_product_visible_{index}' type='checkbox' value='1' {'checked' if item.get('is_visible', True) else ''}> Показывать</label>
-          <label>Мокап{f"<img class='beer-admin-preview' src='{escape(str(item.get('image_url') or ''))}' alt=''>" if item.get('image_url') else ""}<input type='hidden' name='beer_product_image_url_{index}' value='{escape(str(item.get('image_url') or ''))}'><input name='beer_product_image_file_{index}' type='file' accept='image/*'></label>
-          <label>Лого Untappd{f"<img class='beer-admin-preview' src='{escape(str(item.get('untappd_logo_url') or ''))}' alt=''>" if item.get('untappd_logo_url') else ""}<input type='hidden' name='beer_product_untappd_logo_url_{index}' value='{escape(str(item.get('untappd_logo_url') or ''))}'><input name='beer_product_untappd_logo_file_{index}' type='file' accept='image/*'></label>
+    def beer_product_row(index: int, item: dict[str, object], forced_category: str | None = None) -> str:
+        category = str(forced_category or item.get("category") or "seasonal")
+        return f"""
+        <div class='beer-admin-row beer-product-row' data-beer-product-row data-category='{escape(category)}'>
+          <input type='hidden' name='beer_product_delete_{index}' value='0' data-delete-flag>
+          <div class='beer-product-fields'>
+            <label>Название<input name='beer_product_name_{index}' value='{escape(str(item.get('name') or ''))}'></label>
+            <label>Стиль<input name='beer_product_style_{index}' value='{escape(str(item.get('style') or ''))}'></label>
+            <label>ABV<input name='beer_product_abv_{index}' value='{escape(str(item.get('abv') or ''))}'></label>
+            <label>Категория<select name='beer_product_category_{index}'><option value='new' {'selected' if category == 'new' else ''}>новинка</option><option value='core' {'selected' if category == 'core' else ''}>постоянная линейка</option><option value='seasonal' {'selected' if category not in ('new', 'core') else ''}>сезонный сорт</option></select></label>
+            <label>Untappd<input name='beer_product_untappd_url_{index}' value='{escape(str(item.get('untappd_url') or ''))}'></label>
+            <label>Порядок<input name='beer_product_sort_order_{index}' type='number' value='{escape(str(item.get('sort_order') or ((index + 1) * 10)))}'></label>
+            <label class='beer-row-check'><input type='hidden' name='beer_product_visible_{index}' value='0'><input name='beer_product_visible_{index}' type='checkbox' value='1' {'checked' if item.get('is_visible', True) else ''}> Показывать</label>
+            <button class='button secondary beer-delete-row' type='button' data-delete-beer-product>Удалить</button>
+          </div>
+          <div class='beer-asset-fields'>
+            <label>Мокап{f"<img class='beer-admin-preview' src='{escape(str(item.get('image_url') or ''))}' alt=''>" if item.get('image_url') else ""}<input type='hidden' name='beer_product_image_url_{index}' value='{escape(str(item.get('image_url') or ''))}'><input name='beer_product_image_file_{index}' type='file' accept='image/*'></label>
+            <label>Лого Untappd{f"<img class='beer-admin-preview' src='{escape(str(item.get('untappd_logo_url') or ''))}' alt=''>" if item.get('untappd_logo_url') else ""}<input type='hidden' name='beer_product_untappd_logo_url_{index}' value='{escape(str(item.get('untappd_logo_url') or ''))}'><input name='beer_product_untappd_logo_file_{index}' type='file' accept='image/*'></label>
+          </div>
         </div>
         """
-        for index, item in enumerate(beer_products)
-    )
+
+    beer_products_sorted = sorted(enumerate(beer_products), key=lambda pair: (int(pair[1].get('sort_order') or ((pair[0] + 1) * 10)), str(pair[1].get('name') or '')))
+    beer_product_rows_by_category = {
+        'new': ''.join(beer_product_row(index, item, 'new') for index, item in beer_products_sorted if item.get('category') == 'new'),
+        'core': ''.join(beer_product_row(index, item, 'core') for index, item in beer_products_sorted if item.get('category') == 'core'),
+        'seasonal': ''.join(beer_product_row(index, item, 'seasonal') for index, item in beer_products_sorted if item.get('category') not in ('new', 'core')),
+    }
+    for category in ('new', 'core', 'seasonal'):
+        if not beer_product_rows_by_category[category]:
+            beer_product_rows_by_category[category] = beer_product_row(len(beer_products) + {'new': 0, 'core': 1, 'seasonal': 2}[category], {"name": "", "style": "", "abv": "", "image_url": "", "untappd_url": "", "untappd_logo_url": "", "category": category, "sort_order": 10, "is_visible": True}, category)
+
     return page(
         "Контент",
         f"""
@@ -506,9 +522,14 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-news-preview h4 {{ margin:0 0 8px; font-size:26px; }}
           .cms-news-preview p {{ margin:0; color:rgba(246,241,227,.78); white-space:pre-line; }}
           .cms-text-preview {{ white-space:pre-line; }}
-          .beer-admin-row {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; padding:9px 0; border-top:1px solid rgba(16,88,89,.12); align-items:end; }}
+          .beer-admin-row {{ display:grid; gap:8px; padding:9px 0; border-top:1px solid rgba(16,88,89,.12); }}
+          .beer-product-fields {{ display:grid; grid-template-columns:1.2fr 1fr .7fr 1fr 1.2fr .65fr auto auto; gap:8px; align-items:end; }}
+          .beer-asset-fields {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; align-items:end; }}
+          .beer-row-check {{ white-space:nowrap; }}
+          .beer-delete-row {{ padding:9px 10px; background:#8a1f1f; }}
           .beer-admin-preview {{ max-width:52px; max-height:52px; object-fit:contain; display:block; margin:0 0 4px; }}
           .admin-add-row {{ margin-top:10px; padding:9px 12px; }}
+          @media (max-width:1100px) {{ .beer-product-fields {{ grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); }} }}
           @media (max-width:760px) {{ .cms-news-preview {{ grid-template-columns:1fr; }} }}
         </style>
         {notice}
@@ -709,9 +730,15 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <input type="hidden" name="beer_new_is_visible" value="0"><label><input name="beer_new_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_new_is_visible') or '1') != '0' else ''}> Показывать новинки</label>
               <input type="hidden" name="beer_core_is_visible" value="0"><label><input name="beer_core_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_core_is_visible') or '1') != '0' else ''}> Показывать постоянную линейку</label>
               <input type="hidden" name="beer_seasonal_is_visible" value="0"><label><input name="beer_seasonal_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_seasonal_is_visible') or '1') != '0' else ''}> Показывать сезонные сорта</label>
-              <h4>Позиции продукции</h4>
-              <div data-dynamic-list="beer-products">{beer_product_rows}</div>
-              <button class="button secondary admin-add-row" type="button" data-add-beer-product>+ сорт</button>
+              <h4>Новинки</h4>
+              <div data-dynamic-list="beer-products-new">{beer_product_rows_by_category['new']}</div>
+              <button class="button secondary admin-add-row" type="button" data-add-beer-product="new">+ сорт</button>
+              <h4>Постоянная линейка</h4>
+              <div data-dynamic-list="beer-products-core">{beer_product_rows_by_category['core']}</div>
+              <button class="button secondary admin-add-row" type="button" data-add-beer-product="core">+ сорт</button>
+              <h4>Сезонные сорта</h4>
+              <div data-dynamic-list="beer-products-seasonal">{beer_product_rows_by_category['seasonal']}</div>
+              <button class="button secondary admin-add-row" type="button" data-add-beer-product="seasonal">+ сорт</button>
             </div>
             <p><button type="submit">Сохранить раздел Пиво</button></p>
           </section>
@@ -787,25 +814,47 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               }});
               return max + 1;
             }}
-            function cloneRow(listName, prefix) {{
+            function cloneRow(listName, prefix, category) {{
               const list = document.querySelector(`[data-dynamic-list="${{listName}}"]`);
               if (!list) return;
               const row = list.querySelector('.beer-admin-row');
               if (!row) return;
               const oldIndex = (row.querySelector(`[name^="${{prefix}}"]`)?.name || '').match(/_(\\d+)$/)?.[1] || '0';
-              const index = nextIndex(list, prefix);
+              const index = nextIndex(document, prefix);
               const clone = row.cloneNode(true);
+              clone.hidden = false;
               clone.querySelectorAll('input, select, textarea').forEach((field) => {{
                 if (field.name) field.name = field.name.replace(new RegExp(`_${{oldIndex}}$`), `_${{index}}`);
                 if (field.type === 'checkbox') field.checked = true;
                 else if (field.type === 'hidden' && field.name.includes('_visible_')) field.value = '0';
+                else if (field.type === 'hidden' && field.dataset.deleteFlag !== undefined) field.value = '0';
                 else if (field.type !== 'file') field.value = field.tagName === 'SELECT' ? field.value : '';
               }});
+              if (category) {{
+                clone.dataset.category = category;
+                const select = clone.querySelector(`[name="beer_product_category_${{index}}"]`);
+                if (select) select.value = category;
+              }}
               clone.querySelectorAll('img').forEach((img) => img.remove());
               list.appendChild(clone);
             }}
             document.querySelector('[data-add-beer-partner]')?.addEventListener('click', () => cloneRow('beer-partners', 'beer_partner_name_'));
-            document.querySelector('[data-add-beer-product]')?.addEventListener('click', () => cloneRow('beer-products', 'beer_product_name_'));
+            document.querySelectorAll('[data-add-beer-product]').forEach((button) => {{
+              button.addEventListener('click', () => {{
+                const category = button.dataset.addBeerProduct || 'seasonal';
+                cloneRow(`beer-products-${{category}}`, 'beer_product_name_', category);
+              }});
+            }});
+            document.addEventListener('click', (event) => {{
+              const button = event.target.closest('[data-delete-beer-product]');
+              if (!button) return;
+              if (!window.confirm('Удалить сорт?')) return;
+              const row = button.closest('[data-beer-product-row]');
+              if (!row) return;
+              const flag = row.querySelector('[data-delete-flag]');
+              if (flag) flag.value = '1';
+              row.hidden = true;
+            }});
           }})();
         </script>
         """,

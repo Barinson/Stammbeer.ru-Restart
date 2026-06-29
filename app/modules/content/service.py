@@ -269,6 +269,8 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
         products = []
         product_indices = sorted({int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_product_name_") and key.rsplit("_", 1)[1].isdigit()} | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_product_image_url_") and key.rsplit("_", 1)[1].isdigit()})
         for index in product_indices:
+            if str(data.get(f"beer_product_delete_{index}") or "").strip() == "1":
+                continue
             name = str(data.get(f"beer_product_name_{index}") or "").strip()
             image = str(data.get(f"beer_product_image_url_{index}") or "").strip()
             if name or image:
