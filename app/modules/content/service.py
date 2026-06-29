@@ -55,6 +55,15 @@ BUSINESS_DEFAULTS = {
     "business_min_order_amount_minor": "1500000",
 }
 
+LAYOUT_DEFAULTS = {
+    "menu_offset_home_px": "176",
+    "menu_offset_beer_px": "176",
+    "menu_offset_visit_px": "176",
+    "menu_offset_history_px": "176",
+    "menu_offset_business_px": "176",
+    "menu_offset_contacts_px": "176",
+}
+
 BEER_DEFAULTS = {
     "beer_partners_title": "Где найти Stamm Brewing",
     "beer_partners_description": "Партнёры, бары и магазины, где представлена наша продукция.",
@@ -96,6 +105,8 @@ def ensure_public_content_defaults(conn: sqlite3.Connection) -> None:
     for key, value in TYPOGRAPHY_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for key, value in BUSINESS_DEFAULTS.items():
+        conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
+    for key, value in LAYOUT_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for key, value in BEER_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
@@ -167,6 +178,7 @@ def get_public_site_content(conn: sqlite3.Connection, include_hidden: bool = Fal
         "contacts": contacts,
         "typography": {**TYPOGRAPHY_DEFAULTS, **settings},
         "business": {**BUSINESS_DEFAULTS, **settings},
+        "layout": {**LAYOUT_DEFAULTS, **settings},
         "beer": beer,
         "menu": menu,
         "actions": actions,
@@ -239,6 +251,15 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
                 """,
                 (key, str(data.get(key) or "")),
+            )
+    for key in LAYOUT_DEFAULTS:
+        if key in data:
+            conn.execute(
+                """
+                INSERT INTO site_content_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, str(data.get(key) or LAYOUT_DEFAULTS[key])),
             )
     if any(key.startswith("beer_") for key in data):
         beer_values = {
