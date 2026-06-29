@@ -25,10 +25,16 @@ CONTACT_DEFAULTS = {
     "contacts_emails_json": '[{"label":"Основной","value":"info@stammbeer.ru","sort_order":10,"is_visible":true},{"label":"Заказы","value":"order@stammbeer.ru","sort_order":20,"is_visible":true}]',
     "contacts_phones_json": '[{"label":"Офис","value":"+7 (000) 000-00-00","sort_order":10,"is_visible":true},{"label":"Отдел продаж","value":"+7 (000) 000-00-01","sort_order":20,"is_visible":true}]',
     "contacts_address": "Адрес завода Stamm Brewing",
+    "contacts_address_is_visible": "1",
+    "contacts_address_color": "",
     "contacts_description": "Свяжитесь с нами по вопросам заказов, сотрудничества и визитов на производство.",
+    "contacts_description_is_visible": "1",
+    "contacts_description_color": "",
     "contacts_map_lat": "55.7558",
     "contacts_map_lng": "37.6173",
     "contacts_map_zoom": "13",
+    "contacts_map_height_px": "240",
+    "contacts_map_width_px": "420",
     "contacts_map_title": "Stamm Brewing",
 }
 
@@ -47,6 +53,36 @@ TYPOGRAPHY_DEFAULTS = {
 
 BUSINESS_DEFAULTS = {
     "business_min_order_amount_minor": "1500000",
+}
+
+LAYOUT_DEFAULTS = {
+    "menu_offset_home_px": "176",
+    "menu_offset_beer_px": "176",
+    "menu_offset_visit_px": "176",
+    "menu_offset_history_px": "176",
+    "menu_offset_business_px": "176",
+    "menu_offset_contacts_px": "176",
+}
+
+BEER_DEFAULTS = {
+    "beer_partners_title": "Где найти Stamm Brewing",
+    "beer_partners_description": "Партнёры, бары и магазины, где представлена наша продукция.",
+    "beer_partners_is_visible": "1",
+    "beer_partners_json": "[]",
+    "beer_products_title": "Наша продукция",
+    "beer_new_title": "Новинки",
+    "beer_core_title": "Постоянная линейка",
+    "beer_seasonal_title": "Сезонные сорта",
+    "beer_products_is_visible": "1",
+    "beer_new_is_visible": "1",
+    "beer_core_is_visible": "1",
+    "beer_seasonal_is_visible": "1",
+    "beer_untappd_logo_url": "",
+    "beer_popup_backdrop_color": "#0b3f40",
+    "beer_popup_backdrop_opacity": "30",
+    "beer_popup_card_color": "#0d4b4c",
+    "beer_popup_card_opacity": "100",
+    "beer_products_json": "[]",
 }
 
 MENU_DEFAULTS = [
@@ -74,6 +110,10 @@ def ensure_public_content_defaults(conn: sqlite3.Connection) -> None:
     for key, value in TYPOGRAPHY_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for key, value in BUSINESS_DEFAULTS.items():
+        conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
+    for key, value in LAYOUT_DEFAULTS.items():
+        conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
+    for key, value in BEER_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for item in MENU_DEFAULTS:
         conn.execute(
@@ -128,11 +168,23 @@ def get_public_site_content(conn: sqlite3.Connection, include_hidden: bool = Fal
                 "is_visible": bool(item.get("is_visible", True)),
             })
         contacts[target] = sorted(normalized_items, key=lambda item: (item["sort_order"], item["label"]))
+    beer = {**BEER_DEFAULTS, **settings}
+    for key in ("beer_partners_json", "beer_products_json"):
+        try:
+            items = json.loads(str(beer.get(key) or "[]"))
+        except json.JSONDecodeError:
+            items = []
+        beer[key.removeprefix("beer_").removesuffix("_json")] = sorted(
+            [item for item in items if isinstance(item, dict)],
+            key=lambda item: (int(item.get("sort_order") or 100), str(item.get("name") or "")),
+        )
     return {
         "home": {**HOME_DEFAULTS, **settings},
         "contacts": contacts,
         "typography": {**TYPOGRAPHY_DEFAULTS, **settings},
         "business": {**BUSINESS_DEFAULTS, **settings},
+        "layout": {**LAYOUT_DEFAULTS, **settings},
+        "beer": beer,
         "menu": menu,
         "actions": actions,
     }
@@ -183,9 +235,11 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
             "contacts_emails_json": json.dumps(contact_emails, ensure_ascii=False),
             "contacts_phones_json": json.dumps(contact_phones, ensure_ascii=False),
         }
-        for key in ("contacts_address", "contacts_description", "contacts_map_lat", "contacts_map_lng", "contacts_map_zoom", "contacts_map_title"):
+        for key in ("contacts_address", "contacts_address_color", "contacts_description", "contacts_description_color", "contacts_map_lat", "contacts_map_lng", "contacts_map_zoom", "contacts_map_height_px", "contacts_map_width_px", "contacts_map_title"):
             if key in data:
                 contact_values[key] = str(data.get(key) or "")
+        contact_values["contacts_address_is_visible"] = "1" if str(data.get("contacts_address_is_visible", "1")).strip().lower() not in {"0", "false", "off", "no"} else "0"
+        contact_values["contacts_description_is_visible"] = "1" if str(data.get("contacts_description_is_visible", "1")).strip().lower() not in {"0", "false", "off", "no"} else "0"
         for key, value in contact_values.items():
             conn.execute(
                 """
@@ -202,6 +256,72 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
                 """,
                 (key, str(data.get(key) or "")),
+            )
+    for key in LAYOUT_DEFAULTS:
+        if key in data:
+            conn.execute(
+                """
+                INSERT INTO site_content_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, str(data.get(key) or LAYOUT_DEFAULTS[key])),
+            )
+    if any(key.startswith("beer_") for key in data):
+        beer_values = {
+            "beer_partners_title": str(data.get("beer_partners_title") or BEER_DEFAULTS["beer_partners_title"]),
+            "beer_partners_description": str(data.get("beer_partners_description") or ""),
+            "beer_partners_is_visible": "1" if str(data.get("beer_partners_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_products_title": str(data.get("beer_products_title") or BEER_DEFAULTS["beer_products_title"]),
+            "beer_new_title": str(data.get("beer_new_title") or BEER_DEFAULTS["beer_new_title"]),
+            "beer_core_title": str(data.get("beer_core_title") or BEER_DEFAULTS["beer_core_title"]),
+            "beer_seasonal_title": str(data.get("beer_seasonal_title") or BEER_DEFAULTS["beer_seasonal_title"]),
+            "beer_products_is_visible": "1" if str(data.get("beer_products_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_new_is_visible": "1" if str(data.get("beer_new_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_core_is_visible": "1" if str(data.get("beer_core_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_seasonal_is_visible": "1" if str(data.get("beer_seasonal_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_untappd_logo_url": str(data.get("beer_untappd_logo_url") or ""),
+            "beer_popup_backdrop_color": str(data.get("beer_popup_backdrop_color") or BEER_DEFAULTS["beer_popup_backdrop_color"]),
+            "beer_popup_backdrop_opacity": str(data.get("beer_popup_backdrop_opacity") or BEER_DEFAULTS["beer_popup_backdrop_opacity"]),
+            "beer_popup_card_color": str(data.get("beer_popup_card_color") or BEER_DEFAULTS["beer_popup_card_color"]),
+            "beer_popup_card_opacity": str(data.get("beer_popup_card_opacity") or BEER_DEFAULTS["beer_popup_card_opacity"]),
+        }
+        partners = []
+        partner_indices = sorted({int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_partner_name_") and key.rsplit("_", 1)[1].isdigit()} | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_partner_logo_url_") and key.rsplit("_", 1)[1].isdigit()})
+        for index in partner_indices:
+            name = str(data.get(f"beer_partner_name_{index}") or "").strip()
+            logo = str(data.get(f"beer_partner_logo_url_{index}") or "").strip()
+            if name or logo:
+                partners.append({
+                    "name": name, "logo_url": logo, "url": str(data.get(f"beer_partner_url_{index}") or "").strip(),
+                    "size": str(data.get(f"beer_partner_size_{index}") or "medium"),
+                    "sort_order": int(data.get(f"beer_partner_sort_order_{index}") or ((index + 1) * 10)),
+                    "is_visible": str(data.get(f"beer_partner_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
+                })
+        products = []
+        product_indices = sorted({int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_product_name_") and key.rsplit("_", 1)[1].isdigit()} | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_product_image_url_") and key.rsplit("_", 1)[1].isdigit()})
+        for index in product_indices:
+            if str(data.get(f"beer_product_delete_{index}") or "").strip() == "1":
+                continue
+            name = str(data.get(f"beer_product_name_{index}") or "").strip()
+            image = str(data.get(f"beer_product_image_url_{index}") or "").strip()
+            if name or image:
+                products.append({
+                    "name": name, "style": str(data.get(f"beer_product_style_{index}") or "").strip(),
+                    "abv": str(data.get(f"beer_product_abv_{index}") or "").strip(),
+                    "image_url": image, "untappd_url": str(data.get(f"beer_product_untappd_url_{index}") or "").strip(),
+                    "category": str(data.get(f"beer_product_category_{index}") or "seasonal"),
+                    "sort_order": int(data.get(f"beer_product_sort_order_{index}") or ((index + 1) * 10)),
+                    "is_visible": str(data.get(f"beer_product_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
+                })
+        beer_values["beer_partners_json"] = json.dumps(partners, ensure_ascii=False)
+        beer_values["beer_products_json"] = json.dumps(products, ensure_ascii=False)
+        for key, value in beer_values.items():
+            conn.execute(
+                """
+                INSERT INTO site_content_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, value),
             )
     for item in MENU_DEFAULTS:
         key = item["key"]
