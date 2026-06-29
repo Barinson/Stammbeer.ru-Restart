@@ -404,10 +404,16 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         for index, item in enumerate(contact_phones[:6])
     )
     contacts_address = str(contacts.get("contacts_address") or "")
+    contacts_address_is_visible = str(contacts.get("contacts_address_is_visible") or "1") != "0"
+    contacts_address_color = str(contacts.get("contacts_address_color") or "")
     contacts_description = str(contacts.get("contacts_description") or "")
+    contacts_description_is_visible = str(contacts.get("contacts_description_is_visible") or "1") != "0"
+    contacts_description_color = str(contacts.get("contacts_description_color") or "")
     contacts_map_lat = str(contacts.get("contacts_map_lat") or "")
     contacts_map_lng = str(contacts.get("contacts_map_lng") or "")
     contacts_map_zoom = str(contacts.get("contacts_map_zoom") or "13")
+    contacts_map_height_px = str(contacts.get("contacts_map_height_px") or "240")
+    contacts_map_width_px = str(contacts.get("contacts_map_width_px") or "420")
     contacts_map_title = str(contacts.get("contacts_map_title") or "Stamm Brewing")
     map_preview_src = f"https://yandex.ru/map-widget/v1/?ll={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}&z={escape(contacts_map_zoom)}&pt={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}%2Cpm2goldm"
     typography_tokens = [
@@ -428,6 +434,43 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         """
         for key, label in typography_tokens
     )
+
+    beer = content.get("beer") or {}
+    beer_partners = list(beer.get("partners") or [])
+    while len(beer_partners) < 4:
+        beer_partners.append({"name": "", "logo_url": "", "url": "", "size": "medium", "sort_order": (len(beer_partners) + 1) * 10, "is_visible": True})
+    beer_products = list(beer.get("products") or [])
+    while len(beer_products) < 8:
+        beer_products.append({"name": "", "style": "", "abv": "", "image_url": "", "untappd_url": "", "untappd_logo_url": "", "category": "seasonal", "sort_order": (len(beer_products) + 1) * 10, "is_visible": True})
+    beer_partner_rows = "".join(
+        f"""
+        <div class='beer-admin-row'>
+          <label>Название<input name='beer_partner_name_{index}' value='{escape(str(item.get('name') or ''))}'></label>
+          <label>Ссылка<input name='beer_partner_url_{index}' value='{escape(str(item.get('url') or ''))}'></label>
+          <label>Размер<select name='beer_partner_size_{index}'><option value='small' {'selected' if item.get('size') == 'small' else ''}>small</option><option value='medium' {'selected' if item.get('size') in (None, '', 'medium') else ''}>medium</option><option value='large' {'selected' if item.get('size') == 'large' else ''}>large</option></select></label>
+          <label>Порядок<input name='beer_partner_sort_order_{index}' type='number' value='{escape(str(item.get('sort_order') or ((index + 1) * 10)))}'></label>
+          <label><input type='hidden' name='beer_partner_visible_{index}' value='0'><input name='beer_partner_visible_{index}' type='checkbox' value='1' {'checked' if item.get('is_visible', True) else ''}> Показывать</label>
+          <label>Логотип{f"<img class='beer-admin-preview' src='{escape(str(item.get('logo_url') or ''))}' alt=''>" if item.get('logo_url') else ""}<input type='hidden' name='beer_partner_logo_url_{index}' value='{escape(str(item.get('logo_url') or ''))}'><input name='beer_partner_logo_file_{index}' type='file' accept='image/*'></label>
+        </div>
+        """
+        for index, item in enumerate(beer_partners[:4])
+    )
+    beer_product_rows = "".join(
+        f"""
+        <div class='beer-admin-row'>
+          <label>Название<input name='beer_product_name_{index}' value='{escape(str(item.get('name') or ''))}'></label>
+          <label>Стиль<input name='beer_product_style_{index}' value='{escape(str(item.get('style') or ''))}'></label>
+          <label>ABV<input name='beer_product_abv_{index}' value='{escape(str(item.get('abv') or ''))}'></label>
+          <label>Категория<select name='beer_product_category_{index}'><option value='new' {'selected' if item.get('category') == 'new' else ''}>новинка</option><option value='seasonal' {'selected' if item.get('category') != 'new' else ''}>сезонный сорт</option></select></label>
+          <label>Untappd<input name='beer_product_untappd_url_{index}' value='{escape(str(item.get('untappd_url') or ''))}'></label>
+          <label>Порядок<input name='beer_product_sort_order_{index}' type='number' value='{escape(str(item.get('sort_order') or ((index + 1) * 10)))}'></label>
+          <label><input type='hidden' name='beer_product_visible_{index}' value='0'><input name='beer_product_visible_{index}' type='checkbox' value='1' {'checked' if item.get('is_visible', True) else ''}> Показывать</label>
+          <label>Мокап{f"<img class='beer-admin-preview' src='{escape(str(item.get('image_url') or ''))}' alt=''>" if item.get('image_url') else ""}<input type='hidden' name='beer_product_image_url_{index}' value='{escape(str(item.get('image_url') or ''))}'><input name='beer_product_image_file_{index}' type='file' accept='image/*'></label>
+          <label>Лого Untappd{f"<img class='beer-admin-preview' src='{escape(str(item.get('untappd_logo_url') or ''))}' alt=''>" if item.get('untappd_logo_url') else ""}<input type='hidden' name='beer_product_untappd_logo_url_{index}' value='{escape(str(item.get('untappd_logo_url') or ''))}'><input name='beer_product_untappd_logo_file_{index}' type='file' accept='image/*'></label>
+        </div>
+        """
+        for index, item in enumerate(beer_products[:8])
+    )
     return page(
         "Контент",
         f"""
@@ -436,11 +479,11 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-tabs label {{ margin:0; padding:10px 14px; border-radius:999px; background:white; border:1px solid rgba(16,88,89,.16); cursor:pointer; }}
           .cms-tab-input {{ position:absolute; opacity:0; pointer-events:none; }}
           .cms-tab-panel {{ display:none; }}
-          #cms-tab-home:checked ~ form .cms-panel-home, #cms-tab-contacts:checked ~ form .cms-panel-contacts, #cms-tab-business:checked ~ form .cms-panel-business, #cms-tab-typography:checked ~ form .cms-panel-typography, #cms-tab-nav:checked ~ form .cms-panel-nav {{ display:block; }}
+          #cms-tab-home:checked ~ form .cms-panel-home, #cms-tab-contacts:checked ~ form .cms-panel-contacts, #cms-tab-beer:checked ~ form .cms-panel-beer, #cms-tab-business:checked ~ form .cms-panel-business, #cms-tab-typography:checked ~ form .cms-panel-typography, #cms-tab-nav:checked ~ form .cms-panel-nav {{ display:block; }}
           .cms-preview-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; align-items:stretch; }}
           .contact-row {{ display:grid; grid-template-columns:minmax(140px,1fr) minmax(220px,1.5fr) 110px 140px; gap:10px; align-items:end; padding:10px 0; border-top:1px solid rgba(16,88,89,.12); }}
           .contact-row__visible {{ display:flex; gap:8px; align-items:center; padding-bottom:12px; }}
-          .contacts-map-picker {{ height:320px; border-radius:18px; overflow:hidden; border:1px solid rgba(16,88,89,.16); background:#eef3ef; }}
+          .contacts-map-picker {{ height:240px; border-radius:18px; overflow:hidden; border:1px solid rgba(16,88,89,.16); background:#eef3ef; }}
           .typography-preview {{ display:grid; gap:6px; padding:16px; border-radius:16px; background:#f6f1e3; border:1px solid rgba(16,88,89,.12); }}
           .typography-preview h4 {{ margin:0; color:#105859; font-size:24px; }}
           .typography-preview p {{ margin:0; color:#172625; }}
@@ -461,18 +504,23 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-news-preview__image {{ width:100%; aspect-ratio:16/10; border-radius:18px; object-fit:cover; background:rgba(246,241,227,.08); display:block; }}
           .cms-news-preview__image--fallback {{ background:radial-gradient(circle, rgba(199,177,102,.32), transparent 38%), linear-gradient(135deg, rgba(246,241,227,.1), rgba(16,88,89,.45)); }}
           .cms-news-preview h4 {{ margin:0 0 8px; font-size:26px; }}
-          .cms-news-preview p {{ margin:0; color:rgba(246,241,227,.78); }}
+          .cms-news-preview p {{ margin:0; color:rgba(246,241,227,.78); white-space:pre-line; }}
+          .cms-text-preview {{ white-space:pre-line; }}
+          .beer-admin-row {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; padding:14px 0; border-top:1px solid rgba(16,88,89,.12); align-items:end; }}
+          .beer-admin-preview {{ max-width:74px; max-height:74px; object-fit:contain; display:block; margin:0 0 6px; }}
           @media (max-width:760px) {{ .cms-news-preview {{ grid-template-columns:1fr; }} }}
         </style>
         {notice}
         <input class="cms-tab-input" id="cms-tab-home" name="cms_tab" type="radio" checked>
         <input class="cms-tab-input" id="cms-tab-contacts" name="cms_tab" type="radio">
+        <input class="cms-tab-input" id="cms-tab-beer" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-business" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-typography" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-nav" name="cms_tab" type="radio">
         <div class="cms-tabs" role="tablist">
           <label for="cms-tab-home">Главная</label>
           <label for="cms-tab-contacts">Контакты</label>
+          <label for="cms-tab-beer">Пиво</label>
           <label for="cms-tab-business">Бизнес / Store settings</label>
           <label for="cms-tab-typography">Типографика</label>
           <label for="cms-tab-nav">Меню / Навигация</label>
@@ -563,7 +611,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
                 {news_image_preview}
                 <div>
                   <h4>{escape(news_title)}</h4>
-                  <p>{escape(news_text)}</p>
+                  <p class="cms-text-preview">{escape(news_text)}</p>
                 </div>
               </article>
             </div>
@@ -579,16 +627,26 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <h4>Телефоны</h4>
               {phone_rows}
               <label>Текстовый адрес</label>
-              <input id="contacts-address-input" name="contacts_address" value="{escape(contacts_address)}">
+              <textarea id="contacts-address-input" name="contacts_address" rows="3">{escape(contacts_address)}</textarea>
+              <div class="grid">
+                <input type="hidden" name="contacts_address_is_visible" value="0"><label><input name="contacts_address_is_visible" type="checkbox" value="1" {'checked' if contacts_address_is_visible else ''}> Показывать текстовый адрес</label>
+                <label>Цвет адреса<input name="contacts_address_color" type="color" value="{escape(contacts_address_color or '#F6F1E3')}"></label>
+              </div>
               <label>Описание расположения</label>
               <textarea name="contacts_description" rows="4">{escape(contacts_description)}</textarea>
               <div class="grid">
+                <input type="hidden" name="contacts_description_is_visible" value="0"><label><input name="contacts_description_is_visible" type="checkbox" value="1" {'checked' if contacts_description_is_visible else ''}> Показывать описание расположения</label>
+                <label>Цвет описания<input name="contacts_description_color" type="color" value="{escape(contacts_description_color or '#F6F1E3')}"></label>
+              </div>
+              <div class="grid">
                 <label>Zoom карты<input id="contacts-map-zoom" name="contacts_map_zoom" type="number" min="1" max="20" value="{escape(contacts_map_zoom)}"></label>
+                <label>Высота карты, px<input name="contacts_map_height_px" type="number" min="180" max="420" step="10" value="{escape(contacts_map_height_px)}"></label>
+                <label>Ширина карты, px<input name="contacts_map_width_px" type="number" min="280" max="640" step="10" value="{escape(contacts_map_width_px)}"></label>
                 <label>Подпись точки<input name="contacts_map_title" value="{escape(contacts_map_title)}"></label>
               </div>
               <input id="contacts-map-lat" type="hidden" name="contacts_map_lat" value="{escape(contacts_map_lat)}">
               <input id="contacts-map-lng" type="hidden" name="contacts_map_lng" value="{escape(contacts_map_lng)}">
-              <p class="muted">Основной способ выбора точки — клик по карте или перетаскивание маркера. Координаты сохраняются скрыто; текстовый адрес можно отредактировать вручную.</p>
+              <p class="muted">Основной способ выбора точки — клик по карте или перетаскивание маркера. Координаты сохраняются скрыто; текстовый адрес можно отредактировать вручную. Preview карты в админке компактный; публичная высота берётся из поля выше.</p>
               <div id="contacts-map-picker" class="contacts-map-picker" data-lat="{escape(contacts_map_lat)}" data-lng="{escape(contacts_map_lng)}" data-zoom="{escape(contacts_map_zoom)}"></div>
               <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU"></script>
               <script>
@@ -626,6 +684,31 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               </script>
               <p><button type="submit">Сохранить контакты</button></p>
             </div>
+          </section>
+
+          <section class="cms-tab-panel cms-panel-beer">
+            <div class="card">
+              <h3>Пиво / Где найти Stamm Brewing</h3>
+              <label>Заголовок блока<input name="beer_partners_title" value="{escape(str(beer.get('beer_partners_title') or 'Где найти Stamm Brewing'))}"></label>
+              <label>Описание блока<textarea name="beer_partners_description" rows="3">{escape(str(beer.get('beer_partners_description') or ''))}</textarea></label>
+              <input type="hidden" name="beer_partners_is_visible" value="0"><label><input name="beer_partners_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_partners_is_visible') or '1') != '0' else ''}> Показывать блок</label>
+              <h4>Партнёры</h4>
+              {beer_partner_rows}
+            </div>
+            <div class="card">
+              <h3>Пиво / Наша продукция</h3>
+              <label>Заголовок блока<input name="beer_products_title" value="{escape(str(beer.get('beer_products_title') or 'Наша продукция'))}"></label>
+              <div class="grid">
+                <label>Заголовок новинок<input name="beer_new_title" value="{escape(str(beer.get('beer_new_title') or 'Новинки'))}"></label>
+                <label>Заголовок сезонных сортов<input name="beer_seasonal_title" value="{escape(str(beer.get('beer_seasonal_title') or 'Сезонные сорта'))}"></label>
+              </div>
+              <input type="hidden" name="beer_products_is_visible" value="0"><label><input name="beer_products_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_products_is_visible') or '1') != '0' else ''}> Показывать продукцию</label>
+              <input type="hidden" name="beer_new_is_visible" value="0"><label><input name="beer_new_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_new_is_visible') or '1') != '0' else ''}> Показывать новинки</label>
+              <input type="hidden" name="beer_seasonal_is_visible" value="0"><label><input name="beer_seasonal_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_seasonal_is_visible') or '1') != '0' else ''}> Показывать сезонные сорта</label>
+              <h4>Позиции продукции</h4>
+              {beer_product_rows}
+            </div>
+            <p><button type="submit">Сохранить раздел Пиво</button></p>
           </section>
           <section class="cms-tab-panel cms-panel-business">
           <div class="card">
