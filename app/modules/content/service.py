@@ -77,6 +77,9 @@ BEER_DEFAULTS = {
     "beer_new_is_visible": "1",
     "beer_core_is_visible": "1",
     "beer_seasonal_is_visible": "1",
+    "beer_untappd_logo_url": "",
+    "beer_popup_backdrop_color": "#0b3f40",
+    "beer_popup_backdrop_opacity": "30",
     "beer_products_json": "[]",
 }
 
@@ -274,6 +277,9 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
             "beer_new_is_visible": "1" if str(data.get("beer_new_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
             "beer_core_is_visible": "1" if str(data.get("beer_core_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
             "beer_seasonal_is_visible": "1" if str(data.get("beer_seasonal_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_untappd_logo_url": str(data.get("beer_untappd_logo_url") or ""),
+            "beer_popup_backdrop_color": str(data.get("beer_popup_backdrop_color") or BEER_DEFAULTS["beer_popup_backdrop_color"]),
+            "beer_popup_backdrop_opacity": str(data.get("beer_popup_backdrop_opacity") or BEER_DEFAULTS["beer_popup_backdrop_opacity"]),
         }
         partners = []
         partner_indices = sorted({int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_partner_name_") and key.rsplit("_", 1)[1].isdigit()} | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_partner_logo_url_") and key.rsplit("_", 1)[1].isdigit()})
@@ -299,7 +305,6 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
                     "name": name, "style": str(data.get(f"beer_product_style_{index}") or "").strip(),
                     "abv": str(data.get(f"beer_product_abv_{index}") or "").strip(),
                     "image_url": image, "untappd_url": str(data.get(f"beer_product_untappd_url_{index}") or "").strip(),
-                    "untappd_logo_url": str(data.get(f"beer_product_untappd_logo_url_{index}") or "").strip(),
                     "category": str(data.get(f"beer_product_category_{index}") or "seasonal"),
                     "sort_order": int(data.get(f"beer_product_sort_order_{index}") or ((index + 1) * 10)),
                     "is_visible": str(data.get(f"beer_product_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
