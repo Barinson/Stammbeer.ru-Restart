@@ -253,7 +253,7 @@ class StammApp:
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
                     if customer is None:
-                        self.send_json({"ok": False, "error": "Что бы стать нашим партнёром напишите на marketing@stammbeer.ru"}, HTTPStatus.UNAUTHORIZED)
+                        self.send_json({"ok": False, "error": "Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru"}, HTTPStatus.UNAUTHORIZED)
                         return
                     customer = refresh_customer_discount(app.conn, customer)
                     content = get_public_site_content(app.conn)
