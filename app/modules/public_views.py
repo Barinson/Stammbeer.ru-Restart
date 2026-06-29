@@ -686,11 +686,11 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
         partner_cards.append(f'<a class="partner-card" href="{escape(str(item.get("url") or "#"))}" target="_blank" rel="noopener" style="--logo-size:{size_map.get(str(item.get("size") or "medium"), "118px")}">{logo_html}</a>')
 
     def product_card(item: dict[str, Any], featured: bool) -> str:
-        payload = escape(json.dumps({"name": str(item.get("name") or ""), "style": str(item.get("style") or ""), "abv": str(item.get("abv") or ""), "untappdUrl": str(item.get("untappd_url") or ""), "untappdLogoUrl": str(item.get("untappd_logo_url") or "")}, ensure_ascii=False))
+        payload = escape(json.dumps({"name": str(item.get("name") or ""), "style": str(item.get("style") or ""), "abv": str(item.get("abv") or ""), "imageUrl": str(item.get("image_url") or ""), "untappdUrl": str(item.get("untappd_url") or ""), "untappdLogoUrl": str(item.get("untappd_logo_url") or "")}, ensure_ascii=False))
         name = escape(str(item.get("name") or "Stamm Brewing"))
         image = str(item.get("image_url") or "")
         image_html = f'<img src="{escape(image)}" alt="{name}">' if image else '<div class="beer-can__fallback" aria-hidden="true"></div>'
-        return f'<button class="beer-can {"beer-can--featured" if featured else "beer-can--seasonal"}" type="button" data-product="{payload}">{image_html}<span>{name}</span></button>'
+        return f'<button class="beer-can {"beer-can--featured" if featured else "beer-can--seasonal"}" type="button" data-product="{payload}" aria-label="{name}">{image_html}</button>'
 
     new_cards = "".join(product_card(item, True) for item in [p for p in products if p.get("category") == "new"][:3])
     seasonal_cards = "".join(product_card(item, False) for item in [p for p in products if p.get("category") != "new"])
@@ -712,10 +712,11 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
 {BASE_CSS}
 {typography_style(site_content)}
     .beer-page {{ min-height:calc(100vh - 64px); padding:86px min(6vw,72px) 72px; background:radial-gradient(circle at 18% 12%, rgba(199,177,102,.16), transparent 28%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
-    .beer-shell {{ max-width:1180px; margin:0 auto; display:grid; gap:72px; }}
+    .beer-shell {{ max-width:1180px; margin:0 auto; display:grid; gap:72px; justify-items:center; text-align:center; }}
+    .beer-section {{ width:100%; display:grid; justify-items:center; }}
     .beer-section h1, .beer-section h2 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
-    .beer-section p {{ margin:0 0 24px; max-width:720px; color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.55; white-space:pre-line; }}
-    .partners-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:28px 22px; align-items:center; }}
+    .beer-section p {{ margin:0 auto 24px; max-width:720px; color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.55; white-space:pre-line; }}
+    .partners-grid {{ width:100%; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:28px 22px; align-items:center; justify-items:center; }}
     .partner-card {{ display:inline-grid; place-items:center; justify-self:center; width:max-content; max-width:100%; text-decoration:none; line-height:0; }}
     .partner-card img {{ max-width:var(--logo-size); max-height:86px; object-fit:contain; display:block; transition:transform .18s ease, filter .18s ease; }}
     .partner-card:hover img {{ transform:scale(1.045); filter:brightness(1.12) drop-shadow(0 8px 18px rgba(199,177,102,.18)); }}
@@ -723,28 +724,31 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .partner-card:hover .partner-card__fallback {{ transform:scale(1.045); color:var(--golden-malt); }}
     .product-subsection {{ margin-top:28px; }}
     .product-subsection h3 {{ margin:0 0 18px; color:var(--foam); font-size:var(--stamm-section-title-font-size,28px); }}
-    .new-grid {{ display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:28px; align-items:end; }}
-    .seasonal-grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:18px; }}
+    .new-grid {{ width:min(860px,100%); display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:28px; align-items:end; justify-items:center; margin:0 auto; }}
+    .seasonal-grid {{ width:min(920px,100%); display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:18px; justify-items:center; margin:0 auto; }}
     .beer-can {{ border:0; background:transparent; color:var(--foam); cursor:pointer; display:grid; justify-items:center; gap:10px; font:inherit; font-weight:800; transition:transform .18s ease; }}
     .beer-can:hover {{ transform:scale(1.045); }}
     .beer-can img {{ width:100%; object-fit:contain; filter:drop-shadow(0 22px 28px rgba(0,0,0,.28)); }}
     .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:360px; }}
     .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:138px; }}
     .beer-can__fallback {{ width:82px; aspect-ratio:1/2.2; border-radius:18px; background:linear-gradient(180deg, var(--foam), var(--golden-malt)); }}
-    .beer-modal {{ position:fixed; inset:0; z-index:1001; display:none; place-items:center; padding:24px; background:rgba(11,63,64,.72); backdrop-filter:blur(10px); }}
+    .beer-modal {{ position:fixed; inset:0; z-index:1001; display:none; place-items:center; padding:24px; background:rgba(11,63,64,.30); backdrop-filter:blur(8px); }}
     .beer-modal.is-open {{ display:grid; }}
-    .beer-modal__card {{ width:min(460px,100%); border:1px solid rgba(199,177,102,.28); border-radius:26px; padding:26px; background:var(--card-hop); color:var(--foam); box-shadow:0 30px 90px rgba(0,0,0,.34); }}
-    .beer-modal__close {{ float:right; border:0; border-radius:999px; width:34px; height:34px; background:var(--golden-malt); color:var(--ink); cursor:pointer; font-weight:900; }}
-    .beer-modal h3 {{ margin:0 42px 14px 0; color:var(--golden-malt); font-size:30px; }}
-    .untappd-link {{ display:inline-flex; align-items:center; gap:8px; margin-top:18px; padding:11px 15px; border-radius:999px; background:var(--golden-malt); color:var(--ink); text-decoration:none; font-weight:900; }}
-    .untappd-link img {{ width:22px; height:22px; object-fit:contain; }}
+    .beer-modal__card {{ position:relative; width:min(520px,100%); border:1px solid rgba(199,177,102,.28); border-radius:26px; padding:30px; background:var(--card-hop); color:var(--foam); box-shadow:0 30px 90px rgba(0,0,0,.34); display:grid; justify-items:center; text-align:center; }}
+    .beer-modal__close {{ position:absolute; top:18px; right:18px; border:0; border-radius:999px; width:34px; height:34px; background:var(--golden-malt); color:var(--ink); cursor:pointer; font-weight:900; }}
+    .beer-modal h3 {{ margin:0 42px 10px; color:var(--golden-malt); font-size:30px; }}
+    .beer-modal p {{ margin:4px 0; }}
+    .beer-modal__mockup {{ max-width:min(260px,78vw); max-height:420px; object-fit:contain; margin:18px auto 12px; filter:drop-shadow(0 24px 30px rgba(0,0,0,.32)); }}
+    .untappd-link {{ display:inline-grid; place-items:center; margin-top:12px; text-decoration:none; }}
+    .untappd-link img {{ width:42px; height:42px; object-fit:contain; transition:transform .18s ease, filter .18s ease; }}
+    .untappd-link:hover img {{ transform:scale(1.06); filter:brightness(1.12); }}
     @media (max-width:760px) {{ .new-grid {{ grid-template-columns:1fr; }} .beer-page {{ padding:54px 20px; }} }}
   </style>
 </head>
 <body>
 {public_nav("beer", site_content)}
   <main class="beer-page"><div class="beer-shell">{partners_section}{products_section}</div></main>
-  <div class="beer-modal" id="beerModal"><div class="beer-modal__card"><button class="beer-modal__close" type="button" aria-label="Закрыть">×</button><h3 id="beerModalTitle"></h3><p id="beerModalStyle"></p><p id="beerModalAbv"></p><a class="untappd-link" id="beerModalUntappd" href="#" target="_blank" rel="noopener">Untappd</a></div></div>
+  <div class="beer-modal" id="beerModal"><div class="beer-modal__card"><button class="beer-modal__close" type="button" aria-label="Закрыть">×</button><h3 id="beerModalTitle"></h3><p id="beerModalStyle"></p><p id="beerModalAbv"></p><img class="beer-modal__mockup" id="beerModalImage" src="" alt=""><a class="untappd-link" id="beerModalUntappd" href="#" target="_blank" rel="noopener" aria-label="Untappd"></a></div></div>
   <script>
     (function () {{
       const modal = document.getElementById('beerModal');
@@ -752,16 +756,21 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
       const style = document.getElementById('beerModalStyle');
       const abv = document.getElementById('beerModalAbv');
       const link = document.getElementById('beerModalUntappd');
+      const image = document.getElementById('beerModalImage');
       function close() {{ modal.classList.remove('is-open'); }}
       document.addEventListener('click', function (event) {{
         const button = event.target.closest('[data-product]');
         if (button) {{
           const data = JSON.parse(button.dataset.product || '{{}}');
           title.textContent = data.name || 'Stamm Brewing';
-          style.textContent = data.style ? 'Стиль: ' + data.style : '';
+          style.textContent = data.style || '';
           abv.textContent = data.abv ? 'ABV: ' + data.abv : '';
           link.href = data.untappdUrl || '#';
-          link.innerHTML = (data.untappdLogoUrl ? '<img src="' + data.untappdLogoUrl.replace(/"/g, '&quot;') + '" alt="">' : '') + 'Untappd';
+          image.src = data.imageUrl || '';
+          image.alt = data.name || '';
+          image.hidden = !data.imageUrl;
+          link.innerHTML = data.untappdLogoUrl ? '<img src="' + data.untappdLogoUrl.replace(/"/g, '&quot;') + '" alt="Untappd">' : '';
+          link.hidden = !data.untappdUrl || !data.untappdLogoUrl;
           modal.classList.add('is-open');
         }}
         if (event.target === modal || event.target.closest('.beer-modal__close')) close();
