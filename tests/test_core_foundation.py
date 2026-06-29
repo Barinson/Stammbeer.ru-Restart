@@ -652,6 +652,10 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("beer-can--featured", html)
         self.assertIn("beer-can--seasonal", html)
         self.assertIn("beer-modal", html)
+        self.assertIn("beer-modal__mockup", html)
+        self.assertIn("rgba(11,63,64,.30)", html)
+        self.assertIn("style.textContent = data.style || ''", html)
+        self.assertNotIn(">Stamm IPA</span>", html)
         self.assertIn("https://untappd.com/b/stamm-ipa", html)
 
 
