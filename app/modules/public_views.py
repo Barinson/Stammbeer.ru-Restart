@@ -212,6 +212,22 @@ def css_text_color(value: object, fallback: str) -> str:
     return fallback
 
 
+def css_hex_to_rgb(value: object, fallback: str = "#0b3f40") -> tuple[int, int, int]:
+    color = css_text_color(value, fallback)
+    return (int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16))
+
+
+def css_alpha(value: object, fallback_percent: int = 30) -> str:
+    try:
+        number = float(str(value or "").strip().replace(",", "."))
+    except (TypeError, ValueError):
+        number = float(fallback_percent)
+    if number > 1:
+        number = number / 100
+    number = max(0, min(1, number))
+    return f"{number:.2f}".rstrip("0").rstrip(".")
+
+
 def is_enabled(value: object, default: bool = True) -> bool:
     if value is None or value == "":
         return default
@@ -687,6 +703,10 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
 def beer_page(content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
     beer = ((content or {}).get("beer") or {})
+    untappd_logo_url = str(beer.get("beer_untappd_logo_url") or "")
+    backdrop_rgb = css_hex_to_rgb(beer.get("beer_popup_backdrop_color"), "#0b3f40")
+    backdrop_alpha = css_alpha(beer.get("beer_popup_backdrop_opacity"), 30)
+    backdrop_rgba = f"rgba({backdrop_rgb[0]},{backdrop_rgb[1]},{backdrop_rgb[2]},{backdrop_alpha})"
     partners = sorted([item for item in (beer.get("partners") or []) if item.get("is_visible", True)], key=lambda item: (int(item.get("sort_order") or 100), str(item.get("name") or "")))
     products = sorted([item for item in (beer.get("products") or []) if item.get("is_visible", True)], key=lambda item: int(item.get("sort_order") or 100))
     size_map = {"small": "86px", "medium": "118px", "large": "154px"}
@@ -698,7 +718,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
         partner_cards.append(f'<a class="partner-card" href="{escape(str(item.get("url") or "#"))}" target="_blank" rel="noopener" style="--logo-size:{size_map.get(str(item.get("size") or "medium"), "118px")}">{logo_html}</a>')
 
     def product_card(item: dict[str, Any], featured: bool) -> str:
-        payload = escape(json.dumps({"name": str(item.get("name") or ""), "style": str(item.get("style") or ""), "abv": str(item.get("abv") or ""), "imageUrl": str(item.get("image_url") or ""), "untappdUrl": str(item.get("untappd_url") or ""), "untappdLogoUrl": str(item.get("untappd_logo_url") or "")}, ensure_ascii=False))
+        payload = escape(json.dumps({"name": str(item.get("name") or ""), "style": str(item.get("style") or ""), "abv": str(item.get("abv") or ""), "imageUrl": str(item.get("image_url") or ""), "untappdUrl": str(item.get("untappd_url") or "")}, ensure_ascii=False))
         name = escape(str(item.get("name") or "Stamm Brewing"))
         image = str(item.get("image_url") or "")
         image_html = f'<img src="{escape(image)}" alt="{name}">' if image else '<div class="beer-can__fallback" aria-hidden="true"></div>'
@@ -752,7 +772,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:360px; }}
     .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:138px; }}
     .beer-can__fallback {{ width:82px; aspect-ratio:1/2.2; border-radius:18px; background:linear-gradient(180deg, var(--foam), var(--golden-malt)); }}
-    .beer-modal {{ position:fixed; inset:0; z-index:1001; display:none; place-items:center; padding:24px; background:rgba(11,63,64,.30); backdrop-filter:blur(8px); }}
+    .beer-modal {{ position:fixed; inset:0; z-index:1001; display:none; place-items:center; padding:24px; background:{backdrop_rgba}; backdrop-filter:blur(8px); }}
     .beer-modal.is-open {{ display:grid; }}
     .beer-modal__card {{ position:relative; width:min(520px,100%); border:1px solid rgba(199,177,102,.28); border-radius:26px; padding:30px; background:var(--card-hop); color:var(--foam); box-shadow:0 30px 90px rgba(0,0,0,.34); display:grid; justify-items:center; text-align:center; }}
     .beer-modal__close {{ position:absolute; top:18px; right:18px; border:0; border-radius:999px; width:34px; height:34px; background:var(--golden-malt); color:var(--ink); cursor:pointer; font-weight:900; }}
@@ -777,6 +797,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
       const abv = document.getElementById('beerModalAbv');
       const link = document.getElementById('beerModalUntappd');
       const image = document.getElementById('beerModalImage');
+      const untappdLogoUrl = "{escape(untappd_logo_url)}";
       function close() {{ modal.classList.remove('is-open'); }}
       document.addEventListener('click', function (event) {{
         const button = event.target.closest('[data-product]');
@@ -789,8 +810,8 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
           image.src = data.imageUrl || '';
           image.alt = data.name || '';
           image.hidden = !data.imageUrl;
-          link.innerHTML = data.untappdLogoUrl ? '<img src="' + data.untappdLogoUrl.replace(/"/g, '&quot;') + '" alt="Untappd">' : '';
-          link.hidden = !data.untappdUrl || !data.untappdLogoUrl;
+          link.innerHTML = untappdLogoUrl ? '<img src="' + untappdLogoUrl.replace(/"/g, '&quot;') + '" alt="Untappd">' : '';
+          link.hidden = !data.untappdUrl || !untappdLogoUrl;
           modal.classList.add('is-open');
         }}
         if (event.target === modal || event.target.closest('.beer-modal__close')) close();
