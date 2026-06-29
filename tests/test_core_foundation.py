@@ -26,7 +26,7 @@ from app.modules.email import service as email_service
 from app.main import StammApp, admin_stats
 from app.modules.catalog.service import admin_catalog_items, public_catalog, publish_product
 from app.modules.content.service import get_public_site_content, save_public_content
-from app.modules.public_views import business_storefront_page, contacts_page, home_page
+from app.modules.public_views import beer_page, business_storefront_page, contacts_page, home_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
 
 
@@ -600,6 +600,57 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("window.history.back()", html)
         self.assertIn("about:blank", html)
         self.assertIn("stamm_age_confirmed", html)
+
+    def test_beer_page_content_is_cms_managed(self) -> None:
+        app = self.make_app()
+        save_public_content(
+            app.conn,
+            {
+                "beer_partners_title": "Где найти Stamm Brewing",
+                "beer_partners_description": "Партнёры\nи бары",
+                "beer_partners_is_visible": "1",
+                "beer_partner_name_0": "Bottle Shop",
+                "beer_partner_logo_url_0": "/media/partner.svg",
+                "beer_partner_url_0": "https://partner.test",
+                "beer_partner_size_0": "large",
+                "beer_partner_sort_order_0": "10",
+                "beer_partner_visible_0": "1",
+                "beer_products_title": "Наша продукция",
+                "beer_new_title": "Новинки",
+                "beer_seasonal_title": "Сезонные сорта",
+                "beer_products_is_visible": "1",
+                "beer_new_is_visible": "1",
+                "beer_seasonal_is_visible": "1",
+                "beer_product_name_0": "Stamm IPA",
+                "beer_product_style_0": "IPA",
+                "beer_product_abv_0": "6.5%",
+                "beer_product_image_url_0": "/media/ipa.png",
+                "beer_product_untappd_url_0": "https://untappd.com/b/stamm-ipa",
+                "beer_product_untappd_logo_url_0": "/media/untappd.svg",
+                "beer_product_category_0": "new",
+                "beer_product_sort_order_0": "10",
+                "beer_product_visible_0": "1",
+                "beer_product_name_1": "Stamm Saison",
+                "beer_product_style_1": "Saison",
+                "beer_product_abv_1": "5.2%",
+                "beer_product_image_url_1": "/media/saison.png",
+                "beer_product_category_1": "seasonal",
+                "beer_product_sort_order_1": "20",
+                "beer_product_visible_1": "1",
+            },
+        )
+        content = get_public_site_content(app.conn)
+        self.assertEqual(content["beer"]["partners"][0]["name"], "Bottle Shop")
+        html = beer_page(content)
+        self.assertIn("Где найти Stamm Brewing", html)
+        self.assertIn("Партнёры\nи бары", html)
+        self.assertIn('target="_blank"', html)
+        self.assertIn("--logo-size:154px", html)
+        self.assertIn("beer-can--featured", html)
+        self.assertIn("beer-can--seasonal", html)
+        self.assertIn("beer-modal", html)
+        self.assertIn("https://untappd.com/b/stamm-ipa", html)
+
 
     def test_public_cms_text_preserves_line_breaks_without_raw_html(self) -> None:
         app = self.make_app()
