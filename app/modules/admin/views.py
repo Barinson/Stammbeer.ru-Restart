@@ -122,35 +122,37 @@ def customer_accounts_page(user_email: str, accounts: list[object], query: str =
         notice = f"<div class='success'>{escape(result)}</div>"
     if error:
         notice = f"<div class='error'>{escape(error)}</div>"
+
     def status_label(status: object) -> str:
         labels = {"active": "активен", "disabled": "деактивирован", "deleted": "удалён"}
         return labels.get(str(status), str(status or "—"))
+
     if accounts:
         rows = "".join(
             f"""
             <tr>
-              <td>#{escape(str(account['id']))}</td>
-              <td><strong>{escape(str(account['email']))}</strong><br><small>{'подтверждён' if account['email_verified_at'] else 'не подтверждён'}</small></td>
+              <td class='users-id'>#{escape(str(account['id']))}</td>
+              <td><strong>{escape(str(account['email']))}</strong><small>{'подтверждён' if account['email_verified_at'] else 'не подтверждён'}</small></td>
               <td>{escape(str(account['inn']))}</td>
-              <td>{escape(str(account['counterparty_name'] or '—'))}<br><small>{escape(str(account['counterparty_id'] or '—'))}</small></td>
-              <td><span class='status'>{escape(status_label(account['status']))}</span></td>
+              <td>{escape(str(account['counterparty_name'] or '—'))}<small>{escape(str(account['counterparty_id'] or '—'))}</small></td>
+              <td><span class='status users-status'>{escape(status_label(account['status']))}</span></td>
               <td>{escape(str(account['price_type_name'] or '—'))}</td>
               <td>{escape(str(account['created_at'] or '—'))}</td>
               <td>
-                <div style='display:flex; gap:8px; flex-wrap:wrap;'>
+                <div class='users-actions'>
                   <form method='post' action='/admin/users/status'>
                     <input type='hidden' name='account_id' value='{escape(str(account['id']))}'>
                     <input type='hidden' name='status' value='{'disabled' if account['status'] == 'active' else 'active'}'>
-                    <button type='submit' {'disabled' if account['status'] == 'deleted' else ''}>{'Деактивировать' if account['status'] == 'active' else 'Активировать'}</button>
+                    <button class='users-button' type='submit' {'disabled' if account['status'] == 'deleted' else ''}>{'Деакт.' if account['status'] == 'active' else 'Актив.'}</button>
                   </form>
                   <form method='post' action='/admin/users/reset-password'>
                     <input type='hidden' name='account_id' value='{escape(str(account['id']))}'>
-                    <button class='secondary' type='submit' {'disabled' if account['status'] != 'active' else ''}>Сброс пароля</button>
+                    <button class='users-button secondary' type='submit' {'disabled' if account['status'] != 'active' else ''}>Сброс</button>
                   </form>
                   <form method='post' action='/admin/users/delete' onsubmit="return confirm('Мягко удалить пользователя и закрыть активные сессии? История заказов сохранится.');">
                     <input type='hidden' name='account_id' value='{escape(str(account['id']))}'>
                     <input type='hidden' name='confirm' value='yes'>
-                    <button type='submit' {'disabled' if account['status'] == 'deleted' else ''}>Удалить</button>
+                    <button class='users-button' type='submit' {'disabled' if account['status'] == 'deleted' else ''}>Удалить</button>
                   </form>
                 </div>
               </td>
@@ -159,26 +161,68 @@ def customer_accounts_page(user_email: str, accounts: list[object], query: str =
             for account in accounts
         )
         table = f"""
-        <table style='width:100%; border-collapse:collapse;'>
-          <thead><tr><th>ID</th><th>E-mail</th><th>ИНН</th><th>Контрагент</th><th>Статус</th><th>Тип цен</th><th>Регистрация</th><th>Действия</th></tr></thead>
-          <tbody>{rows}</tbody>
-        </table>
+        <div class='users-table-wrap'>
+          <table class='users-table'>
+            <thead><tr><th>ID</th><th>E-mail</th><th>ИНН</th><th>Контрагент</th><th>Статус</th><th>Тип цен</th><th>Регистрация</th><th>Действия</th></tr></thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>
         """
     else:
         table = "<p class='muted'>Пользователи не найдены.</p>"
+
     body = f"""
-      {notice}
-      <div class='card'>
-        <h3>Зарегистрированные пользователи</h3>
-        <p class='muted'>Список B2B-аккаунтов сайта. Деактивация и мягкое удаление закрывают активные сессии, но сохраняют связь с контрагентом и историю заказов.</p>
-        <form method='get' action='/admin/users' style='display:flex; gap:12px; align-items:end; margin:18px 0;'>
-          <label style='flex:1; margin:0;'>Поиск по e-mail, ИНН или организации
-            <input name='q' value='{escape(query)}' placeholder='partner@example.com / 770... / ООО'>
-          </label>
-          <button type='submit'>Найти</button>
-          <a class='button secondary' href='/admin/users'>Сбросить</a>
-        </form>
-        {table}
+      <style>
+        .users-admin {{ display:grid; gap:12px; }}
+        .users-admin .card {{ padding:14px; }}
+        .users-admin h3 {{ margin:0 0 10px; font-size:17px; line-height:1.2; }}
+        .users-admin .muted {{ margin:0 0 10px; font-size:12px; line-height:1.35; }}
+        .users-create-grid {{ display:grid; grid-template-columns:1.1fr 1.1fr .9fr auto; gap:10px; align-items:end; }}
+        .users-filter {{ display:grid; grid-template-columns:minmax(220px,1fr) auto auto; gap:10px; align-items:end; margin:10px 0 12px; }}
+        .users-admin label {{ margin:0; font-size:11px; font-weight:600; }}
+        .users-admin input {{ padding:6px 8px; border-radius:8px; font-size:12px; font-weight:400; }}
+        .users-button, .users-admin button, .users-admin .button {{ padding:7px 10px; border-radius:9px; font-size:12px; line-height:1.15; font-weight:700; white-space:nowrap; }}
+        .users-table-wrap {{ overflow:auto; }}
+        .users-table {{ width:100%; border-collapse:collapse; font-size:12px; }}
+        .users-table th, .users-table td {{ padding:8px 7px; border-bottom:1px solid rgba(16,88,89,.12); text-align:left; vertical-align:top; }}
+        .users-table th {{ color:#52615f; font-size:11px; font-weight:700; }}
+        .users-table strong {{ display:block; font-weight:700; }}
+        .users-table small {{ display:block; color:#64706f; margin-top:2px; font-size:11px; line-height:1.25; }}
+        .users-status {{ padding:4px 8px; font-size:11px; }}
+        .users-actions {{ display:flex; gap:5px; flex-wrap:wrap; }}
+        .users-id {{ color:#64706f; white-space:nowrap; }}
+        @media (max-width:900px) {{ .users-create-grid, .users-filter {{ grid-template-columns:1fr; }} }}
+      </style>
+      <div class='users-admin'>
+        {notice}
+        <div class='card'>
+          <h3>Создать B2B-пользователя</h3>
+          <p class='muted'>ИНН проверяется в МойСклад. Если контрагент не найден, аккаунт не будет создан.</p>
+          <form method='post' action='/admin/users/create' class='users-create-grid'>
+            <label>ИНН
+              <input name='inn' inputmode='numeric' required placeholder='7701234567'>
+            </label>
+            <label>E-mail
+              <input name='email' type='email' required placeholder='partner@example.com'>
+            </label>
+            <label>Временный пароль
+              <input name='temporary_password' type='text' minlength='8' required placeholder='не короче 8 символов'>
+            </label>
+            <button class='users-button secondary' type='submit'>Создать</button>
+          </form>
+        </div>
+        <div class='card'>
+          <h3>Зарегистрированные пользователи</h3>
+          <p class='muted'>Деактивация и мягкое удаление закрывают активные сессии, но сохраняют связь с контрагентом и историю заказов.</p>
+          <form method='get' action='/admin/users' class='users-filter'>
+            <label>Поиск по e-mail, ИНН или организации
+              <input name='q' value='{escape(query)}' placeholder='partner@example.com / 770... / ООО'>
+            </label>
+            <button class='users-button' type='submit'>Найти</button>
+            <a class='button secondary users-button' href='/admin/users'>Сбросить</a>
+          </form>
+          {table}
+        </div>
       </div>
     """
     return page("Пользователи", body, user_email)
