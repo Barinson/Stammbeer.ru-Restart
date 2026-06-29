@@ -456,6 +456,8 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     beer_untappd_logo_url = str(beer.get("beer_untappd_logo_url") or "")
     beer_popup_backdrop_color = str(beer.get("beer_popup_backdrop_color") or "#0b3f40")
     beer_popup_backdrop_opacity = str(beer.get("beer_popup_backdrop_opacity") or "30")
+    beer_popup_card_color = str(beer.get("beer_popup_card_color") or "#0d4b4c")
+    beer_popup_card_opacity = str(beer.get("beer_popup_card_opacity") or "100")
     beer_partners = list(beer.get("partners") or [])
     if not beer_partners:
         beer_partners.append({"name": "", "logo_url": "", "url": "", "size": "medium", "sort_order": 10, "is_visible": True})
@@ -748,6 +750,8 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <div class="grid">
                 <label>Цвет подложки popup<input name="beer_popup_backdrop_color" type="color" value="{escape(beer_popup_backdrop_color)}"></label>
                 <label>Прозрачность подложки popup, %<input name="beer_popup_backdrop_opacity" type="number" min="0" max="100" step="1" value="{escape(beer_popup_backdrop_opacity)}"></label>
+                <label>Цвет фона карточки popup<input name="beer_popup_card_color" type="color" value="{escape(beer_popup_card_color)}"></label>
+                <label>Прозрачность фона карточки popup, %<input name="beer_popup_card_opacity" type="number" min="0" max="100" step="1" value="{escape(beer_popup_card_opacity)}"></label>
               </div>
               <label>Лого Untappd для раздела{f"<img class='beer-admin-preview' src='{escape(beer_untappd_logo_url)}' alt=''>" if beer_untappd_logo_url else ""}<input type="hidden" name="beer_untappd_logo_url" value="{escape(beer_untappd_logo_url)}"><input name="beer_untappd_logo_file" type="file" accept="image/*"></label>
             </div>

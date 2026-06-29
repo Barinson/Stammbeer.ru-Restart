@@ -707,6 +707,9 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     backdrop_rgb = css_hex_to_rgb(beer.get("beer_popup_backdrop_color"), "#0b3f40")
     backdrop_alpha = css_alpha(beer.get("beer_popup_backdrop_opacity"), 30)
     backdrop_rgba = f"rgba({backdrop_rgb[0]},{backdrop_rgb[1]},{backdrop_rgb[2]},{backdrop_alpha})"
+    card_rgb = css_hex_to_rgb(beer.get("beer_popup_card_color"), "#0d4b4c")
+    card_alpha = css_alpha(beer.get("beer_popup_card_opacity"), 100)
+    card_rgba = f"rgba({card_rgb[0]},{card_rgb[1]},{card_rgb[2]},{card_alpha})"
     partners = sorted([item for item in (beer.get("partners") or []) if item.get("is_visible", True)], key=lambda item: (int(item.get("sort_order") or 100), str(item.get("name") or "")))
     products = sorted([item for item in (beer.get("products") or []) if item.get("is_visible", True)], key=lambda item: int(item.get("sort_order") or 100))
     size_map = {"small": "86px", "medium": "118px", "large": "154px"}
@@ -774,7 +777,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .beer-can__fallback {{ width:82px; aspect-ratio:1/2.2; border-radius:18px; background:linear-gradient(180deg, var(--foam), var(--golden-malt)); }}
     .beer-modal {{ position:fixed; inset:0; z-index:1001; display:none; place-items:center; padding:24px; background:{backdrop_rgba}; backdrop-filter:blur(8px); }}
     .beer-modal.is-open {{ display:grid; }}
-    .beer-modal__card {{ position:relative; width:min(520px,100%); border:1px solid rgba(199,177,102,.28); border-radius:26px; padding:30px; background:var(--card-hop); color:var(--foam); box-shadow:0 30px 90px rgba(0,0,0,.34); display:grid; justify-items:center; text-align:center; }}
+    .beer-modal__card {{ position:relative; width:min(520px,100%); border:1px solid rgba(199,177,102,.28); border-radius:26px; padding:30px; background:{card_rgba}; color:var(--foam); box-shadow:0 30px 90px rgba(0,0,0,.34); display:grid; justify-items:center; text-align:center; }}
     .beer-modal__close {{ position:absolute; top:18px; right:18px; border:0; border-radius:999px; width:34px; height:34px; background:var(--golden-malt); color:var(--ink); cursor:pointer; font-weight:900; }}
     .beer-modal h3 {{ margin:0 42px 10px; color:var(--golden-malt); font-size:30px; }}
     .beer-modal p {{ margin:4px 0; }}
