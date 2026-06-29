@@ -453,12 +453,15 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     )
 
     beer = content.get("beer") or {}
+    beer_untappd_logo_url = str(beer.get("beer_untappd_logo_url") or "")
+    beer_popup_backdrop_color = str(beer.get("beer_popup_backdrop_color") or "#0b3f40")
+    beer_popup_backdrop_opacity = str(beer.get("beer_popup_backdrop_opacity") or "30")
     beer_partners = list(beer.get("partners") or [])
     if not beer_partners:
         beer_partners.append({"name": "", "logo_url": "", "url": "", "size": "medium", "sort_order": 10, "is_visible": True})
     beer_products = list(beer.get("products") or [])
     if not beer_products:
-        beer_products.append({"name": "", "style": "", "abv": "", "image_url": "", "untappd_url": "", "untappd_logo_url": "", "category": "seasonal", "sort_order": 10, "is_visible": True})
+        beer_products.append({"name": "", "style": "", "abv": "", "image_url": "", "untappd_url": "", "category": "seasonal", "sort_order": 10, "is_visible": True})
     beer_partner_rows = "".join(
         f"""
         <div class='beer-admin-row'>
@@ -489,7 +492,6 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           </div>
           <div class='beer-asset-fields'>
             <label>Мокап{f"<img class='beer-admin-preview' src='{escape(str(item.get('image_url') or ''))}' alt=''>" if item.get('image_url') else ""}<input type='hidden' name='beer_product_image_url_{index}' value='{escape(str(item.get('image_url') or ''))}'><input name='beer_product_image_file_{index}' type='file' accept='image/*'></label>
-            <label>Лого Untappd{f"<img class='beer-admin-preview' src='{escape(str(item.get('untappd_logo_url') or ''))}' alt=''>" if item.get('untappd_logo_url') else ""}<input type='hidden' name='beer_product_untappd_logo_url_{index}' value='{escape(str(item.get('untappd_logo_url') or ''))}'><input name='beer_product_untappd_logo_file_{index}' type='file' accept='image/*'></label>
           </div>
         </div>
         """
@@ -502,7 +504,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     }
     for category in ('new', 'core', 'seasonal'):
         if not beer_product_rows_by_category[category]:
-            beer_product_rows_by_category[category] = beer_product_row(len(beer_products) + {'new': 0, 'core': 1, 'seasonal': 2}[category], {"name": "", "style": "", "abv": "", "image_url": "", "untappd_url": "", "untappd_logo_url": "", "category": category, "sort_order": 10, "is_visible": True}, category)
+            beer_product_rows_by_category[category] = beer_product_row(len(beer_products) + {'new': 0, 'core': 1, 'seasonal': 2}[category], {"name": "", "style": "", "abv": "", "image_url": "", "untappd_url": "", "category": category, "sort_order": 10, "is_visible": True}, category)
 
     return page(
         "Контент",
@@ -739,6 +741,15 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <h4>Партнёры</h4>
               <div data-dynamic-list="beer-partners">{beer_partner_rows}</div>
               <button class="button secondary admin-add-row" type="button" data-add-beer-partner>+ партнёр</button>
+            </div>
+            <div class="card">
+              <h3>Пиво / Popup сорта</h3>
+              <p class="muted">Общие настройки модального окна для всех сортов: подложка и единый логотип Untappd. Ссылки Untappd остаются индивидуальными в строках сортов.</p>
+              <div class="grid">
+                <label>Цвет подложки popup<input name="beer_popup_backdrop_color" type="color" value="{escape(beer_popup_backdrop_color)}"></label>
+                <label>Прозрачность подложки popup, %<input name="beer_popup_backdrop_opacity" type="number" min="0" max="100" step="1" value="{escape(beer_popup_backdrop_opacity)}"></label>
+              </div>
+              <label>Лого Untappd для раздела{f"<img class='beer-admin-preview' src='{escape(beer_untappd_logo_url)}' alt=''>" if beer_untappd_logo_url else ""}<input type="hidden" name="beer_untappd_logo_url" value="{escape(beer_untappd_logo_url)}"><input name="beer_untappd_logo_file" type="file" accept="image/*"></label>
             </div>
             <div class="card">
               <h3>Пиво / Наша продукция</h3>
