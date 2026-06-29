@@ -1041,7 +1041,9 @@ class CoreFoundationTest(unittest.TestCase):
             response = urllib.request.urlopen(base + path, timeout=5)
             self.assertEqual(response.status, 200)
             body = response.read().decode("utf-8")
-            self.assertIn("Что бы стать нашим партнёром напишите на marketing@stammbeer.ru", body)
+            self.assertIn("Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru", body)
+            self.assertIn("business-guest__message", body)
+            self.assertNotIn("business-guest__card", body)
             self.assertNotIn("Корзина", body)
             self.assertNotIn("/api/public/business/catalog", body)
 
@@ -1087,7 +1089,7 @@ class CoreFoundationTest(unittest.TestCase):
         url = f"http://127.0.0.1:{server.server_port}/api/public/business/catalog?containerType=keg"
         anonymous = open_without_redirects(url)
         self.assertEqual(anonymous.code, 401)
-        self.assertIn("Что бы стать нашим партнёром", anonymous.read().decode("utf-8"))
+        self.assertIn("Чтобы стать нашим партнёром", anonymous.read().decode("utf-8"))
         payload = urllib.request.urlopen(urllib.request.Request(url, headers={"Cookie": f"stamm_customer_session={session_id}"}), timeout=5).read().decode("utf-8")
         data = json.loads(payload)
         self.assertEqual(data["meta"]["source"], "local_read_model")
