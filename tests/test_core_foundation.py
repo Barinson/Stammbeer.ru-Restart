@@ -617,9 +617,11 @@ class CoreFoundationTest(unittest.TestCase):
                 "beer_partner_visible_0": "1",
                 "beer_products_title": "Наша продукция",
                 "beer_new_title": "Новинки",
+                "beer_core_title": "Постоянная линейка",
                 "beer_seasonal_title": "Сезонные сорта",
                 "beer_products_is_visible": "1",
                 "beer_new_is_visible": "1",
+                "beer_core_is_visible": "1",
                 "beer_seasonal_is_visible": "1",
                 "beer_product_name_0": "Stamm IPA",
                 "beer_product_style_0": "IPA",
@@ -630,13 +632,20 @@ class CoreFoundationTest(unittest.TestCase):
                 "beer_product_category_0": "new",
                 "beer_product_sort_order_0": "10",
                 "beer_product_visible_0": "1",
-                "beer_product_name_1": "Stamm Saison",
-                "beer_product_style_1": "Saison",
-                "beer_product_abv_1": "5.2%",
-                "beer_product_image_url_1": "/media/saison.png",
-                "beer_product_category_1": "seasonal",
+                "beer_product_name_1": "Stamm Lager",
+                "beer_product_style_1": "Lager",
+                "beer_product_abv_1": "4.8%",
+                "beer_product_image_url_1": "/media/lager.png",
+                "beer_product_category_1": "core",
                 "beer_product_sort_order_1": "20",
                 "beer_product_visible_1": "1",
+                "beer_product_name_24": "Stamm Saison",
+                "beer_product_style_24": "Saison",
+                "beer_product_abv_24": "5.2%",
+                "beer_product_image_url_24": "/media/saison.png",
+                "beer_product_category_24": "seasonal",
+                "beer_product_sort_order_24": "30",
+                "beer_product_visible_24": "1",
             },
         )
         content = get_public_site_content(app.conn)
@@ -650,7 +659,9 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn(".partner-card:hover img", html)
         self.assertNotIn("min-height:132px", html)
         self.assertIn("beer-can--featured", html)
+        self.assertIn("Постоянная линейка", html)
         self.assertIn("beer-can--seasonal", html)
+        self.assertEqual(len(content["beer"]["products"]), 3)
         self.assertIn("beer-modal", html)
         self.assertIn("beer-modal__mockup", html)
         self.assertIn("rgba(11,63,64,.30)", html)
@@ -720,6 +731,10 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('for="cms-tab-contacts"', admin_content_html)
         self.assertIn("Контакты", admin_content_html)
         self.assertIn("contacts-map-picker", admin_content_html)
+        self.assertIn('for="cms-tab-beer"', admin_content_html)
+        self.assertIn("beer_core_title", admin_content_html)
+        self.assertIn("data-add-beer-product", admin_content_html)
+        self.assertIn("stamm_admin_content_scroll", admin_content_html)
         self.assertIn("contacts_map_height_px", admin_content_html)
         self.assertIn("contacts_map_width_px", admin_content_html)
         self.assertIn("Высота карты, px", admin_content_html)
