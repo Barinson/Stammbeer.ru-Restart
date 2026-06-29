@@ -405,6 +405,11 @@ def list_customer_orders(conn: sqlite3.Connection, account_id: int, limit: int =
     return result
 
 
+def create_customer_account_by_admin(conn: sqlite3.Connection, inn: str, email: str, temporary_password: str) -> RegistrationResult:
+    """Create a B2B customer account from admin after validating the INN in MoySklad."""
+    return register_customer(conn, inn, email, temporary_password, temporary_password)
+
+
 def list_customer_accounts(conn: sqlite3.Connection, query: str | None = None) -> list[sqlite3.Row]:
     normalized = (query or "").strip().lower()
     if normalized:
