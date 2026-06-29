@@ -325,6 +325,8 @@ ACCOUNT_CSS = """
     .account-form input { width:100%; border:1px solid rgba(199,177,102,.32); border-radius:14px; padding:10px 12px; background:rgba(11,63,64,.82); color:var(--foam); font:inherit; font-size:14px; font-weight:400; }
     .account-form input:focus { outline:2px solid rgba(199,177,102,.44); outline-offset:2px; }
     .account-actions { display:flex; gap:9px; align-items:center; flex-wrap:wrap; margin-top:6px; }
+    .account-actions--single-row { flex-wrap:nowrap; }
+    @media (max-width:620px) { .account-actions--single-row { flex-wrap:wrap; } }
     .account-button { border:0; border-radius:999px; padding:9px 14px; background:var(--golden-malt); color:var(--ink); font:inherit; font-size:14px; line-height:1.15; font-weight:700; cursor:pointer; text-decoration:none; box-shadow:0 2px 7px rgba(199,177,102,.14); }
     .account-button--compact { padding:7px 11px; font-size:12.5px; font-weight:700; box-shadow:0 1px 4px rgba(199,177,102,.1); }
     .account-inline-form { margin:0; }
@@ -656,7 +658,6 @@ def account_dashboard_page(
   <main class="account-shell">
     <section class="account-card">
       <h1>Кабинет</h1>
-      <p>Здесь собраны данные B2B-аккаунта, история заказов и управление паролем.</p>
       {notice}
       <section class="account-section">
         <h2>Профиль</h2>
@@ -683,18 +684,17 @@ def account_dashboard_page(
           <label>Подтверждение нового пароля
             <input name="new_password_confirm" type="password" autocomplete="new-password" minlength="8" required>
           </label>
-          <div class="account-actions">
+          <div class="account-actions account-actions--single-row">
             <button class="account-button account-button--compact" type="submit">Сменить пароль</button>
             <button class="account-button account-button--compact" type="submit" form="forgotPasswordForm">Забыл пароль</button>
+            <button class="account-button account-button--compact" type="submit" form="logoutForm">Выйти</button>
           </div>
         </form>
         <form id="forgotPasswordForm" class="account-inline-form" method="post" action="/account/password-reset">
           <input type="hidden" name="email" value="{escape(str(customer['email']))}">
         </form>
+        <form id="logoutForm" class="account-inline-form" method="post" action="/account/logout"></form>
       </section>
-      <form method="post" action="/account/logout">
-        <button class="account-button account-button--compact" type="submit">Выйти</button>
-      </form>
     </section>
   </main>
 {age_gate_markup()}

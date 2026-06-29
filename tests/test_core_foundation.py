@@ -191,7 +191,67 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("ООО Админ Партнёр", users_html)
         self.assertIn("B2B 10%", users_html)
         self.assertIn("подтверждён", users_html)
-        self.assertIn("Сброс пароля", users_html)
+        self.assertIn("Сброс", users_html)
+        self.assertIn("/admin/users/create", users_html)
+        self.assertIn("Временный пароль", users_html)
+        self.assertIn("users-create-grid", users_html)
+        self.assertIn("users-table", users_html)
+
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "token-123",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "360",
+                "stock_sync_interval_minutes": "120",
+                "is_enabled": True,
+            },
+            admin["id"],
+        )
+        original_urlopen = urllib.request.urlopen
+
+        def fake_urlopen(request, timeout=0):
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            if "api.moysklad.ru" not in url:
+                return original_urlopen(request, timeout=timeout)
+            rows = [] if "filter=inn%3D7700000000" in url else [
+                {
+                    "id": "counterparty-created",
+                    "name": "ООО Новый Партнёр",
+                    "inn": "7709998887",
+                    "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-created"},
+                }
+            ]
+            return FakeMoyskladResponse(json.dumps({"rows": rows}).encode("utf-8"))
+
+        urllib.request.urlopen = fake_urlopen
+        try:
+            create_missing = urllib.request.Request(
+                base + "/admin/users/create",
+                data=urllib.parse.urlencode({"inn": "7700000000", "email": "missing-admin@example.com", "temporary_password": "secret123"}).encode("utf-8"),
+                headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            missing_response = open_without_redirects(create_missing)
+            self.assertEqual(missing_response.status, 303)
+            self.assertIn("error=", missing_response.headers["Location"])
+            self.assertIsNone(app.conn.execute("SELECT * FROM customer_accounts WHERE email = 'missing-admin@example.com'").fetchone())
+
+            create_ok = urllib.request.Request(
+                base + "/admin/users/create",
+                data=urllib.parse.urlencode({"inn": "7709998887", "email": "created-admin@example.com", "temporary_password": "secret123"}).encode("utf-8"),
+                headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            created_response = open_without_redirects(create_ok)
+        finally:
+            urllib.request.urlopen = original_urlopen
+        self.assertEqual(created_response.status, 303)
+        self.assertIn("result=", created_response.headers["Location"])
+        created_account = authenticate_customer(app.conn, "created-admin@example.com", "secret123", refresh_discount=False)
+        self.assertIsNotNone(created_account)
+        self.assertEqual(created_account["counterparty_name"], "ООО Новый Партнёр")
 
         disable = urllib.request.Request(
             base + "/admin/users/status",
@@ -1841,6 +1901,10 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Stamm IPA банка", page_html)
         self.assertIn("Смена пароля", page_html)
         self.assertIn("Забыл пароль", page_html)
+        self.assertIn("Выйти", page_html)
+        self.assertIn("account-actions account-actions--single-row", page_html)
+        self.assertIn('form="logoutForm"', page_html)
+        self.assertNotIn("Здесь собраны данные B2B-аккаунта, история заказов и управление паролем.", page_html)
         self.assertIn('form="forgotPasswordForm"', page_html)
         self.assertIn('action="/account/password-reset"', page_html)
         self.assertNotIn("Контрагент МойСклад найден", page_html)

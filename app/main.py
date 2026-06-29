@@ -29,6 +29,7 @@ from app.modules.account.service import (
     DiscountRefreshError,
     authenticate_customer,
     change_customer_password,
+    create_customer_account_by_admin,
     create_customer_session,
     current_customer,
     customer_cookie_header,
@@ -773,6 +774,15 @@ class StammApp:
                     except Exception as exc:
                         self.redirect("/admin/email?error=" + urllib.parse.quote(str(exc)))
                         return
+                if path == "/admin/users/create":
+                    user = self.require_admin()
+                    if user is None:
+                        return
+                    form = self.read_form()
+                    result = create_customer_account_by_admin(app.conn, form.get("inn", ""), form.get("email", ""), form.get("temporary_password", ""))
+                    target = "result" if result.ok else "error"
+                    self.redirect(f"/admin/users?{target}=" + urllib.parse.quote(result.message))
+                    return
                 if path in {"/admin/users/status", "/admin/users/delete", "/admin/users/reset-password"}:
                     user = self.require_admin()
                     if user is None:
