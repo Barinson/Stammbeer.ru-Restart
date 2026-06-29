@@ -326,6 +326,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     business = content.get("business") or {}
     contacts = content.get("contacts") or {}
     typography = content.get("typography") or {}
+    layout = content.get("layout") or {}
     contact_emails = list(contacts.get("emails") or [])
     contact_phones = list(contacts.get("phones") or [])
     while len(contact_emails) < 6:
@@ -435,6 +436,20 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         <label>{escape(label)}<input name='{escape(key)}' type='number' min='8' max='96' value='{escape(str(typography.get(key) or ''))}'></label>
         """
         for key, label in typography_tokens
+    )
+    menu_offset_tokens = [
+        ("menu_offset_home_px", "Отступ контента от меню — Главная"),
+        ("menu_offset_beer_px", "Отступ контента от меню — Пиво"),
+        ("menu_offset_visit_px", "Отступ контента от меню — Stammhaus / Посетить пивоварню"),
+        ("menu_offset_history_px", "Отступ контента от меню — История"),
+        ("menu_offset_business_px", "Отступ контента от меню — Бизнес"),
+        ("menu_offset_contacts_px", "Отступ контента от меню — Контакты"),
+    ]
+    menu_offset_rows = "".join(
+        f"""
+        <label>{escape(label)}<input name='{escape(key)}' type='number' min='0' max='420' value='{escape(str(layout.get(key) or '176'))}'></label>
+        """
+        for key, label in menu_offset_tokens
     )
 
     beer = content.get("beer") or {}
@@ -769,6 +784,9 @@ def content_management_page(user_email: str, content: dict[str, object], result:
                 <p>Обычный текст и lead выглядят компактно и используют глобальные настройки.</p>
                 <small>Label / подпись · цена · карточка товара · контакты</small>
               </div>
+              <h3>Отступы от верхнего меню</h3>
+              <p class="muted">Каждый публичный раздел получает собственный отступ между фиксированным меню и началом контента. Изменение одного значения не влияет на остальные страницы.</p>
+              <div class="grid">{menu_offset_rows}</div>
               <p><button type="submit">Сохранить типографику</button></p>
             </div>
           </section>

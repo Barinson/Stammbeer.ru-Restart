@@ -4,7 +4,7 @@ import json
 from html import escape
 from typing import Any
 
-from app.modules.content.service import ACTION_DEFAULTS, BUSINESS_DEFAULTS, CONTACT_DEFAULTS, HOME_DEFAULTS, MENU_DEFAULTS, TYPOGRAPHY_DEFAULTS
+from app.modules.content.service import ACTION_DEFAULTS, BUSINESS_DEFAULTS, CONTACT_DEFAULTS, HOME_DEFAULTS, LAYOUT_DEFAULTS, MENU_DEFAULTS, TYPOGRAPHY_DEFAULTS
 
 
 PUBLIC_HEAD = """<meta charset=\"utf-8\">
@@ -27,7 +27,7 @@ BASE_CSS = """
     .nav-actions { display:flex; align-items:center; gap:9px; }
     .nav-icon { width:32px; height:32px; border:0; border-radius:999px; display:grid; place-items:center; background:var(--golden-malt); color:var(--ink); text-decoration:none; font-size:11px; font-weight:900; line-height:1; overflow:hidden; padding:0; }
     .nav-icon img { width:100%; height:100%; padding:0; object-fit:contain; display:block; border-radius:inherit; }
-    .top-nav + main { padding-top:176px; }
+    .top-nav + main { padding-top:var(--menu-offset,176px); }
     body.age-gate-pending { overflow:hidden; }
     .age-gate { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at 50% 25%, rgba(199,177,102,.16), transparent 30%), rgba(11,63,64,.96); backdrop-filter:blur(14px); }
     .age-gate.is-hidden { display:none; }
@@ -47,6 +47,7 @@ def public_content_or_defaults(content: dict[str, Any] | None = None) -> dict[st
         "business": {**BUSINESS_DEFAULTS, **((content or {}).get("business") or {})},
         "contacts": {**CONTACT_DEFAULTS, **((content or {}).get("contacts") or {})},
         "typography": {**TYPOGRAPHY_DEFAULTS, **((content or {}).get("typography") or {})},
+        "layout": {**LAYOUT_DEFAULTS, **((content or {}).get("layout") or {})},
         "menu": (content or {}).get("menu") or MENU_DEFAULTS,
         "actions": (content or {}).get("actions") or ACTION_DEFAULTS,
     }
@@ -172,6 +173,17 @@ def css_gap_px(value: object, fallback: int = 0) -> str:
     return f"{number}px"
 
 
+def menu_offset_px(content: dict[str, Any] | None, section: str, fallback: int = 176) -> str:
+    site_content = public_content_or_defaults(content)
+    layout = site_content.get("layout") or {}
+    raw_value = layout.get(f"menu_offset_{section}_px")
+    try:
+        number = max(0, min(420, int(str(raw_value or "").strip())))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
+
+
 def cms_text(value: object) -> str:
     """Safely render CMS-managed plain text while preserving admin-entered line breaks."""
     return escape(str(value or ""))
@@ -232,7 +244,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    body.home-body .top-nav + main {{ padding-top:176px; }}
+    body.home-body .top-nav + main {{ padding-top:var(--menu-offset,176px); }}
     .home-hero {{ min-height:100vh; display:grid; place-items:center; text-align:center; padding:104px min(6vw,72px) 72px; background:radial-gradient(circle at 50% 16%, rgba(199,177,102,.18), transparent 28%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
     .home-hero__inner {{ display:grid; justify-items:center; gap:0; }}
     .home-logo {{ max-width:154px; max-height:154px; object-fit:contain; margin-bottom:28px; }}
@@ -255,7 +267,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body class="home-body">
 {public_nav("home", site_content)}
-  <main>
+  <main style="--menu-offset:{menu_offset_px(site_content, 'home')};">
     <section class="home-hero" style="--home-title-size:{title_size}; --home-title-weight:{title_weight}; --home-subtitle-size:{subtitle_size}; --home-subtitle-weight:{subtitle_weight}; --home-line-gap:{line_gap};">
       <div class="home-hero__inner">
         {logo_markup}
@@ -655,7 +667,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("contacts", site_content)}
-  <main class="contacts-page">
+  <main class="contacts-page" style="--menu-offset:{menu_offset_px(site_content, 'contacts')};">
     <section class="contacts-hero">
       <div class="contacts-card contacts-info-card">
         {description_markup}
@@ -707,7 +719,10 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_seasonal_title") or "Сезонные сорта"))}</h3><div class="seasonal-grid">{seasonal_cards}</div></div>'
     products_section = f'<section class="beer-section"><h2>{escape(str(beer.get("beer_products_title") or "Наша продукция"))}</h2>{products_inner}</section>' if is_enabled(beer.get("beer_products_is_visible"), True) else ""
     beer_bg_url = str(site_content.get("home", {}).get("home_content_bg_url") or "")
-    beer_bg_style = f' style="--beer-bg:url(\'{escape(beer_bg_url)}\')"' if beer_bg_url else ""
+    beer_style_values = [f"--menu-offset:{menu_offset_px(site_content, 'beer')}"]
+    if beer_bg_url:
+        beer_style_values.append(f"--beer-bg:url('{escape(beer_bg_url)}')")
+    beer_page_style = f' style="{";".join(beer_style_values)}"'
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -752,7 +767,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("beer", site_content)}
-  <main class="beer-page"{beer_bg_style}><div class="beer-shell">{partners_section}{products_section}</div></main>
+  <main class="beer-page"{beer_page_style}><div class="beer-shell">{partners_section}{products_section}</div></main>
   <div class="beer-modal" id="beerModal"><div class="beer-modal__card"><button class="beer-modal__close" type="button" aria-label="Закрыть">×</button><h3 id="beerModalTitle"></h3><p id="beerModalStyle"></p><p id="beerModalAbv"></p><img class="beer-modal__mockup" id="beerModalImage" src="" alt=""><a class="untappd-link" id="beerModalUntappd" href="#" target="_blank" rel="noopener" aria-label="Untappd"></a></div></div>
   <script>
     (function () {{
@@ -805,7 +820,7 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
 </head>
 <body>
 {public_nav(active, content)}
-  <main class="placeholder"><section class="placeholder__card"><h1>{title}</h1><p>Раздел будет собираться после ядра B2B-магазина и админки.</p></section></main>
+  <main class="placeholder" style="--menu-offset:{menu_offset_px(site_content, active)};"><section class="placeholder__card"><h1>{title}</h1><p>Раздел будет собираться после ядра B2B-магазина и админки.</p></section></main>
 {age_gate_markup()}
 </body>
 </html>"""
@@ -877,7 +892,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("business", content)}
-  <main class="wrap">
+  <main class="wrap" style="--menu-offset:{menu_offset_px(site_content, 'business')};">
     <div class="toolbar">
       <div class="filters" aria-label="Фильтры каталога">
         <button class="filter is-active" data-filter="all">Все</button>

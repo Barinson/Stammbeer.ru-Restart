@@ -624,6 +624,7 @@ class CoreFoundationTest(unittest.TestCase):
                 "beer_new_is_visible": "1",
                 "beer_core_is_visible": "1",
                 "beer_seasonal_is_visible": "1",
+                "menu_offset_beer_px": "232",
                 "beer_product_name_0": "Stamm IPA",
                 "beer_product_style_0": "IPA",
                 "beer_product_abv_0": "6.5%",
@@ -660,6 +661,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("display:flex; flex-wrap:wrap", html)
         self.assertIn("--beer-bg:url", html)
         self.assertIn("linear-gradient(180deg, rgba(16,88,89,.78)", html)
+        self.assertIn("--menu-offset:232px", html)
         self.assertIn(".partner-card:hover img", html)
         self.assertNotIn("min-height:132px", html)
         self.assertIn("beer-can--featured", html)
@@ -763,6 +765,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('for="cms-tab-typography"', admin_content_html)
         self.assertIn("Типографика", admin_content_html)
         self.assertIn("typography_product_title_font_size_px", admin_content_html)
+        self.assertIn("menu_offset_home_px", admin_content_html)
+        self.assertIn("Отступ контента от меню — Пиво", admin_content_html)
 
         parts = [
             field("home_hero_title", "STAMM"),
@@ -796,6 +800,9 @@ class CoreFoundationTest(unittest.TestCase):
             field("typography_body_font_size_px", "18"), field("typography_contact_text_font_size_px", "22"),
             field("typography_product_title_font_size_px", "20"), field("typography_price_font_size_px", "24"),
             field("typography_cart_font_size_px", "16"),
+            field("menu_offset_home_px", "210"), field("menu_offset_beer_px", "230"),
+            field("menu_offset_visit_px", "190"), field("menu_offset_history_px", "200"),
+            field("menu_offset_business_px", "240"), field("menu_offset_contacts_px", "220"),
             field("menu_beer_label", "Пиво"), field("menu_beer_sort_order", "10"), field("menu_beer_visible", "on"),
             field("menu_visit_label", "Посетить пивоварню"), field("menu_visit_sort_order", "20"), field("menu_visit_visible", "on"),
             field("menu_history_label", "История"), field("menu_history_sort_order", "30"), field("menu_history_visible", "on"),
@@ -836,6 +843,10 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("--stamm-page-title-font-size:54px", contacts_page(content))
         self.assertIn("--stamm-product-title-font-size:20px", business_storefront_page(content))
         self.assertIn("--stamm-price-font-size:24px", business_storefront_page(content))
+        self.assertEqual(content["layout"]["menu_offset_home_px"], "210")
+        self.assertIn("--menu-offset:210px", home_page(content))
+        self.assertIn("--menu-offset:220px", contacts_page(content))
+        self.assertIn("--menu-offset:240px", business_storefront_page(content))
         tg = next(item for item in content["actions"] if item["key"] == "tg")
         self.assertTrue(tg["icon_url"].startswith("/media/nav-tg-"))
         self.assertIn(content["home"]["home_logo_url"], home_page(content))
