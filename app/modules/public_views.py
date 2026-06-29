@@ -672,6 +672,106 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
 </body>
 </html>"""
 
+def beer_page(content: dict[str, Any] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
+    beer = ((content or {}).get("beer") or {})
+    partners = sorted([item for item in (beer.get("partners") or []) if item.get("is_visible", True)], key=lambda item: (int(item.get("sort_order") or 100), str(item.get("name") or "")))
+    products = sorted([item for item in (beer.get("products") or []) if item.get("is_visible", True)], key=lambda item: int(item.get("sort_order") or 100))
+    size_map = {"small": "86px", "medium": "118px", "large": "154px"}
+    partner_cards = []
+    for item in partners:
+        name = escape(str(item.get("name") or "Партнёр"))
+        logo = str(item.get("logo_url") or "")
+        logo_html = f'<img src="{escape(logo)}" alt="{name}">' if logo else f'<span class="partner-card__fallback">{name}</span>'
+        partner_cards.append(f'<a class="partner-card" href="{escape(str(item.get("url") or "#"))}" target="_blank" rel="noopener" style="--logo-size:{size_map.get(str(item.get("size") or "medium"), "118px")}">{logo_html}</a>')
+
+    def product_card(item: dict[str, Any], featured: bool) -> str:
+        payload = escape(json.dumps({"name": str(item.get("name") or ""), "style": str(item.get("style") or ""), "abv": str(item.get("abv") or ""), "untappdUrl": str(item.get("untappd_url") or ""), "untappdLogoUrl": str(item.get("untappd_logo_url") or "")}, ensure_ascii=False))
+        name = escape(str(item.get("name") or "Stamm Brewing"))
+        image = str(item.get("image_url") or "")
+        image_html = f'<img src="{escape(image)}" alt="{name}">' if image else '<div class="beer-can__fallback" aria-hidden="true"></div>'
+        return f'<button class="beer-can {"beer-can--featured" if featured else "beer-can--seasonal"}" type="button" data-product="{payload}">{image_html}<span>{name}</span></button>'
+
+    new_cards = "".join(product_card(item, True) for item in [p for p in products if p.get("category") == "new"][:3])
+    seasonal_cards = "".join(product_card(item, False) for item in [p for p in products if p.get("category") != "new"])
+    partners_section = ""
+    if is_enabled(beer.get("beer_partners_is_visible"), True):
+        partners_section = f'<section class="beer-section"><h1>{escape(str(beer.get("beer_partners_title") or "Где найти Stamm Brewing"))}</h1><p>{cms_text(beer.get("beer_partners_description") or "")}</p><div class="partners-grid">{"".join(partner_cards)}</div></section>'
+    products_inner = ""
+    if is_enabled(beer.get("beer_new_is_visible"), True):
+        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_new_title") or "Новинки"))}</h3><div class="new-grid">{new_cards}</div></div>'
+    if is_enabled(beer.get("beer_seasonal_is_visible"), True):
+        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_seasonal_title") or "Сезонные сорта"))}</h3><div class="seasonal-grid">{seasonal_cards}</div></div>'
+    products_section = f'<section class="beer-section"><h2>{escape(str(beer.get("beer_products_title") or "Наша продукция"))}</h2>{products_inner}</section>' if is_enabled(beer.get("beer_products_is_visible"), True) else ""
+    return f"""<!doctype html>
+<html lang="ru">
+<head>
+  {PUBLIC_HEAD}
+  <title>Пиво · Stamm Brewing</title>
+  <style>
+{BASE_CSS}
+{typography_style(site_content)}
+    .beer-page {{ min-height:calc(100vh - 64px); padding:86px min(6vw,72px) 72px; background:radial-gradient(circle at 18% 12%, rgba(199,177,102,.16), transparent 28%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .beer-shell {{ max-width:1180px; margin:0 auto; display:grid; gap:72px; }}
+    .beer-section h1, .beer-section h2 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
+    .beer-section p {{ margin:0 0 24px; max-width:720px; color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.55; white-space:pre-line; }}
+    .partners-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:18px; }}
+    .partner-card {{ min-height:132px; display:grid; place-items:center; border:1px solid rgba(199,177,102,.18); border-radius:22px; background:rgba(13,75,76,.7); transition:transform .18s ease, border-color .18s ease; text-decoration:none; }}
+    .partner-card:hover {{ transform:scale(1.035); border-color:rgba(199,177,102,.48); }}
+    .partner-card img {{ max-width:var(--logo-size); max-height:86px; object-fit:contain; display:block; }}
+    .partner-card__fallback {{ color:var(--foam); font-weight:800; text-align:center; padding:12px; }}
+    .product-subsection {{ margin-top:28px; }}
+    .product-subsection h3 {{ margin:0 0 18px; color:var(--foam); font-size:var(--stamm-section-title-font-size,28px); }}
+    .new-grid {{ display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:28px; align-items:end; }}
+    .seasonal-grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:18px; }}
+    .beer-can {{ border:0; background:transparent; color:var(--foam); cursor:pointer; display:grid; justify-items:center; gap:10px; font:inherit; font-weight:800; transition:transform .18s ease; }}
+    .beer-can:hover {{ transform:scale(1.045); }}
+    .beer-can img {{ width:100%; object-fit:contain; filter:drop-shadow(0 22px 28px rgba(0,0,0,.28)); }}
+    .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:360px; }}
+    .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:138px; }}
+    .beer-can__fallback {{ width:82px; aspect-ratio:1/2.2; border-radius:18px; background:linear-gradient(180deg, var(--foam), var(--golden-malt)); }}
+    .beer-modal {{ position:fixed; inset:0; z-index:1001; display:none; place-items:center; padding:24px; background:rgba(11,63,64,.72); backdrop-filter:blur(10px); }}
+    .beer-modal.is-open {{ display:grid; }}
+    .beer-modal__card {{ width:min(460px,100%); border:1px solid rgba(199,177,102,.28); border-radius:26px; padding:26px; background:var(--card-hop); color:var(--foam); box-shadow:0 30px 90px rgba(0,0,0,.34); }}
+    .beer-modal__close {{ float:right; border:0; border-radius:999px; width:34px; height:34px; background:var(--golden-malt); color:var(--ink); cursor:pointer; font-weight:900; }}
+    .beer-modal h3 {{ margin:0 42px 14px 0; color:var(--golden-malt); font-size:30px; }}
+    .untappd-link {{ display:inline-flex; align-items:center; gap:8px; margin-top:18px; padding:11px 15px; border-radius:999px; background:var(--golden-malt); color:var(--ink); text-decoration:none; font-weight:900; }}
+    .untappd-link img {{ width:22px; height:22px; object-fit:contain; }}
+    @media (max-width:760px) {{ .new-grid {{ grid-template-columns:1fr; }} .beer-page {{ padding:54px 20px; }} }}
+  </style>
+</head>
+<body>
+{public_nav("beer", site_content)}
+  <main class="beer-page"><div class="beer-shell">{partners_section}{products_section}</div></main>
+  <div class="beer-modal" id="beerModal"><div class="beer-modal__card"><button class="beer-modal__close" type="button" aria-label="Закрыть">×</button><h3 id="beerModalTitle"></h3><p id="beerModalStyle"></p><p id="beerModalAbv"></p><a class="untappd-link" id="beerModalUntappd" href="#" target="_blank" rel="noopener">Untappd</a></div></div>
+  <script>
+    (function () {{
+      const modal = document.getElementById('beerModal');
+      const title = document.getElementById('beerModalTitle');
+      const style = document.getElementById('beerModalStyle');
+      const abv = document.getElementById('beerModalAbv');
+      const link = document.getElementById('beerModalUntappd');
+      function close() {{ modal.classList.remove('is-open'); }}
+      document.addEventListener('click', function (event) {{
+        const button = event.target.closest('[data-product]');
+        if (button) {{
+          const data = JSON.parse(button.dataset.product || '{{}}');
+          title.textContent = data.name || 'Stamm Brewing';
+          style.textContent = data.style ? 'Стиль: ' + data.style : '';
+          abv.textContent = data.abv ? 'ABV: ' + data.abv : '';
+          link.href = data.untappdUrl || '#';
+          link.innerHTML = (data.untappdLogoUrl ? '<img src="' + data.untappdLogoUrl.replace(/"/g, '&quot;') + '" alt="">' : '') + 'Untappd';
+          modal.classList.add('is-open');
+        }}
+        if (event.target === modal || event.target.closest('.beer-modal__close')) close();
+      }});
+      document.addEventListener('keydown', function (event) {{ if (event.key === 'Escape') close(); }});
+    }})();
+  </script>
+{age_gate_markup()}
+</body>
+</html>"""
+
 def public_placeholder_page(title: str, active: str, content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
     return f"""<!doctype html>

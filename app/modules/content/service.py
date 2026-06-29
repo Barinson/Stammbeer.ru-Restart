@@ -55,6 +55,20 @@ BUSINESS_DEFAULTS = {
     "business_min_order_amount_minor": "1500000",
 }
 
+BEER_DEFAULTS = {
+    "beer_partners_title": "Где найти Stamm Brewing",
+    "beer_partners_description": "Партнёры, бары и магазины, где представлена наша продукция.",
+    "beer_partners_is_visible": "1",
+    "beer_partners_json": "[]",
+    "beer_products_title": "Наша продукция",
+    "beer_new_title": "Новинки",
+    "beer_seasonal_title": "Сезонные сорта",
+    "beer_products_is_visible": "1",
+    "beer_new_is_visible": "1",
+    "beer_seasonal_is_visible": "1",
+    "beer_products_json": "[]",
+}
+
 MENU_DEFAULTS = [
     {"key": "beer", "href": "/beer", "label": "Пиво", "sort_order": 10, "is_visible": True},
     {"key": "visit", "href": "/visit", "label": "Посетить пивоварню", "sort_order": 20, "is_visible": True},
@@ -80,6 +94,8 @@ def ensure_public_content_defaults(conn: sqlite3.Connection) -> None:
     for key, value in TYPOGRAPHY_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for key, value in BUSINESS_DEFAULTS.items():
+        conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
+    for key, value in BEER_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for item in MENU_DEFAULTS:
         conn.execute(
@@ -134,11 +150,22 @@ def get_public_site_content(conn: sqlite3.Connection, include_hidden: bool = Fal
                 "is_visible": bool(item.get("is_visible", True)),
             })
         contacts[target] = sorted(normalized_items, key=lambda item: (item["sort_order"], item["label"]))
+    beer = {**BEER_DEFAULTS, **settings}
+    for key in ("beer_partners_json", "beer_products_json"):
+        try:
+            items = json.loads(str(beer.get(key) or "[]"))
+        except json.JSONDecodeError:
+            items = []
+        beer[key.removeprefix("beer_").removesuffix("_json")] = sorted(
+            [item for item in items if isinstance(item, dict)],
+            key=lambda item: (int(item.get("sort_order") or 100), str(item.get("name") or "")),
+        )
     return {
         "home": {**HOME_DEFAULTS, **settings},
         "contacts": contacts,
         "typography": {**TYPOGRAPHY_DEFAULTS, **settings},
         "business": {**BUSINESS_DEFAULTS, **settings},
+        "beer": beer,
         "menu": menu,
         "actions": actions,
     }
@@ -210,6 +237,53 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
                 """,
                 (key, str(data.get(key) or "")),
+            )
+    if any(key.startswith("beer_") for key in data):
+        beer_values = {
+            "beer_partners_title": str(data.get("beer_partners_title") or BEER_DEFAULTS["beer_partners_title"]),
+            "beer_partners_description": str(data.get("beer_partners_description") or ""),
+            "beer_partners_is_visible": "1" if str(data.get("beer_partners_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_products_title": str(data.get("beer_products_title") or BEER_DEFAULTS["beer_products_title"]),
+            "beer_new_title": str(data.get("beer_new_title") or BEER_DEFAULTS["beer_new_title"]),
+            "beer_seasonal_title": str(data.get("beer_seasonal_title") or BEER_DEFAULTS["beer_seasonal_title"]),
+            "beer_products_is_visible": "1" if str(data.get("beer_products_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_new_is_visible": "1" if str(data.get("beer_new_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_seasonal_is_visible": "1" if str(data.get("beer_seasonal_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+        }
+        partners = []
+        for index in range(8):
+            name = str(data.get(f"beer_partner_name_{index}") or "").strip()
+            logo = str(data.get(f"beer_partner_logo_url_{index}") or "").strip()
+            if name or logo:
+                partners.append({
+                    "name": name, "logo_url": logo, "url": str(data.get(f"beer_partner_url_{index}") or "").strip(),
+                    "size": str(data.get(f"beer_partner_size_{index}") or "medium"),
+                    "sort_order": int(data.get(f"beer_partner_sort_order_{index}") or ((index + 1) * 10)),
+                    "is_visible": str(data.get(f"beer_partner_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
+                })
+        products = []
+        for index in range(12):
+            name = str(data.get(f"beer_product_name_{index}") or "").strip()
+            image = str(data.get(f"beer_product_image_url_{index}") or "").strip()
+            if name or image:
+                products.append({
+                    "name": name, "style": str(data.get(f"beer_product_style_{index}") or "").strip(),
+                    "abv": str(data.get(f"beer_product_abv_{index}") or "").strip(),
+                    "image_url": image, "untappd_url": str(data.get(f"beer_product_untappd_url_{index}") or "").strip(),
+                    "untappd_logo_url": str(data.get(f"beer_product_untappd_logo_url_{index}") or "").strip(),
+                    "category": str(data.get(f"beer_product_category_{index}") or "seasonal"),
+                    "sort_order": int(data.get(f"beer_product_sort_order_{index}") or ((index + 1) * 10)),
+                    "is_visible": str(data.get(f"beer_product_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
+                })
+        beer_values["beer_partners_json"] = json.dumps(partners, ensure_ascii=False)
+        beer_values["beer_products_json"] = json.dumps(products, ensure_ascii=False)
+        for key, value in beer_values.items():
+            conn.execute(
+                """
+                INSERT INTO site_content_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, value),
             )
     for item in MENU_DEFAULTS:
         key = item["key"]
