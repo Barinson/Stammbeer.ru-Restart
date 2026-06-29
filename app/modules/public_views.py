@@ -735,7 +735,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
         partners_section = f'<section class="beer-section"><h1>{escape(str(beer.get("beer_partners_title") or "Где найти Stamm Brewing"))}</h1><p>{cms_text(beer.get("beer_partners_description") or "")}</p><div class="partners-grid">{"".join(partner_cards)}</div></section>'
     products_inner = ""
     if is_enabled(beer.get("beer_new_is_visible"), True):
-        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_new_title") or "Новинки"))}</h3><div class="new-grid">{new_cards}</div></div>'
+        products_inner += f'<div class="product-subsection product-subsection--new"><h3>{escape(str(beer.get("beer_new_title") or "Новинки"))}</h3><div class="new-grid">{new_cards}</div></div>'
     if is_enabled(beer.get("beer_core_is_visible"), True):
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_core_title") or "Постоянная линейка"))}</h3><div class="seasonal-grid">{core_cards}</div></div>'
     if is_enabled(beer.get("beer_seasonal_is_visible"), True):
@@ -766,10 +766,12 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .partner-card__fallback {{ color:var(--foam); font-weight:800; text-align:center; padding:4px 0; line-height:1.2; transition:transform .18s ease, color .18s ease; }}
     .partner-card:hover .partner-card__fallback {{ transform:scale(1.045); color:var(--golden-malt); }}
     .product-subsection {{ margin-top:28px; }}
+    .product-subsection--new {{ width:min(980px,100%); padding:28px 28px 34px; border-radius:28px; background:var(--card-hop); }}
     .product-subsection h3 {{ margin:0 0 18px; color:var(--foam); font-size:var(--stamm-section-title-font-size,28px); }}
     .new-grid {{ width:min(860px,100%); display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:28px; align-items:end; justify-items:center; margin:0 auto; }}
-    .seasonal-grid {{ width:min(1320px,100%); display:grid; grid-template-columns:repeat(9,minmax(72px,1fr)); gap:16px; justify-items:center; align-items:end; margin:0 auto; }}
+    .seasonal-grid {{ width:min(1320px,100%); display:flex; flex-wrap:wrap; justify-content:center; align-items:end; gap:16px; margin:0 auto; }}
     .beer-can {{ border:0; background:transparent; color:var(--foam); cursor:pointer; display:grid; justify-items:center; gap:10px; font:inherit; font-weight:800; transition:transform .18s ease; }}
+    .seasonal-grid .beer-can {{ flex:0 1 calc((100% - 128px) / 9); max-width:132px; min-width:72px; }}
     .beer-can:hover {{ transform:scale(1.045); }}
     .beer-can img {{ width:100%; object-fit:contain; filter:drop-shadow(0 22px 28px rgba(0,0,0,.28)); }}
     .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:360px; }}
@@ -785,7 +787,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .untappd-link {{ display:inline-grid; place-items:center; margin-top:12px; text-decoration:none; }}
     .untappd-link img {{ width:42px; height:42px; object-fit:contain; transition:transform .18s ease, filter .18s ease; }}
     .untappd-link:hover img {{ transform:scale(1.06); filter:brightness(1.12); }}
-    @media (max-width:1100px) {{ .seasonal-grid {{ grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); }} }}
+    @media (max-width:1100px) {{ .seasonal-grid .beer-can {{ flex-basis:110px; }} }}
     @media (max-width:760px) {{ .new-grid {{ grid-template-columns:1fr; }} .beer-page {{ padding:76px 20px 54px; background-attachment:scroll; }} }}
   </style>
 </head>
