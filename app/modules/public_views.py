@@ -627,7 +627,6 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     ) or "<li><span>Телефон</span><strong>Скоро появится</strong></li>"
     map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
     description_markup = f'<p style="color:{escape(description_color)}">{cms_text(description)}</p>' if description_is_visible and description else ""
-    address_markup = f'<ul class="contact-list"><li><span>Адрес</span><strong class="contact-list__address" style="color:{escape(address_color)}">{cms_text(address)}</strong></li></ul>' if address_is_visible and address else ""
     map_info_address = f'<strong style="color:{escape(address_color)}">{cms_text(address)}</strong>' if address_is_visible and address else ""
     return f"""<!doctype html>
 <html lang="ru">
@@ -646,7 +645,6 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; gap:4px; }}
     .contact-list span {{ color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); }}
-    .contact-list__address {{ white-space:pre-line; }}
     .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:grid; align-self:start; justify-self:end; }}
     .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; }}
     .map-info {{ padding:18px 20px 20px; border-top:1px solid rgba(199,177,102,.18); background:rgba(11,63,64,.34); }}
@@ -663,7 +661,6 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
         {description_markup}
         <ul class="contact-list">{email_cards}</ul>
         <ul class="contact-list">{phone_cards}</ul>
-        {address_markup}
       </div>
       <div class="contacts-card map-card" style="--contacts-map-height:{map_height}; --contacts-map-width:{map_width}">
         <iframe title="Яндекс.Карта: {escape(title)}" src="{map_src}" loading="lazy" allowfullscreen></iframe>
