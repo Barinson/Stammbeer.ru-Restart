@@ -706,6 +706,8 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     if is_enabled(beer.get("beer_seasonal_is_visible"), True):
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_seasonal_title") or "Сезонные сорта"))}</h3><div class="seasonal-grid">{seasonal_cards}</div></div>'
     products_section = f'<section class="beer-section"><h2>{escape(str(beer.get("beer_products_title") or "Наша продукция"))}</h2>{products_inner}</section>' if is_enabled(beer.get("beer_products_is_visible"), True) else ""
+    beer_bg_url = str(site_content.get("home", {}).get("home_content_bg_url") or "")
+    beer_bg_style = f' style="--beer-bg:url(\'{escape(beer_bg_url)}\')"' if beer_bg_url else ""
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -750,7 +752,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("beer", site_content)}
-  <main class="beer-page"{f' style="--beer-bg:url(\'{escape(str(site_content.get("home", {}).get("home_content_bg_url") or ""))}\')"' if site_content.get("home", {}).get("home_content_bg_url") else ""}><div class="beer-shell">{partners_section}{products_section}</div></main>
+  <main class="beer-page"{beer_bg_style}><div class="beer-shell">{partners_section}{products_section}</div></main>
   <div class="beer-modal" id="beerModal"><div class="beer-modal__card"><button class="beer-modal__close" type="button" aria-label="Закрыть">×</button><h3 id="beerModalTitle"></h3><p id="beerModalStyle"></p><p id="beerModalAbv"></p><img class="beer-modal__mockup" id="beerModalImage" src="" alt=""><a class="untappd-link" id="beerModalUntappd" href="#" target="_blank" rel="noopener" aria-label="Untappd"></a></div></div>
   <script>
     (function () {{
