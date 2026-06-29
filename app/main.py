@@ -66,6 +66,7 @@ from app.modules.public_views import (
     account_login_page,
     account_message_page,
     account_register_page,
+    business_guest_page,
     business_storefront_page,
     beer_page,
     contacts_page,
@@ -241,24 +242,29 @@ class StammApp:
                     return
                 if path in BUSINESS_STOREFRONT_ROUTES:
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
-                    if customer is not None:
-                        refresh_customer_discount(app.conn, customer)
-                    self.send_html(business_storefront_page(get_public_site_content(app.conn)))
+                    content = get_public_site_content(app.conn)
+                    if customer is None:
+                        self.send_html(business_guest_page(content))
+                        return
+                    refresh_customer_discount(app.conn, customer)
+                    self.send_html(business_storefront_page(content))
                     return
                 if path == PUBLIC_CATALOG_API_ROUTE:
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
-                    if customer is not None:
-                        customer = refresh_customer_discount(app.conn, customer)
+                    if customer is None:
+                        self.send_json({"ok": False, "error": "Что бы стать нашим партнёром напишите на marketing@stammbeer.ru"}, HTTPStatus.UNAUTHORIZED)
+                        return
+                    customer = refresh_customer_discount(app.conn, customer)
                     content = get_public_site_content(app.conn)
                     minimum_order_minor = business_min_order_amount_minor((content.get("business") or {}).get("business_min_order_amount_minor"))
                     catalog = public_catalog(
                         app.conn,
                         query.get("containerType", [None])[0],
-                        customer["discount_percent"] if customer is not None else 0,
-                        customer["price_type_href"] if customer is not None else None,
-                        customer["price_type_id"] if customer is not None else None,
-                        customer["price_type_name"] if customer is not None else None,
+                        customer["discount_percent"],
+                        customer["price_type_href"],
+                        customer["price_type_id"],
+                        customer["price_type_name"],
                         minimum_order_minor,
                     )
                     self.send_json(catalog)
@@ -395,10 +401,10 @@ class StammApp:
                     catalog = public_catalog(
                         app.conn,
                         None,
-                        customer["discount_percent"] if customer is not None else 0,
-                        customer["price_type_href"] if customer is not None else None,
-                        customer["price_type_id"] if customer is not None else None,
-                        customer["price_type_name"] if customer is not None else None,
+                        customer["discount_percent"],
+                        customer["price_type_href"],
+                        customer["price_type_id"],
+                        customer["price_type_name"],
                         minimum_order_minor,
                     )
                     catalog_by_id = {str(item["productId"]): item for item in catalog["items"]}

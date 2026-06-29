@@ -320,13 +320,13 @@ ACCOUNT_CSS = """
     .account-card { width:min(760px,100%); margin:0 auto; padding:34px; border-radius:28px; background:rgba(13,75,76,.94); box-shadow:0 30px 90px rgba(0,0,0,.24); }
     .account-card h1 { margin:0 0 10px; color:var(--golden-malt); font-size:var(--stamm-page-title-font-size,42px); line-height:.95; letter-spacing:.08em; text-transform:uppercase; }
     .account-card p { color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.5; }
-    .account-form { display:grid; gap:14px; margin-top:24px; }
-    .account-form label { display:grid; gap:6px; color:rgba(246,241,227,.8); font-weight:700; font-size:var(--stamm-label-font-size,13px); }
-    .account-form input { width:100%; border:1px solid rgba(199,177,102,.32); border-radius:16px; padding:13px 14px; background:rgba(11,63,64,.82); color:var(--foam); font:inherit; }
+    .account-form { display:grid; gap:11px; margin-top:20px; }
+    .account-form label { display:grid; gap:5px; color:rgba(246,241,227,.8); font-weight:600; font-size:12px; }
+    .account-form input { width:100%; border:1px solid rgba(199,177,102,.32); border-radius:14px; padding:10px 12px; background:rgba(11,63,64,.82); color:var(--foam); font:inherit; font-size:14px; font-weight:400; }
     .account-form input:focus { outline:2px solid rgba(199,177,102,.44); outline-offset:2px; }
-    .account-actions { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:8px; }
-    .account-button { border:0; border-radius:999px; padding:13px 20px; background:var(--golden-malt); color:var(--ink); font:inherit; font-weight:900; cursor:pointer; text-decoration:none; }
-    .account-button--compact { padding:9px 14px; font-size:14px; }
+    .account-actions { display:flex; gap:9px; align-items:center; flex-wrap:wrap; margin-top:6px; }
+    .account-button { border:0; border-radius:999px; padding:9px 14px; background:var(--golden-malt); color:var(--ink); font:inherit; font-size:14px; line-height:1.15; font-weight:700; cursor:pointer; text-decoration:none; }
+    .account-button--compact { padding:7px 11px; font-size:12.5px; font-weight:700; }
     .account-inline-form { margin:0; }
     .account-link { color:var(--golden-malt); font-weight:800; text-decoration:none; }
     .account-message { margin-top:18px; border-radius:16px; padding:12px 14px; background:rgba(199,177,102,.14); color:var(--foam); }
@@ -941,6 +941,33 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
 <body>
 {public_nav(active, content)}
   <main class="placeholder" style="--menu-offset:{menu_offset_px(site_content, active)};"><section class="placeholder__card"><h1>{title}</h1><p>Раздел будет собираться после ядра B2B-магазина и админки.</p></section></main>
+{age_gate_markup()}
+</body>
+</html>"""
+
+
+def business_guest_page(content: dict[str, Any] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
+    site_content = {**site_content, "actions": [{**item, "is_visible": False} if item.get("key") == "cart" else item for item in site_content.get("actions", [])]}
+    message = "Что бы стать нашим партнёром напишите на marketing@stammbeer.ru"
+    return f"""<!doctype html>
+<html lang="ru">
+<head>
+  {PUBLIC_HEAD}
+  <title>Бизнес · Stamm Brewing</title>
+  <style>
+{BASE_CSS}
+{typography_style(site_content)}
+    .business-guest {{ min-height:calc(100vh - 88px); padding:var(--menu-offset,176px) min(6vw,72px) 72px; display:grid; place-items:start center; background:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .business-guest__card {{ width:min(720px,100%); border-radius:28px; padding:34px; text-align:center; background:rgba(13,75,76,.92); border:1px solid rgba(199,177,102,.2); box-shadow:0 24px 70px rgba(0,0,0,.22); }}
+    .business-guest__card p {{ margin:0; color:var(--golden-malt); font-size:clamp(22px,3vw,34px); line-height:1.2; font-weight:800; letter-spacing:.02em; }}
+  </style>
+</head>
+<body>
+{public_nav("business", site_content)}
+  <main class="business-guest" style="--menu-offset:{menu_offset_px(site_content, 'business')};">
+    <section class="business-guest__card"><p>{escape(message)}</p></section>
+  </main>
 {age_gate_markup()}
 </body>
 </html>"""

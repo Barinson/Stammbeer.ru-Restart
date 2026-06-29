@@ -1041,8 +1041,24 @@ class CoreFoundationTest(unittest.TestCase):
             response = urllib.request.urlopen(base + path, timeout=5)
             self.assertEqual(response.status, 200)
             body = response.read().decode("utf-8")
-            self.assertIn("Корзина", body)
-            self.assertNotIn("<h1>БИЗНЕС</h1>", body)
+            self.assertIn("Что бы стать нашим партнёром напишите на marketing@stammbeer.ru", body)
+            self.assertNotIn("Корзина", body)
+            self.assertNotIn("/api/public/business/catalog", body)
+
+        from app.modules.auth.security import hash_password
+        customer_id = app.conn.execute(
+            """
+            INSERT INTO customer_accounts (email, password_hash, inn, counterparty_id, counterparty_href, counterparty_name, counterparty_meta_json)
+            VALUES ('route-buyer@example.com', ?, '7701234567', 'counterparty-route', 'https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-route', 'ООО Route Buyer', '{}')
+            """,
+            (hash_password("secret123"),),
+        ).lastrowid
+        app.conn.commit()
+        session_id = create_customer_session(app.conn, customer_id)
+        auth_request = urllib.request.Request(base + "/business", headers={"Cookie": f"stamm_customer_session={session_id}"})
+        auth_body = urllib.request.urlopen(auth_request, timeout=5).read().decode("utf-8")
+        self.assertIn("Корзина", auth_body)
+        self.assertIn("/api/public/business/catalog", auth_body)
 
         redirects = {"/business/": "/business", "/business/catalog/": "/business/catalog"}
         for path, expected_location in redirects.items():
@@ -1058,8 +1074,21 @@ class CoreFoundationTest(unittest.TestCase):
         thread.start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
+        from app.modules.auth.security import hash_password
+        customer_id = app.conn.execute(
+            """
+            INSERT INTO customer_accounts (email, password_hash, inn, counterparty_id, counterparty_href, counterparty_name, counterparty_meta_json)
+            VALUES ('catalog-buyer@example.com', ?, '7701234567', 'counterparty-catalog', 'https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-catalog', 'ООО Catalog Buyer', '{}')
+            """,
+            (hash_password("secret123"),),
+        ).lastrowid
+        app.conn.commit()
+        session_id = create_customer_session(app.conn, customer_id)
         url = f"http://127.0.0.1:{server.server_port}/api/public/business/catalog?containerType=keg"
-        payload = urllib.request.urlopen(url, timeout=5).read().decode("utf-8")
+        anonymous = open_without_redirects(url)
+        self.assertEqual(anonymous.code, 401)
+        self.assertIn("Что бы стать нашим партнёром", anonymous.read().decode("utf-8"))
+        payload = urllib.request.urlopen(urllib.request.Request(url, headers={"Cookie": f"stamm_customer_session={session_id}"}), timeout=5).read().decode("utf-8")
         data = json.loads(payload)
         self.assertEqual(data["meta"]["source"], "local_read_model")
         self.assertEqual(len(data["items"]), 1)
@@ -1983,13 +2012,13 @@ class CoreFoundationTest(unittest.TestCase):
         self.addCleanup(server.shutdown)
         base = f"http://127.0.0.1:{server.server_port}"
 
-        guest = json.loads(urllib.request.urlopen(base + "/api/public/business/catalog", timeout=5).read().decode("utf-8"))
+        guest_response = open_without_redirects(base + "/api/public/business/catalog")
+        self.assertEqual(guest_response.code, 401)
         request_a = urllib.request.Request(base + "/api/public/business/catalog", headers={"Cookie": f"stamm_customer_session={session_a}"})
         request_b = urllib.request.Request(base + "/api/public/business/catalog", headers={"Cookie": f"stamm_customer_session={session_b}"})
         response_a = json.loads(urllib.request.urlopen(request_a, timeout=5).read().decode("utf-8"))
         response_b = json.loads(urllib.request.urlopen(request_b, timeout=5).read().decode("utf-8"))
 
-        self.assertEqual(guest["items"][0]["price"]["amountMinor"], 12300)
         self.assertEqual(response_a["items"][0]["price"]["amountMinor"], 9800)
         self.assertEqual(response_b["items"][0]["price"]["amountMinor"], 8700)
         self.assertEqual(response_a["meta"]["customerPriceType"]["name"], "B2B A")
