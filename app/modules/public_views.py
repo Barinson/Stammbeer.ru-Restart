@@ -329,9 +329,18 @@ ACCOUNT_CSS = """
     .account-link { color:var(--golden-malt); font-weight:800; text-decoration:none; }
     .account-message { margin-top:18px; border-radius:16px; padding:12px 14px; background:rgba(199,177,102,.14); color:var(--foam); }
     .account-message.is-error { background:rgba(115,33,33,.42); color:#ffe6df; }
+    .account-section { margin-top:28px; padding-top:22px; border-top:1px solid rgba(199,177,102,.16); }
+    .account-section h2 { margin:0 0 14px; color:var(--golden-malt); font-size:24px; line-height:1.05; letter-spacing:.04em; text-transform:uppercase; }
     .account-details { display:grid; gap:12px; margin:26px 0; }
     .account-detail { display:flex; justify-content:space-between; gap:18px; padding:14px 0; border-bottom:1px solid rgba(199,177,102,.16); color:rgba(246,241,227,.82); }
     .account-detail strong { color:var(--foam); text-align:right; }
+    .account-orders { display:grid; gap:12px; }
+    .account-order { border:1px solid rgba(199,177,102,.18); border-radius:18px; padding:14px; background:rgba(11,63,64,.35); }
+    .account-order__head, .account-order__meta { display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+    .account-order__head strong { color:var(--foam); }
+    .account-order__head span, .account-order__meta { color:rgba(246,241,227,.72); font-size:13px; }
+    .account-order ul { margin:10px 0 0; padding-left:18px; color:rgba(246,241,227,.78); }
+    .account-empty { margin:0; color:rgba(246,241,227,.76); }
     .account-debug { margin:18px 0 24px; border-radius:18px; background:rgba(11,63,64,.42); padding:14px; }
     .account-debug summary { cursor:pointer; color:var(--golden-malt); font-weight:900; }
     .account-debug__rows { display:grid; gap:8px; margin:12px 0; }
@@ -579,7 +588,55 @@ def _discount_debug_html(customer: Any) -> str:
     return f'<details class="account-debug"><summary>Диагностика скидки МойСклад</summary><div class="account-debug__rows">{rows}</div><pre>{raw}</pre></details>'
 
 
-def account_dashboard_page(customer: Any, content: dict[str, Any] | None = None) -> str:
+def account_money(value: object, currency: object = "RUB") -> str:
+    try:
+        amount = int(value or 0) / 100
+    except (TypeError, ValueError):
+        amount = 0
+    suffix = "₽" if str(currency or "RUB").upper() == "RUB" else str(currency or "")
+    return f"{amount:,.0f} {suffix}".replace(",", " ")
+
+
+def account_date(value: object) -> str:
+    raw = str(value or "")
+    try:
+        return raw[:10].split("T", 1)[0]
+    except Exception:
+        return raw or "—"
+
+
+def account_dashboard_page(
+    customer: Any,
+    content: dict[str, Any] | None = None,
+    orders: list[dict[str, Any]] | None = None,
+    password_result: str | None = None,
+    password_error: str | None = None,
+) -> str:
+    orders = orders or []
+    notice = ""
+    if password_error:
+        notice = f'<div class="account-message is-error">{escape(password_error)}</div>'
+    elif password_result:
+        notice = f'<div class="account-message">{escape(password_result)}</div>'
+    if orders:
+        order_cards = "".join(
+            f"""
+            <article class="account-order">
+              <div class="account-order__head">
+                <strong>{escape(str(order.get('number') or 'Заказ'))}</strong>
+                <span>{escape(account_date(order.get('created_at')))}</span>
+              </div>
+              <div class="account-order__meta">
+                <span>Статус: {escape(str(order.get('status') or 'новый'))}</span>
+                <span>Сумма: {escape(account_money(order.get('total_minor'), order.get('currency')))}</span>
+              </div>
+              <ul>{''.join(f"<li>{escape(str(item.get('name') or 'Позиция'))} · {escape(str(item.get('quantity') or 0))} шт.</li>" for item in (order.get('items') or [])[:4])}</ul>
+            </article>
+            """
+            for order in orders
+        )
+    else:
+        order_cards = '<p class="account-empty">Заказов пока нет. Оформите первый заказ в разделе «Бизнес».</p>'
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -596,17 +653,38 @@ def account_dashboard_page(customer: Any, content: dict[str, Any] | None = None)
   <main class="account-shell">
     <section class="account-card">
       <h1>Кабинет</h1>
-      <p>Аккаунт связан с контрагентом МойСклад. На следующих этапах здесь появятся B2B-заказы и документы.</p>
+      <p>Здесь собраны данные B2B-аккаунта, история заказов и управление паролем.</p>
+      {notice}
+      <section class="account-section">
+        <h2>Профиль</h2>
       <div class="account-details">
         <div class="account-detail"><span>E-mail</span><strong>{escape(str(customer['email']))}</strong></div>
         <div class="account-detail"><span>ИНН</span><strong>{escape(str(customer['inn']))}</strong></div>
         <div class="account-detail"><span>Организация</span><strong>{escape(str(customer['counterparty_name']))}</strong></div>
         <div class="account-detail"><span>Персональная скидка</span><strong>{float(customer['discount_percent'] or 0):g}%</strong></div>
-        <div class="account-detail"><span>Персональный тип цен</span><strong>{escape(str(customer['price_type_name'] or 'не задан'))}</strong></div>
-        <div class="account-detail"><span>Обновлена</span><strong>{escape(str(customer['discount_synced_at'] or 'ещё не обновлялась'))}</strong></div>
-        <div class="account-detail"><span>Статус связи</span><strong>Контрагент МойСклад найден и сохранён</strong></div>
       </div>
-      {_discount_debug_html(customer)}
+      </section>
+      <section class="account-section">
+        <h2>История заказов</h2>
+        <div class="account-orders">{order_cards}</div>
+      </section>
+      <section class="account-section">
+        <h2>Смена пароля</h2>
+        <form class="account-form" method="post" action="/account/password">
+          <label>Текущий пароль
+            <input name="current_password" type="password" autocomplete="current-password" required>
+          </label>
+          <label>Новый пароль
+            <input name="new_password" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+          <label>Подтверждение нового пароля
+            <input name="new_password_confirm" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+          <div class="account-actions">
+            <button class="account-button" type="submit">Сменить пароль</button>
+          </div>
+        </form>
+      </section>
       <form method="post" action="/account/logout">
         <button class="account-button" type="submit">Выйти</button>
       </form>

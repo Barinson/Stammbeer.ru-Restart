@@ -28,6 +28,7 @@ from app.modules.catalog.service import admin_catalog_items, business_min_order_
 from app.modules.account.service import (
     DiscountRefreshError,
     authenticate_customer,
+    change_customer_password,
     create_customer_session,
     current_customer,
     customer_cookie_header,
@@ -35,6 +36,7 @@ from app.modules.account.service import (
     destroy_customer_session,
     expired_customer_cookie_header,
     list_customer_accounts,
+    list_customer_orders,
     refresh_customer_discount,
     register_customer,
     set_customer_account_status,
@@ -288,12 +290,21 @@ class StammApp:
                     self.send_html(password_reset_confirm_page(query.get("token", [""])[0], get_public_site_content(app.conn)))
                     return
                 if path == "/account":
+                    query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
                     if customer is None:
                         self.redirect("/account/login")
                         return
                     customer = refresh_customer_discount(app.conn, customer)
-                    self.send_html(account_dashboard_page(customer, get_public_site_content(app.conn)))
+                    self.send_html(
+                        account_dashboard_page(
+                            customer,
+                            get_public_site_content(app.conn),
+                            list_customer_orders(app.conn, customer["id"]),
+                            password_result=query.get("password_result", [None])[0],
+                            password_error=query.get("password_error", [None])[0],
+                        )
+                    )
                     return
                 if path == "/admin/login":
                     self.send_html(login_page())
@@ -631,6 +642,22 @@ class StammApp:
                         )
                         return
                     self.send_html(account_message_page("Пароль обновлён", message, get_public_site_content(app.conn)))
+                    return
+                if path == "/account/password":
+                    customer = current_customer(app.conn, self.headers.get("Cookie"))
+                    if customer is None:
+                        self.redirect("/account/login")
+                        return
+                    form = self.read_form()
+                    ok, message = change_customer_password(
+                        app.conn,
+                        customer["id"],
+                        form.get("current_password", ""),
+                        form.get("new_password", ""),
+                        form.get("new_password_confirm", ""),
+                    )
+                    target = "password_result" if ok else "password_error"
+                    self.redirect(f"/account?{target}=" + urllib.parse.quote(message))
                     return
                 if path == "/account/logout":
                     destroy_customer_session(app.conn, customer_session_from_cookie(self.headers.get("Cookie")))
