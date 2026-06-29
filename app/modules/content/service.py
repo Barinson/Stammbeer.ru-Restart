@@ -80,6 +80,8 @@ BEER_DEFAULTS = {
     "beer_untappd_logo_url": "",
     "beer_popup_backdrop_color": "#0b3f40",
     "beer_popup_backdrop_opacity": "30",
+    "beer_popup_card_color": "#0d4b4c",
+    "beer_popup_card_opacity": "100",
     "beer_products_json": "[]",
 }
 
@@ -280,6 +282,8 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
             "beer_untappd_logo_url": str(data.get("beer_untappd_logo_url") or ""),
             "beer_popup_backdrop_color": str(data.get("beer_popup_backdrop_color") or BEER_DEFAULTS["beer_popup_backdrop_color"]),
             "beer_popup_backdrop_opacity": str(data.get("beer_popup_backdrop_opacity") or BEER_DEFAULTS["beer_popup_backdrop_opacity"]),
+            "beer_popup_card_color": str(data.get("beer_popup_card_color") or BEER_DEFAULTS["beer_popup_card_color"]),
+            "beer_popup_card_opacity": str(data.get("beer_popup_card_opacity") or BEER_DEFAULTS["beer_popup_card_opacity"]),
         }
         partners = []
         partner_indices = sorted({int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_partner_name_") and key.rsplit("_", 1)[1].isdigit()} | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_partner_logo_url_") and key.rsplit("_", 1)[1].isdigit()})

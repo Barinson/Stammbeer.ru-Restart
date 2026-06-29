@@ -628,6 +628,8 @@ class CoreFoundationTest(unittest.TestCase):
                 "beer_untappd_logo_url": "/media/untappd-global.svg",
                 "beer_popup_backdrop_color": "#123456",
                 "beer_popup_backdrop_opacity": "45",
+                "beer_popup_card_color": "#654321",
+                "beer_popup_card_opacity": "72",
                 "beer_product_name_0": "Stamm IPA",
                 "beer_product_style_0": "IPA",
                 "beer_product_abv_0": "6.5%",
@@ -673,6 +675,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("beer-modal", html)
         self.assertIn("beer-modal__mockup", html)
         self.assertIn("rgba(18,52,86,0.45)", html)
+        self.assertIn("background:rgba(101,67,33,0.72)", html)
         self.assertIn('const untappdLogoUrl = "/media/untappd-global.svg"', html)
         self.assertNotIn("untappdLogoUrl", html.split("data-product=", 1)[1].split(" aria-label", 1)[0])
         self.assertIn("style.textContent = data.style || ''", html)
@@ -753,6 +756,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("beer_untappd_logo_file", admin_content_html)
         self.assertIn("beer_popup_backdrop_color", admin_content_html)
         self.assertIn("beer_popup_backdrop_opacity", admin_content_html)
+        self.assertIn("beer_popup_card_color", admin_content_html)
+        self.assertIn("beer_popup_card_opacity", admin_content_html)
         self.assertNotIn("beer_product_untappd_logo_file_0", admin_content_html)
         self.assertIn("stamm_admin_content_scroll", admin_content_html)
         self.assertIn("contacts_map_height_px", admin_content_html)
@@ -814,6 +819,7 @@ class CoreFoundationTest(unittest.TestCase):
             field("beer_untappd_logo_url", ""),
             file_field("beer_untappd_logo_file", "untappd.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'></svg>"),
             field("beer_popup_backdrop_color", "#224466"), field("beer_popup_backdrop_opacity", "35"),
+            field("beer_popup_card_color", "#335577"), field("beer_popup_card_opacity", "80"),
             field("menu_beer_label", "Пиво"), field("menu_beer_sort_order", "10"), field("menu_beer_visible", "on"),
             field("menu_visit_label", "Посетить пивоварню"), field("menu_visit_sort_order", "20"), field("menu_visit_visible", "on"),
             field("menu_history_label", "История"), field("menu_history_sort_order", "30"), field("menu_history_visible", "on"),
@@ -858,6 +864,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertTrue(content["beer"]["beer_untappd_logo_url"].startswith("/media/beer-untappd-"))
         self.assertEqual(content["beer"]["beer_popup_backdrop_color"], "#224466")
         self.assertEqual(content["beer"]["beer_popup_backdrop_opacity"], "35")
+        self.assertEqual(content["beer"]["beer_popup_card_color"], "#335577")
+        self.assertEqual(content["beer"]["beer_popup_card_opacity"], "80")
         self.assertIn("--menu-offset:210px", home_page(content))
         self.assertIn("--menu-offset:220px", contacts_page(content))
         self.assertIn("--menu-offset:240px", business_storefront_page(content))
