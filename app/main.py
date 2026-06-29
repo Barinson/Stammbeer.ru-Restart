@@ -65,6 +65,7 @@ from app.modules.public_views import (
     account_message_page,
     account_register_page,
     business_storefront_page,
+    beer_page,
     contacts_page,
     home_page,
     password_reset_confirm_page,
@@ -86,7 +87,6 @@ from app.modules.auth.service import (
 BUSINESS_STOREFRONT_ROUTES = {"/business", "/business/catalog"}
 BUSINESS_STOREFRONT_REDIRECTS = {"/business/": "/business", "/business/catalog/": "/business/catalog"}
 PUBLIC_PLACEHOLDER_ROUTES = {
-    "/beer": ("Пиво", "beer"),
     "/visit": ("Посетить пивоварню", "visit"),
     "/history": ("История", "history"),
 }
@@ -226,6 +226,9 @@ class StammApp:
                     return
                 if path == "/contacts":
                     self.send_html(contacts_page(get_public_site_content(app.conn)))
+                    return
+                if path == "/beer":
+                    self.send_html(beer_page(get_public_site_content(app.conn)))
                     return
                 if path in PUBLIC_PLACEHOLDER_ROUTES:
                     title, active = PUBLIC_PLACEHOLDER_ROUTES[path]
@@ -791,10 +794,19 @@ class StammApp:
                     news_file = files.get("home_news_image_file")
                     if news_file:
                         form["home_news_image_url"] = self.save_uploaded_media(news_file, "home-news")
+                    beer_untappd_logo_file = files.get("beer_untappd_logo_file")
+                    if beer_untappd_logo_file:
+                        form["beer_untappd_logo_url"] = self.save_uploaded_media(beer_untappd_logo_file, "beer-untappd")
                     for field_name, upload in files.items():
                         if field_name.startswith("action_") and field_name.endswith("_icon_file"):
                             key = field_name.removeprefix("action_").removesuffix("_icon_file")
                             form[f"action_{key}_icon_url"] = self.save_uploaded_media(upload, f"nav-{key}")
+                        if field_name.startswith("beer_partner_logo_file_"):
+                            index = field_name.removeprefix("beer_partner_logo_file_")
+                            form[f"beer_partner_logo_url_{index}"] = self.save_uploaded_media(upload, f"beer-partner-{index}")
+                        if field_name.startswith("beer_product_image_file_"):
+                            index = field_name.removeprefix("beer_product_image_file_")
+                            form[f"beer_product_image_url_{index}"] = self.save_uploaded_media(upload, f"beer-product-{index}")
                     save_public_content(app.conn, form)
                     self.redirect("/admin/content?result=" + urllib.parse.quote("Контент сохранён"))
                     return
