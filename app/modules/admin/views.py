@@ -213,14 +213,25 @@ def admin_catalog_page(user_email: str, items: list[dict[str, object]], result: 
             for item in items
         )
         table = f"""
-          <table style="width:100%; border-collapse:collapse;">
-            <thead><tr><th>Название</th><th>Тара</th><th>Цена продажи / 1 SKU</th><th>Доступно</th><th>Источник</th><th>Публикация</th><th>Sync</th><th></th></tr></thead>
-            <tbody>{rows}</tbody>
-          </table>
-        """
+            <style>
+              .admin-catalog-card {{ padding:16px; }}
+              .admin-catalog-table {{ width:100%; border-collapse:collapse; font-size:12px; line-height:1.28; }}
+              .admin-catalog-table th {{ color:#52615f; font-size:11px; font-weight:700; text-align:left; padding:7px 8px; border-bottom:1px solid rgba(16,88,89,.16); }}
+              .admin-catalog-table td {{ padding:7px 8px; border-bottom:1px solid rgba(16,88,89,.1); vertical-align:middle; }}
+              .admin-catalog-table strong {{ font-size:12px; font-weight:600; color:#172625; }}
+              .admin-catalog-table small {{ font-size:10px; color:#64706f; }}
+              .admin-catalog-table form {{ display:flex; gap:6px; align-items:center; margin:0; }}
+              .admin-catalog-table button {{ padding:7px 9px; border-radius:9px; font-size:11px; font-weight:700; }}
+              .admin-catalog-table input[type=checkbox] {{ margin:0; }}
+            </style>
+            <table class="admin-catalog-table">
+                <thead><tr><th>Название</th><th>Тара</th><th>Цена продажи / 1 SKU</th><th>Доступно</th><th>Источник</th><th>Публикация</th><th>Sync</th><th></th></tr></thead>
+                <tbody>{rows}</tbody>
+              </table>
+            """
     else:
         table = "<div class='card'><p>Локальный каталог пока пуст. Запустите ручную синхронизацию в разделе МойСклад.</p></div>"
-    return page("Каталог", f"{notice}<div class='card'><h3>Локальный каталог админки</h3><p class='muted'>SKU из МойСклад сначала попадают сюда. В публичный магазин попадают только опубликованные позиции.</p>{table}</div>", user_email)
+    return page("Каталог", f"{notice}<div class='card admin-catalog-card'><h3>Локальный каталог админки</h3><p class='muted'>SKU из МойСклад сначала попадают сюда. В публичный магазин попадают только опубликованные позиции.</p>{table}</div>", user_email)
 
 
 def moysklad_reference_select(name: str, label: str, options: list[dict[str, object]], selected_href: str | None) -> str:
@@ -758,6 +769,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
             <div class="card">
               <h3>Пиво / Наша продукция</h3>
               <label>Заголовок блока<input name="beer_products_title" value="{escape(str(beer.get('beer_products_title') or 'Наша продукция'))}"></label>
+              <label>Отступ между блоками «Партнёры» и «Наша продукция», px<input name="beer_section_gap_px" type="number" min="0" max="220" value="{escape(str(beer.get('beer_section_gap_px') or '72'))}"></label>
               <div class="grid">
                 <label>Заголовок новинок<input name="beer_new_title" value="{escape(str(beer.get('beer_new_title') or 'Новинки'))}"></label>
                 <label>Заголовок постоянной линейки<input name="beer_core_title" value="{escape(str(beer.get('beer_core_title') or 'Постоянная линейка'))}"></label>

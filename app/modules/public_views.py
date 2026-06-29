@@ -173,6 +173,14 @@ def css_gap_px(value: object, fallback: int = 0) -> str:
     return f"{number}px"
 
 
+def css_section_gap_px(value: object, fallback: int = 72) -> str:
+    try:
+        number = max(0, min(220, int(str(value))))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
+
+
 def menu_offset_px(content: dict[str, Any] | None, section: str, fallback: int = 176) -> str:
     site_content = public_content_or_defaults(content)
     layout = site_content.get("layout") or {}
@@ -735,7 +743,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
         partners_section = f'<section class="beer-section"><h1>{escape(str(beer.get("beer_partners_title") or "Где найти Stamm Brewing"))}</h1><p>{cms_text(beer.get("beer_partners_description") or "")}</p><div class="partners-grid">{"".join(partner_cards)}</div></section>'
     products_inner = ""
     if is_enabled(beer.get("beer_new_is_visible"), True):
-        products_inner += f'<div class="product-subsection product-subsection--new"><h3>{escape(str(beer.get("beer_new_title") or "Новинки"))}</h3><div class="new-grid">{new_cards}</div></div>'
+        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_new_title") or "Новинки"))}</h3><div class="new-grid">{new_cards}</div></div>'
     if is_enabled(beer.get("beer_core_is_visible"), True):
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_core_title") or "Постоянная линейка"))}</h3><div class="seasonal-grid">{core_cards}</div></div>'
     if is_enabled(beer.get("beer_seasonal_is_visible"), True):
@@ -743,6 +751,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     products_section = f'<section class="beer-section"><h2>{escape(str(beer.get("beer_products_title") or "Наша продукция"))}</h2>{products_inner}</section>' if is_enabled(beer.get("beer_products_is_visible"), True) else ""
     beer_bg_url = str(site_content.get("home", {}).get("home_content_bg_url") or "")
     beer_style_values = [f"--menu-offset:{menu_offset_px(site_content, 'beer')}"]
+    beer_section_gap = css_section_gap_px(beer.get("beer_section_gap_px"), 72)
     if beer_bg_url:
         beer_style_values.append(f"--beer-bg:url('{escape(beer_bg_url)}')")
     beer_page_style = f' style="{";".join(beer_style_values)}"'
@@ -755,7 +764,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
 {BASE_CSS}
 {typography_style(site_content)}
     .beer-page {{ min-height:calc(100vh - 88px); padding:120px min(6vw,72px) 72px; background-image:linear-gradient(180deg, rgba(16,88,89,.78), rgba(11,63,64,.86)), var(--beer-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
-    .beer-shell {{ width:100%; max-width:1440px; margin:0 auto; display:grid; gap:72px; justify-items:center; text-align:center; }}
+    .beer-shell {{ width:100%; max-width:1440px; margin:0 auto; display:grid; gap:{beer_section_gap}; justify-items:center; text-align:center; }}
     .beer-section {{ width:100%; display:grid; justify-items:center; }}
     .beer-section h1, .beer-section h2 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
     .beer-section p {{ margin:0 auto 24px; max-width:720px; color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.55; white-space:pre-line; }}
@@ -766,7 +775,6 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .partner-card__fallback {{ color:var(--foam); font-weight:800; text-align:center; padding:4px 0; line-height:1.2; transition:transform .18s ease, color .18s ease; }}
     .partner-card:hover .partner-card__fallback {{ transform:scale(1.045); color:var(--golden-malt); }}
     .product-subsection {{ margin-top:28px; }}
-    .product-subsection--new {{ width:min(980px,100%); padding:28px 28px 34px; border-radius:28px; background:var(--card-hop); }}
     .product-subsection h3 {{ margin:0 0 18px; color:var(--foam); font-size:var(--stamm-section-title-font-size,28px); }}
     .new-grid {{ width:min(860px,100%); display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:28px; align-items:end; justify-items:center; margin:0 auto; }}
     .seasonal-grid {{ width:min(1320px,100%); display:flex; flex-wrap:wrap; justify-content:center; align-items:end; gap:16px; margin:0 auto; }}
