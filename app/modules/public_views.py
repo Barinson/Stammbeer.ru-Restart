@@ -326,6 +326,8 @@ ACCOUNT_CSS = """
     .account-form input:focus { outline:2px solid rgba(199,177,102,.44); outline-offset:2px; }
     .account-actions { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:8px; }
     .account-button { border:0; border-radius:999px; padding:13px 20px; background:var(--golden-malt); color:var(--ink); font:inherit; font-weight:900; cursor:pointer; text-decoration:none; }
+    .account-button--compact { padding:9px 14px; font-size:14px; }
+    .account-inline-form { margin:0; }
     .account-link { color:var(--golden-malt); font-weight:800; text-decoration:none; }
     .account-message { margin-top:18px; border-radius:16px; padding:12px 14px; background:rgba(199,177,102,.14); color:var(--foam); }
     .account-message.is-error { background:rgba(115,33,33,.42); color:#ffe6df; }
@@ -623,20 +625,21 @@ def account_dashboard_page(
             f"""
             <article class="account-order">
               <div class="account-order__head">
-                <strong>{escape(str(order.get('number') or 'Заказ'))}</strong>
+                <strong>Заказ {index}</strong>
                 <span>{escape(account_date(order.get('created_at')))}</span>
               </div>
               <div class="account-order__meta">
-                <span>Статус: {escape(str(order.get('status') or 'новый'))}</span>
                 <span>Сумма: {escape(account_money(order.get('total_minor'), order.get('currency')))}</span>
               </div>
               <ul>{''.join(f"<li>{escape(str(item.get('name') or 'Позиция'))} · {escape(str(item.get('quantity') or 0))} шт.</li>" for item in (order.get('items') or [])[:4])}</ul>
             </article>
             """
-            for order in orders
+            for index, order in enumerate(orders, start=1)
         )
     else:
         order_cards = '<p class="account-empty">Заказов пока нет. Оформите первый заказ в разделе «Бизнес».</p>'
+    discount = float(customer["discount_percent"] or 0)
+    discount_markup = f'<div class="account-detail"><span>Персональная скидка</span><strong>{discount:g}%</strong></div>' if discount > 0 else ""
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -661,7 +664,7 @@ def account_dashboard_page(
         <div class="account-detail"><span>E-mail</span><strong>{escape(str(customer['email']))}</strong></div>
         <div class="account-detail"><span>ИНН</span><strong>{escape(str(customer['inn']))}</strong></div>
         <div class="account-detail"><span>Организация</span><strong>{escape(str(customer['counterparty_name']))}</strong></div>
-        <div class="account-detail"><span>Персональная скидка</span><strong>{float(customer['discount_percent'] or 0):g}%</strong></div>
+        {discount_markup}
       </div>
       </section>
       <section class="account-section">
@@ -681,12 +684,16 @@ def account_dashboard_page(
             <input name="new_password_confirm" type="password" autocomplete="new-password" minlength="8" required>
           </label>
           <div class="account-actions">
-            <button class="account-button" type="submit">Сменить пароль</button>
+            <button class="account-button account-button--compact" type="submit">Сменить пароль</button>
+            <button class="account-button account-button--compact" type="submit" form="forgotPasswordForm">Забыл пароль</button>
           </div>
+        </form>
+        <form id="forgotPasswordForm" class="account-inline-form" method="post" action="/account/password-reset">
+          <input type="hidden" name="email" value="{escape(str(customer['email']))}">
         </form>
       </section>
       <form method="post" action="/account/logout">
-        <button class="account-button" type="submit">Выйти</button>
+        <button class="account-button account-button--compact" type="submit">Выйти</button>
       </form>
     </section>
   </main>
