@@ -27,7 +27,7 @@ BASE_CSS = """
     .nav-actions { display:flex; align-items:center; gap:9px; }
     .nav-icon { width:32px; height:32px; border:0; border-radius:999px; display:grid; place-items:center; background:var(--golden-malt); color:var(--ink); text-decoration:none; font-size:11px; font-weight:900; line-height:1; overflow:hidden; padding:0; }
     .nav-icon img { width:100%; height:100%; padding:0; object-fit:contain; display:block; border-radius:inherit; }
-    .top-nav + main { padding-top:88px; }
+    .top-nav + main { padding-top:176px; }
     body.age-gate-pending { overflow:hidden; }
     .age-gate { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at 50% 25%, rgba(199,177,102,.16), transparent 30%), rgba(11,63,64,.96); backdrop-filter:blur(14px); }
     .age-gate.is-hidden { display:none; }
@@ -232,7 +232,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    body.home-body .top-nav + main {{ padding-top:0; }}
+    body.home-body .top-nav + main {{ padding-top:176px; }}
     .home-hero {{ min-height:100vh; display:grid; place-items:center; text-align:center; padding:104px min(6vw,72px) 72px; background:radial-gradient(circle at 50% 16%, rgba(199,177,102,.18), transparent 28%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
     .home-hero__inner {{ display:grid; justify-items:center; gap:0; }}
     .home-logo {{ max-width:154px; max-height:154px; object-fit:contain; margin-bottom:28px; }}

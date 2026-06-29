@@ -40,9 +40,11 @@ def page(title: str, body: str, user_email: str | None = None) -> str:
     .topbar {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }}
     .card {{ background:white; border:1px solid rgba(16,88,89,.14); border-radius:18px; padding:18px; box-shadow:0 10px 28px rgba(16,88,89,.07); margin-bottom:14px; }}
     .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:18px; }}
-    label {{ display:block; font-weight:700; margin:9px 0 4px; }}
-    input, select, textarea {{ width:100%; padding:9px 11px; border:1px solid rgba(16,88,89,.25); border-radius:10px; font:inherit; }}
+    label {{ display:block; font-size:12px; font-weight:600; margin:8px 0 4px; color:#52615f; }}
+    input, select, textarea {{ width:100%; padding:7px 9px; border:1px solid rgba(16,88,89,.25); border-radius:9px; font:inherit; font-size:12px; font-weight:400; line-height:1.3; }}
     input[type=checkbox] {{ width:auto; }}
+    input[type=file] {{ color:transparent; font-size:0; padding:0; border:0; background:transparent; }}
+    input[type=file]::file-selector-button {{ margin:0; border:1px solid rgba(16,88,89,.24); border-radius:8px; background:#f6f1e3; color:#172625; padding:6px 9px; font-size:11px; font-weight:700; cursor:pointer; }}
     button, .button {{ border:0; background:var(--noble-hop); color:white; padding:12px 16px; border-radius:12px; font-weight:800; cursor:pointer; text-decoration:none; display:inline-block; }}
     button.secondary {{ background:var(--golden-malt); color:#172625; }}
     .muted {{ color:#64706f; }}
