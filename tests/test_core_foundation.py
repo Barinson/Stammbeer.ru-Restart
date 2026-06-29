@@ -608,6 +608,7 @@ class CoreFoundationTest(unittest.TestCase):
             {
                 "beer_partners_title": "Где найти Stamm Brewing",
                 "beer_partners_description": "Партнёры\nи бары",
+                "home_content_bg_url": "/media/taproom-bg.jpg",
                 "beer_partners_is_visible": "1",
                 "beer_partner_name_0": "Bottle Shop",
                 "beer_partner_logo_url_0": "/media/partner.svg",
@@ -656,6 +657,9 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('target="_blank"', html)
         self.assertIn("--logo-size:154px", html)
         self.assertIn("width:max-content", html)
+        self.assertIn("display:flex; flex-wrap:wrap", html)
+        self.assertIn("--beer-bg:url", html)
+        self.assertIn("linear-gradient(180deg, rgba(16,88,89,.78)", html)
         self.assertIn(".partner-card:hover img", html)
         self.assertNotIn("min-height:132px", html)
         self.assertIn("beer-can--featured", html)
