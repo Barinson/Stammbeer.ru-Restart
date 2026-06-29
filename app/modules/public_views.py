@@ -715,11 +715,12 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .beer-shell {{ max-width:1180px; margin:0 auto; display:grid; gap:72px; }}
     .beer-section h1, .beer-section h2 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
     .beer-section p {{ margin:0 0 24px; max-width:720px; color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.55; white-space:pre-line; }}
-    .partners-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:18px; }}
-    .partner-card {{ min-height:132px; display:grid; place-items:center; border:1px solid rgba(199,177,102,.18); border-radius:22px; background:rgba(13,75,76,.7); transition:transform .18s ease, border-color .18s ease; text-decoration:none; }}
-    .partner-card:hover {{ transform:scale(1.035); border-color:rgba(199,177,102,.48); }}
-    .partner-card img {{ max-width:var(--logo-size); max-height:86px; object-fit:contain; display:block; }}
-    .partner-card__fallback {{ color:var(--foam); font-weight:800; text-align:center; padding:12px; }}
+    .partners-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:28px 22px; align-items:center; }}
+    .partner-card {{ display:inline-grid; place-items:center; justify-self:center; width:max-content; max-width:100%; text-decoration:none; line-height:0; }}
+    .partner-card img {{ max-width:var(--logo-size); max-height:86px; object-fit:contain; display:block; transition:transform .18s ease, filter .18s ease; }}
+    .partner-card:hover img {{ transform:scale(1.045); filter:brightness(1.12) drop-shadow(0 8px 18px rgba(199,177,102,.18)); }}
+    .partner-card__fallback {{ color:var(--foam); font-weight:800; text-align:center; padding:4px 0; line-height:1.2; transition:transform .18s ease, color .18s ease; }}
+    .partner-card:hover .partner-card__fallback {{ transform:scale(1.045); color:var(--golden-malt); }}
     .product-subsection {{ margin-top:28px; }}
     .product-subsection h3 {{ margin:0 0 18px; color:var(--foam); font-size:var(--stamm-section-title-font-size,28px); }}
     .new-grid {{ display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:28px; align-items:end; }}
