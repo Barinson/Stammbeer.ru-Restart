@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from html import escape
+from urllib.parse import quote
 from typing import Any
 
 from app.modules.content.service import ACTION_DEFAULTS, BUSINESS_DEFAULTS, CONTACT_DEFAULTS, HOME_DEFAULTS, LAYOUT_DEFAULTS, MENU_DEFAULTS, TYPOGRAPHY_DEFAULTS
@@ -746,7 +747,8 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
         f"<li><span>{escape(str(item.get('label') or 'Телефон'))}</span><a href='tel:{escape(str(item.get('value') or ''))}'>{escape(str(item.get('value') or ''))}</a></li>"
         for item in visible_phones
     ) or "<li><span>Телефон</span><strong>Скоро появится</strong></li>"
-    map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
+    map_query = quote(title or "Stamm Brewing")
+    map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&mode=search&text={map_query}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
     description_markup = f'<p style="color:{escape(description_color)}">{cms_text(description)}</p>' if description_is_visible and description else ""
     map_info_address = f'<strong style="color:{escape(address_color)}">{cms_text(address)}</strong>' if address_is_visible and address else ""
     return f"""<!doctype html>
@@ -757,21 +759,21 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .contacts-page {{ min-height:calc(100vh - 88px); padding:104px min(6vw,72px) 64px; display:grid; align-items:center; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
-    .contacts-hero {{ max-width:1000px; margin:0 auto; display:grid; grid-template-columns:minmax(0,430px) minmax(280px,.72fr); gap:24px; align-items:start; }}
+    .contacts-page {{ min-height:calc(100vh - 88px); padding:104px min(6vw,72px) 64px; display:grid; align-items:start; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .contacts-hero {{ width:min(100%,1040px); margin:0 auto; display:grid; grid-template-columns:1fr; gap:28px; align-items:start; justify-items:center; }}
     .contacts-card {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:24px; padding:28px; box-shadow:0 18px 44px rgba(0,0,0,.18); }}
-    .contacts-info-card {{ border:0; background:transparent; box-shadow:none; padding:10px 0; }}
+    .contacts-info-card {{ width:min(760px,100%); border:0; background:transparent; box-shadow:none; padding:10px 0; justify-self:start; }}
     .contacts-card p {{ color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-lead-font-size,18px); white-space:pre-line; }}
     .contact-list {{ list-style:none; margin:22px 0 0; padding:0; display:grid; gap:12px; }}
     .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; gap:4px; }}
     .contact-list span {{ color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); }}
-    .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:grid; align-self:start; justify-self:end; }}
+    .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:grid; align-self:start; justify-self:center; }}
     .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; }}
     .map-info {{ padding:18px 20px 20px; border-top:1px solid rgba(199,177,102,.18); background:rgba(11,63,64,.34); }}
     .map-info span {{ display:block; margin-bottom:6px; color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .map-info strong {{ display:block; color:var(--foam); font-size:var(--stamm-contact-text-font-size,18px); line-height:1.35; white-space:pre-line; }}
-    @media (max-width:880px) {{ .contacts-hero {{ grid-template-columns:1fr; }} .map-card {{ width:100%; justify-self:stretch; }} }}
+    @media (max-width:880px) {{ .contacts-info-card {{ justify-self:stretch; }} .map-card {{ width:100%; justify-self:stretch; }} }}
   </style>
 </head>
 <body>
