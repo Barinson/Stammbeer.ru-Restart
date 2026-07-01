@@ -382,6 +382,13 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     contacts = content.get("contacts") or {}
     typography = content.get("typography") or {}
     layout = content.get("layout") or {}
+    site = content.get("site") or {}
+    age_gate_title = str(site.get("age_gate_title") or "Вам есть 18+?")
+    age_gate_text = str(site.get("age_gate_text") or "Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет")
+    age_gate_confirm_label = str(site.get("age_gate_confirm_label") or "Да, мне есть 18")
+    age_gate_deny_label = str(site.get("age_gate_deny_label") or "Нет, мне нет 18")
+    maintenance_enabled = str(site.get("maintenance_enabled") or "0") == "1"
+    maintenance_text = str(site.get("maintenance_text") or "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru")
     contact_emails = list(contacts.get("emails") or [])
     contact_phones = list(contacts.get("phones") or [])
     while len(contact_emails) < 6:
@@ -570,7 +577,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-tabs label {{ margin:0; padding:10px 14px; border-radius:999px; background:white; border:1px solid rgba(16,88,89,.16); cursor:pointer; }}
           .cms-tab-input {{ position:absolute; opacity:0; pointer-events:none; }}
           .cms-tab-panel {{ display:none; }}
-          #cms-tab-home:checked ~ form .cms-panel-home, #cms-tab-contacts:checked ~ form .cms-panel-contacts, #cms-tab-beer:checked ~ form .cms-panel-beer, #cms-tab-business:checked ~ form .cms-panel-business, #cms-tab-typography:checked ~ form .cms-panel-typography, #cms-tab-nav:checked ~ form .cms-panel-nav {{ display:block; }}
+          #cms-tab-home:checked ~ form .cms-panel-home, #cms-tab-site:checked ~ form .cms-panel-site, #cms-tab-contacts:checked ~ form .cms-panel-contacts, #cms-tab-beer:checked ~ form .cms-panel-beer, #cms-tab-business:checked ~ form .cms-panel-business, #cms-tab-typography:checked ~ form .cms-panel-typography, #cms-tab-nav:checked ~ form .cms-panel-nav {{ display:block; }}
           .cms-preview-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; align-items:stretch; }}
           .contact-row {{ display:grid; grid-template-columns:minmax(140px,1fr) minmax(220px,1.5fr) 110px 140px; gap:10px; align-items:end; padding:10px 0; border-top:1px solid rgba(16,88,89,.12); }}
           .contact-row__visible {{ display:flex; gap:8px; align-items:center; padding-bottom:12px; }}
@@ -614,6 +621,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         </style>
         {notice}
         <input class="cms-tab-input" id="cms-tab-home" name="cms_tab" type="radio" checked>
+        <input class="cms-tab-input" id="cms-tab-site" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-contacts" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-beer" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-business" name="cms_tab" type="radio">
@@ -621,6 +629,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         <input class="cms-tab-input" id="cms-tab-nav" name="cms_tab" type="radio">
         <div class="cms-tabs" role="tablist">
           <label for="cms-tab-home">Главная</label>
+          <label for="cms-tab-site">Сайт / Доступ</label>
           <label for="cms-tab-contacts">Контакты</label>
           <label for="cms-tab-beer">Пиво</label>
           <label for="cms-tab-business">Бизнес / Store settings</label>
@@ -719,6 +728,27 @@ def content_management_page(user_email: str, content: dict[str, object], result:
             </div>
           </div>
           <p><button type="submit">Сохранить главную</button></p>
+          </section>
+
+          <section class="cms-tab-panel cms-panel-site">
+            <div class="card">
+              <h3>Окно 18+</h3>
+              <p class="muted">Текст этого окна хранится в CMS. Окно показывается обычным посетителям при каждом посещении, но скрывается для авторизованных B2B-пользователей.</p>
+              <label>Заголовок окна 18+<input name="age_gate_title" value="{escape(age_gate_title)}"></label>
+              <label>Текст окна 18+<textarea name="age_gate_text" rows="3">{escape(age_gate_text)}</textarea></label>
+              <div class="grid">
+                <label>Кнопка подтверждения<input name="age_gate_confirm_label" value="{escape(age_gate_confirm_label)}"></label>
+                <label>Кнопка отказа<input name="age_gate_deny_label" value="{escape(age_gate_deny_label)}"></label>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Техническая шторка</h3>
+              <p class="muted">Закрывает публичные страницы для посетителей. Админка остаётся доступной, чтобы режим можно было отключить.</p>
+              <input type="hidden" name="maintenance_enabled" value="0">
+              <label><input name="maintenance_enabled" type="checkbox" value="1" {'checked' if maintenance_enabled else ''}> Закрыть сайт</label>
+              <label>Текст шторки<textarea name="maintenance_text" rows="3">{escape(maintenance_text)}</textarea></label>
+            </div>
+            <p><button type="submit">Сохранить настройки сайта</button></p>
           </section>
           <section class="cms-tab-panel cms-panel-contacts">
             <div class="card">

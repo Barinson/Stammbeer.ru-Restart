@@ -29,7 +29,7 @@ from app.main import StammApp, admin_stats
 from app.modules.catalog.service import admin_catalog_items, public_catalog, publish_product
 from app.modules.content.service import get_public_site_content, save_public_content
 from app.modules.admin.views import admin_catalog_page
-from app.modules.public_views import account_dashboard_page, beer_page, business_storefront_page, contacts_page, home_page
+from app.modules.public_views import account_dashboard_page, beer_page, business_storefront_page, contacts_page, home_page, maintenance_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
 
 
@@ -525,6 +525,12 @@ class CoreFoundationTest(unittest.TestCase):
                 "home_news_link_url": "/business/catalog",
                 "home_news_link_label": "Order now",
                 "business_min_order_amount_minor": "2500000",
+                "age_gate_title": "Проверка возраста",
+                "age_gate_text": "Вам уже исполнилось 18 лет?",
+                "age_gate_confirm_label": "Да, можно",
+                "age_gate_deny_label": "Нет",
+                "maintenance_enabled": "1",
+                "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
                 "contact_email_label_0": "Основной",
                 "contact_email_value_0": "hello@stamm.test",
                 "contact_email_sort_order_0": "20",
@@ -593,6 +599,8 @@ class CoreFoundationTest(unittest.TestCase):
         )
         content = get_public_site_content(app.conn)
         self.assertEqual(content["business"]["business_min_order_amount_minor"], "2500000")
+        self.assertEqual(content["site"]["age_gate_title"], "Проверка возраста")
+        self.assertEqual(content["site"]["maintenance_enabled"], "1")
         self.assertEqual(content["contacts"]["emails"][0]["value"], "hidden@stamm.test")
         self.assertFalse(content["contacts"]["emails"][0]["is_visible"])
         self.assertEqual(content["contacts"]["emails"][1]["value"], "hello@stamm.test")
@@ -663,13 +671,18 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Beer list", html)
         self.assertIn("https://untappd.com/stamm", html)
         self.assertIn("/media/untappd.svg", html)
-        self.assertIn("Вам есть 18+?", html)
-        self.assertIn("Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет", html)
-        self.assertIn("Да, мне есть 18", html)
-        self.assertIn("Нет, мне нет 18", html)
+        self.assertIn("Проверка возраста", html)
+        self.assertIn("Вам уже исполнилось 18 лет?", html)
+        self.assertIn("Да, можно", html)
+        self.assertIn("Нет", html)
         self.assertIn("window.history.back()", html)
         self.assertIn("about:blank", html)
-        self.assertIn("stamm_age_confirmed", html)
+        self.assertNotIn("stamm_age_confirmed", html)
+        html_for_customer = home_page({**content, "viewer": {"is_customer": True}})
+        self.assertNotIn("ageGate", html_for_customer)
+        maintenance_html = maintenance_page(content)
+        self.assertIn("Технические работы", maintenance_html)
+        self.assertIn("mailto:marketing@stammbeer.ru", maintenance_html)
 
     def test_beer_page_content_is_cms_managed(self) -> None:
         app = self.make_app()
@@ -1066,7 +1079,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("submitOrder", html)
         self.assertIn("/api/public/business/order", html)
         self.assertIn("Вам есть 18+?", html)
-        self.assertIn("stamm_age_confirmed", html)
+        self.assertNotIn("stamm_age_confirmed", html)
         self.assertIn("Stamm Brewing</a>", html)
         self.assertNotIn('href="/">Главная</a>', html)
         self.assertIn("Untappd", html)
