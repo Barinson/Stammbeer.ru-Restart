@@ -317,7 +317,7 @@ def diagnostic_block(diagnostics: dict[str, object] | None) -> str:
         sections.append(f"<h4>{escape(title)}</h4><pre style='white-space:pre-wrap; overflow:auto; max-height:340px; background:#f7f8f3; padding:14px; border-radius:12px;'>{escape(pretty)}</pre>")
     return f"<div class='card'><h3>Diagnostic mode: последний sync</h3><p class='muted'>Показывает фактическую цепочку: папка товаров → складской отчёт → matching → запись в БД.</p>{''.join(sections)}</div>"
 
-def moysklad_settings_page(user_email: str, settings: dict[str, object], result: str | None = None, error: str | None = None, diagnostics: dict[str, object] | None = None) -> str:
+def moysklad_settings_page(user_email: str, settings: dict[str, object], result: str | None = None, error: str | None = None, auto_history: list[dict[str, object]] | None = None) -> str:
     notice = ""
     if result:
         notice = f"<div class='success'>{escape(result)}</div>"
@@ -326,12 +326,21 @@ def moysklad_settings_page(user_email: str, settings: dict[str, object], result:
     checked_child = "checked" if settings.get("includeChildFolders") else ""
     checked_enabled = "checked" if settings.get("isEnabled") else ""
     token_help = "Токен сохранён" if settings.get("hasToken") else "Токен ещё не сохранён"
+    auto_history = auto_history or []
+    def compact_sync_time(value: object) -> str:
+        return str(value or "—").replace("T", " ").replace("Z", "")[:16]
+    history_rows = "".join(
+        f"<li><strong>{escape(compact_sync_time(item.get('startedAt')))}</strong> — "
+        f"{('успешно' if item.get('status') == 'success' else 'неуспешно' if item.get('status') == 'failed' else escape(str(item.get('status') or '—')))}"
+        f"{': ' + escape(str(item.get('error') or '')) if item.get('status') == 'failed' and item.get('error') else ''}</li>"
+        for item in auto_history[:3]
+    ) or "<li class='muted'>Автосинхронизация ещё не запускалась.</li>"
     return page(
         "МойСклад",
         f"""
         <div class="card">
           <h3>Настройки подключения JSON API 1.2</h3>
-          <p class="muted">Экран сохраняет настройки интеграции. Полный sync worker будет подключён следующим этапом.</p>
+          <p class="muted">Экран сохраняет подключение и управляет плановой синхронизацией каталога.</p>
           {notice}
           <form method="post" action="/admin/moysklad/save">
             <label>API base URL</label>
@@ -346,16 +355,18 @@ def moysklad_settings_page(user_email: str, settings: dict[str, object], result:
             <input name="full_sync_interval_minutes" type="number" min="15" value="{escape(str(settings.get('fullSyncIntervalMinutes') or 360))}">
             <label>Stock sync interval, минут</label>
             <input name="stock_sync_interval_minutes" type="number" min="15" value="{escape(str(settings.get('stockSyncIntervalMinutes') or 120))}">
-            <label><input type="checkbox" name="is_enabled" {checked_enabled}> Включить плановую синхронизацию после подключения worker</label>
+            <label><input type="checkbox" name="is_enabled" {checked_enabled}> Включить плановую синхронизацию</label>
             <p>
               <button type="submit">Сохранить</button>
               <button class="secondary" formaction="/admin/moysklad/test" formmethod="post">Проверить подключение</button>
               <button class="secondary" formaction="/admin/moysklad/sync-products" formmethod="post">Синхронизировать товары сейчас</button>
             </p>
-            <label><input type="checkbox" name="diagnostic_mode"> Diagnostic mode: сохранить подробную отладку первых 10 SKU/stock rows</label>
           </form>
         </div>
-        {diagnostic_block(diagnostics)}
+        <div class="card">
+          <h3>Автосинхронизация / последние 3 запуска</h3>
+          <ul style="margin:0; padding-left:18px; line-height:1.6;">{history_rows}</ul>
+        </div>
         <div class="card">
           <h3>Текущее состояние</h3>
           <p>Последняя успешная синхронизация: <strong>{escape(str(settings.get('lastSuccessAt') or 'ещё не выполнялась'))}</strong></p>
