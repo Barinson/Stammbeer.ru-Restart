@@ -38,11 +38,13 @@ def page(title: str, body: str, user_email: str | None = None) -> str:
     nav a:hover {{ background:rgba(255,255,255,.12); }}
     main {{ padding:32px; }}
     .topbar {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }}
-    .card {{ background:white; border:1px solid rgba(16,88,89,.14); border-radius:20px; padding:24px; box-shadow:0 14px 40px rgba(16,88,89,.08); margin-bottom:18px; }}
+    .card {{ background:white; border:1px solid rgba(16,88,89,.14); border-radius:18px; padding:18px; box-shadow:0 10px 28px rgba(16,88,89,.07); margin-bottom:14px; }}
     .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:18px; }}
-    label {{ display:block; font-weight:700; margin:14px 0 6px; }}
-    input, select, textarea {{ width:100%; padding:12px 14px; border:1px solid rgba(16,88,89,.25); border-radius:12px; font:inherit; }}
+    label {{ display:block; font-size:12px; font-weight:600; margin:8px 0 4px; color:#52615f; }}
+    input, select, textarea {{ width:100%; padding:7px 9px; border:1px solid rgba(16,88,89,.25); border-radius:9px; font:inherit; font-size:12px; font-weight:400; line-height:1.3; }}
     input[type=checkbox] {{ width:auto; }}
+    input[type=file] {{ color:transparent; font-size:0; padding:0; border:0; background:transparent; }}
+    input[type=file]::file-selector-button {{ margin:0; border:1px solid rgba(16,88,89,.24); border-radius:8px; background:#f6f1e3; color:#172625; padding:6px 9px; font-size:11px; font-weight:700; cursor:pointer; }}
     button, .button {{ border:0; background:var(--noble-hop); color:white; padding:12px 16px; border-radius:12px; font-weight:800; cursor:pointer; text-decoration:none; display:inline-block; }}
     button.secondary {{ background:var(--golden-malt); color:#172625; }}
     .muted {{ color:#64706f; }}
@@ -120,35 +122,37 @@ def customer_accounts_page(user_email: str, accounts: list[object], query: str =
         notice = f"<div class='success'>{escape(result)}</div>"
     if error:
         notice = f"<div class='error'>{escape(error)}</div>"
+
     def status_label(status: object) -> str:
         labels = {"active": "активен", "disabled": "деактивирован", "deleted": "удалён"}
         return labels.get(str(status), str(status or "—"))
+
     if accounts:
         rows = "".join(
             f"""
             <tr>
-              <td>#{escape(str(account['id']))}</td>
-              <td><strong>{escape(str(account['email']))}</strong><br><small>{'подтверждён' if account['email_verified_at'] else 'не подтверждён'}</small></td>
+              <td class='users-id'>#{escape(str(account['id']))}</td>
+              <td><strong>{escape(str(account['email']))}</strong><small>{'подтверждён' if account['email_verified_at'] else 'не подтверждён'}</small></td>
               <td>{escape(str(account['inn']))}</td>
-              <td>{escape(str(account['counterparty_name'] or '—'))}<br><small>{escape(str(account['counterparty_id'] or '—'))}</small></td>
-              <td><span class='status'>{escape(status_label(account['status']))}</span></td>
+              <td>{escape(str(account['counterparty_name'] or '—'))}<small>{escape(str(account['counterparty_id'] or '—'))}</small></td>
+              <td><span class='status users-status'>{escape(status_label(account['status']))}</span></td>
               <td>{escape(str(account['price_type_name'] or '—'))}</td>
               <td>{escape(str(account['created_at'] or '—'))}</td>
               <td>
-                <div style='display:flex; gap:8px; flex-wrap:wrap;'>
+                <div class='users-actions'>
                   <form method='post' action='/admin/users/status'>
                     <input type='hidden' name='account_id' value='{escape(str(account['id']))}'>
                     <input type='hidden' name='status' value='{'disabled' if account['status'] == 'active' else 'active'}'>
-                    <button type='submit' {'disabled' if account['status'] == 'deleted' else ''}>{'Деактивировать' if account['status'] == 'active' else 'Активировать'}</button>
+                    <button class='users-button' type='submit' {'disabled' if account['status'] == 'deleted' else ''}>{'Деакт.' if account['status'] == 'active' else 'Актив.'}</button>
                   </form>
                   <form method='post' action='/admin/users/reset-password'>
                     <input type='hidden' name='account_id' value='{escape(str(account['id']))}'>
-                    <button class='secondary' type='submit' {'disabled' if account['status'] != 'active' else ''}>Сброс пароля</button>
+                    <button class='users-button secondary' type='submit' {'disabled' if account['status'] != 'active' else ''}>Сброс</button>
                   </form>
                   <form method='post' action='/admin/users/delete' onsubmit="return confirm('Мягко удалить пользователя и закрыть активные сессии? История заказов сохранится.');">
                     <input type='hidden' name='account_id' value='{escape(str(account['id']))}'>
                     <input type='hidden' name='confirm' value='yes'>
-                    <button type='submit' {'disabled' if account['status'] == 'deleted' else ''}>Удалить</button>
+                    <button class='users-button' type='submit' {'disabled' if account['status'] == 'deleted' else ''}>Удалить</button>
                   </form>
                 </div>
               </td>
@@ -157,26 +161,68 @@ def customer_accounts_page(user_email: str, accounts: list[object], query: str =
             for account in accounts
         )
         table = f"""
-        <table style='width:100%; border-collapse:collapse;'>
-          <thead><tr><th>ID</th><th>E-mail</th><th>ИНН</th><th>Контрагент</th><th>Статус</th><th>Тип цен</th><th>Регистрация</th><th>Действия</th></tr></thead>
-          <tbody>{rows}</tbody>
-        </table>
+        <div class='users-table-wrap'>
+          <table class='users-table'>
+            <thead><tr><th>ID</th><th>E-mail</th><th>ИНН</th><th>Контрагент</th><th>Статус</th><th>Тип цен</th><th>Регистрация</th><th>Действия</th></tr></thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>
         """
     else:
         table = "<p class='muted'>Пользователи не найдены.</p>"
+
     body = f"""
-      {notice}
-      <div class='card'>
-        <h3>Зарегистрированные пользователи</h3>
-        <p class='muted'>Список B2B-аккаунтов сайта. Деактивация и мягкое удаление закрывают активные сессии, но сохраняют связь с контрагентом и историю заказов.</p>
-        <form method='get' action='/admin/users' style='display:flex; gap:12px; align-items:end; margin:18px 0;'>
-          <label style='flex:1; margin:0;'>Поиск по e-mail, ИНН или организации
-            <input name='q' value='{escape(query)}' placeholder='partner@example.com / 770... / ООО'>
-          </label>
-          <button type='submit'>Найти</button>
-          <a class='button secondary' href='/admin/users'>Сбросить</a>
-        </form>
-        {table}
+      <style>
+        .users-admin {{ display:grid; gap:12px; }}
+        .users-admin .card {{ padding:14px; }}
+        .users-admin h3 {{ margin:0 0 10px; font-size:17px; line-height:1.2; }}
+        .users-admin .muted {{ margin:0 0 10px; font-size:12px; line-height:1.35; }}
+        .users-create-grid {{ display:grid; grid-template-columns:1.1fr 1.1fr .9fr auto; gap:10px; align-items:end; }}
+        .users-filter {{ display:grid; grid-template-columns:minmax(220px,1fr) auto auto; gap:10px; align-items:end; margin:10px 0 12px; }}
+        .users-admin label {{ margin:0; font-size:11px; font-weight:600; }}
+        .users-admin input {{ padding:6px 8px; border-radius:8px; font-size:12px; font-weight:400; }}
+        .users-button, .users-admin button, .users-admin .button {{ padding:7px 10px; border-radius:9px; font-size:12px; line-height:1.15; font-weight:700; white-space:nowrap; }}
+        .users-table-wrap {{ overflow:auto; }}
+        .users-table {{ width:100%; border-collapse:collapse; font-size:12px; }}
+        .users-table th, .users-table td {{ padding:8px 7px; border-bottom:1px solid rgba(16,88,89,.12); text-align:left; vertical-align:top; }}
+        .users-table th {{ color:#52615f; font-size:11px; font-weight:700; }}
+        .users-table strong {{ display:block; font-weight:700; }}
+        .users-table small {{ display:block; color:#64706f; margin-top:2px; font-size:11px; line-height:1.25; }}
+        .users-status {{ padding:4px 8px; font-size:11px; }}
+        .users-actions {{ display:flex; gap:5px; flex-wrap:wrap; }}
+        .users-id {{ color:#64706f; white-space:nowrap; }}
+        @media (max-width:900px) {{ .users-create-grid, .users-filter {{ grid-template-columns:1fr; }} }}
+      </style>
+      <div class='users-admin'>
+        {notice}
+        <div class='card'>
+          <h3>Создать B2B-пользователя</h3>
+          <p class='muted'>ИНН проверяется в МойСклад. Если контрагент не найден, аккаунт не будет создан.</p>
+          <form method='post' action='/admin/users/create' class='users-create-grid'>
+            <label>ИНН
+              <input name='inn' inputmode='numeric' required placeholder='7701234567'>
+            </label>
+            <label>E-mail
+              <input name='email' type='email' required placeholder='partner@example.com'>
+            </label>
+            <label>Временный пароль
+              <input name='temporary_password' type='text' minlength='8' required placeholder='не короче 8 символов'>
+            </label>
+            <button class='users-button secondary' type='submit'>Создать</button>
+          </form>
+        </div>
+        <div class='card'>
+          <h3>Зарегистрированные пользователи</h3>
+          <p class='muted'>Деактивация и мягкое удаление закрывают активные сессии, но сохраняют связь с контрагентом и историю заказов.</p>
+          <form method='get' action='/admin/users' class='users-filter'>
+            <label>Поиск по e-mail, ИНН или организации
+              <input name='q' value='{escape(query)}' placeholder='partner@example.com / 770... / ООО'>
+            </label>
+            <button class='users-button' type='submit'>Найти</button>
+            <a class='button secondary users-button' href='/admin/users'>Сбросить</a>
+          </form>
+          {table}
+        </div>
       </div>
     """
     return page("Пользователи", body, user_email)
@@ -211,14 +257,25 @@ def admin_catalog_page(user_email: str, items: list[dict[str, object]], result: 
             for item in items
         )
         table = f"""
-          <table style="width:100%; border-collapse:collapse;">
-            <thead><tr><th>Название</th><th>Тара</th><th>Цена продажи / 1 SKU</th><th>Доступно</th><th>Источник</th><th>Публикация</th><th>Sync</th><th></th></tr></thead>
-            <tbody>{rows}</tbody>
-          </table>
-        """
+            <style>
+              .admin-catalog-card {{ padding:16px; }}
+              .admin-catalog-table {{ width:100%; border-collapse:collapse; font-size:12px; line-height:1.28; }}
+              .admin-catalog-table th {{ color:#52615f; font-size:11px; font-weight:700; text-align:left; padding:7px 8px; border-bottom:1px solid rgba(16,88,89,.16); }}
+              .admin-catalog-table td {{ padding:7px 8px; border-bottom:1px solid rgba(16,88,89,.1); vertical-align:middle; }}
+              .admin-catalog-table strong {{ font-size:12px; font-weight:600; color:#172625; }}
+              .admin-catalog-table small {{ font-size:10px; color:#64706f; }}
+              .admin-catalog-table form {{ display:flex; gap:6px; align-items:center; margin:0; }}
+              .admin-catalog-table button {{ padding:7px 9px; border-radius:9px; font-size:11px; font-weight:700; }}
+              .admin-catalog-table input[type=checkbox] {{ margin:0; }}
+            </style>
+            <table class="admin-catalog-table">
+                <thead><tr><th>Название</th><th>Тара</th><th>Цена продажи / 1 SKU</th><th>Доступно</th><th>Источник</th><th>Публикация</th><th>Sync</th><th></th></tr></thead>
+                <tbody>{rows}</tbody>
+              </table>
+            """
     else:
         table = "<div class='card'><p>Локальный каталог пока пуст. Запустите ручную синхронизацию в разделе МойСклад.</p></div>"
-    return page("Каталог", f"{notice}<div class='card'><h3>Локальный каталог админки</h3><p class='muted'>SKU из МойСклад сначала попадают сюда. В публичный магазин попадают только опубликованные позиции.</p>{table}</div>", user_email)
+    return page("Каталог", f"{notice}<div class='card admin-catalog-card'><h3>Локальный каталог админки</h3><p class='muted'>SKU из МойСклад сначала попадают сюда. В публичный магазин попадают только опубликованные позиции.</p>{table}</div>", user_email)
 
 
 def moysklad_reference_select(name: str, label: str, options: list[dict[str, object]], selected_href: str | None) -> str:
@@ -260,7 +317,7 @@ def diagnostic_block(diagnostics: dict[str, object] | None) -> str:
         sections.append(f"<h4>{escape(title)}</h4><pre style='white-space:pre-wrap; overflow:auto; max-height:340px; background:#f7f8f3; padding:14px; border-radius:12px;'>{escape(pretty)}</pre>")
     return f"<div class='card'><h3>Diagnostic mode: последний sync</h3><p class='muted'>Показывает фактическую цепочку: папка товаров → складской отчёт → matching → запись в БД.</p>{''.join(sections)}</div>"
 
-def moysklad_settings_page(user_email: str, settings: dict[str, object], result: str | None = None, error: str | None = None, diagnostics: dict[str, object] | None = None) -> str:
+def moysklad_settings_page(user_email: str, settings: dict[str, object], result: str | None = None, error: str | None = None, auto_history: list[dict[str, object]] | None = None) -> str:
     notice = ""
     if result:
         notice = f"<div class='success'>{escape(result)}</div>"
@@ -269,12 +326,21 @@ def moysklad_settings_page(user_email: str, settings: dict[str, object], result:
     checked_child = "checked" if settings.get("includeChildFolders") else ""
     checked_enabled = "checked" if settings.get("isEnabled") else ""
     token_help = "Токен сохранён" if settings.get("hasToken") else "Токен ещё не сохранён"
+    auto_history = auto_history or []
+    def compact_sync_time(value: object) -> str:
+        return str(value or "—").replace("T", " ").replace("Z", "")[:16]
+    history_rows = "".join(
+        f"<li><strong>{escape(compact_sync_time(item.get('startedAt')))}</strong> — "
+        f"{('успешно' if item.get('status') == 'success' else 'неуспешно' if item.get('status') == 'failed' else escape(str(item.get('status') or '—')))}"
+        f"{': ' + escape(str(item.get('error') or '')) if item.get('status') == 'failed' and item.get('error') else ''}</li>"
+        for item in auto_history[:3]
+    ) or "<li class='muted'>Автосинхронизация ещё не запускалась.</li>"
     return page(
         "МойСклад",
         f"""
         <div class="card">
           <h3>Настройки подключения JSON API 1.2</h3>
-          <p class="muted">Экран сохраняет настройки интеграции. Полный sync worker будет подключён следующим этапом.</p>
+          <p class="muted">Экран сохраняет подключение и управляет плановой синхронизацией каталога.</p>
           {notice}
           <form method="post" action="/admin/moysklad/save">
             <label>API base URL</label>
@@ -289,16 +355,18 @@ def moysklad_settings_page(user_email: str, settings: dict[str, object], result:
             <input name="full_sync_interval_minutes" type="number" min="15" value="{escape(str(settings.get('fullSyncIntervalMinutes') or 360))}">
             <label>Stock sync interval, минут</label>
             <input name="stock_sync_interval_minutes" type="number" min="15" value="{escape(str(settings.get('stockSyncIntervalMinutes') or 120))}">
-            <label><input type="checkbox" name="is_enabled" {checked_enabled}> Включить плановую синхронизацию после подключения worker</label>
+            <label><input type="checkbox" name="is_enabled" {checked_enabled}> Включить плановую синхронизацию</label>
             <p>
               <button type="submit">Сохранить</button>
               <button class="secondary" formaction="/admin/moysklad/test" formmethod="post">Проверить подключение</button>
               <button class="secondary" formaction="/admin/moysklad/sync-products" formmethod="post">Синхронизировать товары сейчас</button>
             </p>
-            <label><input type="checkbox" name="diagnostic_mode"> Diagnostic mode: сохранить подробную отладку первых 10 SKU/stock rows</label>
           </form>
         </div>
-        {diagnostic_block(diagnostics)}
+        <div class="card">
+          <h3>Автосинхронизация / последние 3 запуска</h3>
+          <ul style="margin:0; padding-left:18px; line-height:1.6;">{history_rows}</ul>
+        </div>
         <div class="card">
           <h3>Текущее состояние</h3>
           <p>Последняя успешная синхронизация: <strong>{escape(str(settings.get('lastSuccessAt') or 'ещё не выполнялась'))}</strong></p>
@@ -324,6 +392,14 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     business = content.get("business") or {}
     contacts = content.get("contacts") or {}
     typography = content.get("typography") or {}
+    layout = content.get("layout") or {}
+    site = content.get("site") or {}
+    age_gate_title = str(site.get("age_gate_title") or "Вам есть 18+?")
+    age_gate_text = str(site.get("age_gate_text") or "Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет")
+    age_gate_confirm_label = str(site.get("age_gate_confirm_label") or "Да, мне есть 18")
+    age_gate_deny_label = str(site.get("age_gate_deny_label") or "Нет, мне нет 18")
+    maintenance_enabled = str(site.get("maintenance_enabled") or "0") == "1"
+    maintenance_text = str(site.get("maintenance_text") or "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru")
     contact_emails = list(contacts.get("emails") or [])
     contact_phones = list(contacts.get("phones") or [])
     while len(contact_emails) < 6:
@@ -404,12 +480,17 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         for index, item in enumerate(contact_phones[:6])
     )
     contacts_address = str(contacts.get("contacts_address") or "")
+    contacts_address_is_visible = str(contacts.get("contacts_address_is_visible") or "1") != "0"
+    contacts_address_color = str(contacts.get("contacts_address_color") or "")
     contacts_description = str(contacts.get("contacts_description") or "")
+    contacts_description_is_visible = str(contacts.get("contacts_description_is_visible") or "1") != "0"
+    contacts_description_color = str(contacts.get("contacts_description_color") or "")
     contacts_map_lat = str(contacts.get("contacts_map_lat") or "")
     contacts_map_lng = str(contacts.get("contacts_map_lng") or "")
     contacts_map_zoom = str(contacts.get("contacts_map_zoom") or "13")
+    contacts_map_height_px = str(contacts.get("contacts_map_height_px") or "240")
+    contacts_map_width_px = str(contacts.get("contacts_map_width_px") or "420")
     contacts_map_title = str(contacts.get("contacts_map_title") or "Stamm Brewing")
-    map_preview_src = f"https://yandex.ru/map-widget/v1/?ll={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}&z={escape(contacts_map_zoom)}&pt={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}%2Cpm2goldm"
     typography_tokens = [
         ("typography_nav_font_size_px", "Пункты меню"),
         ("typography_page_title_font_size_px", "Главный заголовок страницы"),
@@ -428,6 +509,77 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         """
         for key, label in typography_tokens
     )
+    menu_offset_tokens = [
+        ("menu_offset_home_px", "Отступ контента от меню — Главная"),
+        ("menu_offset_beer_px", "Отступ контента от меню — Пиво"),
+        ("menu_offset_visit_px", "Отступ контента от меню — Stammhaus / Посетить пивоварню"),
+        ("menu_offset_history_px", "Отступ контента от меню — История"),
+        ("menu_offset_business_px", "Отступ контента от меню — Бизнес"),
+        ("menu_offset_contacts_px", "Отступ контента от меню — Контакты"),
+    ]
+    menu_offset_rows = "".join(
+        f"""
+        <label>{escape(label)}<input name='{escape(key)}' type='number' min='0' max='420' value='{escape(str(layout.get(key) or '176'))}'></label>
+        """
+        for key, label in menu_offset_tokens
+    )
+
+    beer = content.get("beer") or {}
+    beer_untappd_logo_url = str(beer.get("beer_untappd_logo_url") or "")
+    beer_popup_backdrop_color = str(beer.get("beer_popup_backdrop_color") or "#0b3f40")
+    beer_popup_backdrop_opacity = str(beer.get("beer_popup_backdrop_opacity") or "30")
+    beer_popup_card_color = str(beer.get("beer_popup_card_color") or "#0d4b4c")
+    beer_popup_card_opacity = str(beer.get("beer_popup_card_opacity") or "100")
+    beer_partners = list(beer.get("partners") or [])
+    if not beer_partners:
+        beer_partners.append({"name": "", "logo_url": "", "url": "", "size": "medium", "sort_order": 10, "is_visible": True})
+    beer_products = list(beer.get("products") or [])
+    if not beer_products:
+        beer_products.append({"name": "", "style": "", "abv": "", "image_url": "", "untappd_url": "", "category": "seasonal", "sort_order": 10, "is_visible": True})
+    beer_partner_rows = "".join(
+        f"""
+        <div class='beer-admin-row'>
+          <label>Название<input name='beer_partner_name_{index}' value='{escape(str(item.get('name') or ''))}'></label>
+          <label>Ссылка<input name='beer_partner_url_{index}' value='{escape(str(item.get('url') or ''))}'></label>
+          <label>Размер<select name='beer_partner_size_{index}'><option value='small' {'selected' if item.get('size') == 'small' else ''}>small</option><option value='medium' {'selected' if item.get('size') in (None, '', 'medium') else ''}>medium</option><option value='large' {'selected' if item.get('size') == 'large' else ''}>large</option></select></label>
+          <label>Порядок<input name='beer_partner_sort_order_{index}' type='number' value='{escape(str(item.get('sort_order') or ((index + 1) * 10)))}'></label>
+          <label><input type='hidden' name='beer_partner_visible_{index}' value='0'><input name='beer_partner_visible_{index}' type='checkbox' value='1' {'checked' if item.get('is_visible', True) else ''}> Показывать</label>
+          <label>Логотип{f"<img class='beer-admin-preview' src='{escape(str(item.get('logo_url') or ''))}' alt=''>" if item.get('logo_url') else ""}<input type='hidden' name='beer_partner_logo_url_{index}' value='{escape(str(item.get('logo_url') or ''))}'><input name='beer_partner_logo_file_{index}' type='file' accept='image/*'></label>
+        </div>
+        """
+        for index, item in enumerate(beer_partners)
+    )
+    def beer_product_row(index: int, item: dict[str, object], forced_category: str | None = None) -> str:
+        category = str(forced_category or item.get("category") or "seasonal")
+        return f"""
+        <div class='beer-admin-row beer-product-row' data-beer-product-row data-category='{escape(category)}'>
+          <input type='hidden' name='beer_product_delete_{index}' value='0' data-delete-flag>
+          <div class='beer-product-fields'>
+            <label>Название<input name='beer_product_name_{index}' value='{escape(str(item.get('name') or ''))}'></label>
+            <label>Стиль<input name='beer_product_style_{index}' value='{escape(str(item.get('style') or ''))}'></label>
+            <label>ABV<input name='beer_product_abv_{index}' value='{escape(str(item.get('abv') or ''))}'></label>
+            <label>Категория<select name='beer_product_category_{index}'><option value='new' {'selected' if category == 'new' else ''}>новинка</option><option value='core' {'selected' if category == 'core' else ''}>постоянная линейка</option><option value='seasonal' {'selected' if category not in ('new', 'core') else ''}>сезонный сорт</option></select></label>
+            <label>Untappd<input name='beer_product_untappd_url_{index}' value='{escape(str(item.get('untappd_url') or ''))}'></label>
+            <label>Порядок<input name='beer_product_sort_order_{index}' type='number' value='{escape(str(item.get('sort_order') or ((index + 1) * 10)))}'></label>
+            <label class='beer-row-check'><input type='hidden' name='beer_product_visible_{index}' value='0'><input name='beer_product_visible_{index}' type='checkbox' value='1' {'checked' if item.get('is_visible', True) else ''}> Показывать</label>
+            <button class='button secondary beer-delete-row' type='button' data-delete-beer-product>Удалить</button>
+          </div>
+          <div class='beer-asset-fields'>
+            <label>Мокап{f"<img class='beer-admin-preview' src='{escape(str(item.get('image_url') or ''))}' alt=''>" if item.get('image_url') else ""}<input type='hidden' name='beer_product_image_url_{index}' value='{escape(str(item.get('image_url') or ''))}'><input name='beer_product_image_file_{index}' type='file' accept='image/*'></label>
+          </div>
+        </div>
+        """
+
+    beer_products_sorted = sorted(enumerate(beer_products), key=lambda pair: (int(pair[1].get('sort_order') or ((pair[0] + 1) * 10)), str(pair[1].get('name') or '')))
+    beer_product_rows_by_category = {
+        'new': ''.join(beer_product_row(index, item, 'new') for index, item in beer_products_sorted if item.get('category') == 'new'),
+        'core': ''.join(beer_product_row(index, item, 'core') for index, item in beer_products_sorted if item.get('category') == 'core'),
+        'seasonal': ''.join(beer_product_row(index, item, 'seasonal') for index, item in beer_products_sorted if item.get('category') not in ('new', 'core')),
+    }
+    for category in ('new', 'core', 'seasonal'):
+        if not beer_product_rows_by_category[category]:
+            beer_product_rows_by_category[category] = beer_product_row(len(beer_products) + {'new': 0, 'core': 1, 'seasonal': 2}[category], {"name": "", "style": "", "abv": "", "image_url": "", "untappd_url": "", "category": category, "sort_order": 10, "is_visible": True}, category)
+
     return page(
         "Контент",
         f"""
@@ -436,11 +588,11 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-tabs label {{ margin:0; padding:10px 14px; border-radius:999px; background:white; border:1px solid rgba(16,88,89,.16); cursor:pointer; }}
           .cms-tab-input {{ position:absolute; opacity:0; pointer-events:none; }}
           .cms-tab-panel {{ display:none; }}
-          #cms-tab-home:checked ~ form .cms-panel-home, #cms-tab-contacts:checked ~ form .cms-panel-contacts, #cms-tab-business:checked ~ form .cms-panel-business, #cms-tab-typography:checked ~ form .cms-panel-typography, #cms-tab-nav:checked ~ form .cms-panel-nav {{ display:block; }}
+          #cms-tab-home:checked ~ form .cms-panel-home, #cms-tab-site:checked ~ form .cms-panel-site, #cms-tab-contacts:checked ~ form .cms-panel-contacts, #cms-tab-beer:checked ~ form .cms-panel-beer, #cms-tab-business:checked ~ form .cms-panel-business, #cms-tab-typography:checked ~ form .cms-panel-typography, #cms-tab-nav:checked ~ form .cms-panel-nav {{ display:block; }}
           .cms-preview-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; align-items:stretch; }}
           .contact-row {{ display:grid; grid-template-columns:minmax(140px,1fr) minmax(220px,1.5fr) 110px 140px; gap:10px; align-items:end; padding:10px 0; border-top:1px solid rgba(16,88,89,.12); }}
           .contact-row__visible {{ display:flex; gap:8px; align-items:center; padding-bottom:12px; }}
-          .contacts-map-picker {{ height:320px; border-radius:18px; overflow:hidden; border:1px solid rgba(16,88,89,.16); background:#eef3ef; }}
+          .contacts-map-picker {{ height:240px; border-radius:18px; overflow:hidden; border:1px solid rgba(16,88,89,.16); background:#eef3ef; }}
           .typography-preview {{ display:grid; gap:6px; padding:16px; border-radius:16px; background:#f6f1e3; border:1px solid rgba(16,88,89,.12); }}
           .typography-preview h4 {{ margin:0; color:#105859; font-size:24px; }}
           .typography-preview p {{ margin:0; color:#172625; }}
@@ -461,18 +613,36 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-news-preview__image {{ width:100%; aspect-ratio:16/10; border-radius:18px; object-fit:cover; background:rgba(246,241,227,.08); display:block; }}
           .cms-news-preview__image--fallback {{ background:radial-gradient(circle, rgba(199,177,102,.32), transparent 38%), linear-gradient(135deg, rgba(246,241,227,.1), rgba(16,88,89,.45)); }}
           .cms-news-preview h4 {{ margin:0 0 8px; font-size:26px; }}
-          .cms-news-preview p {{ margin:0; color:rgba(246,241,227,.78); }}
+          .cms-news-preview p {{ margin:0; color:rgba(246,241,227,.78); white-space:pre-line; }}
+          .cms-text-preview {{ white-space:pre-line; }}
+          .beer-admin-row {{ display:grid; gap:8px; padding:9px 0; border-top:1px solid rgba(16,88,89,.12); }}
+          .cms-panel-beer h4 {{ margin:22px 0 10px; color:#105859; font-size:24px; line-height:1.15; letter-spacing:.02em; }}
+          .beer-admin-row label {{ margin:0; font-size:11px; font-weight:600; color:#52615f; }}
+          .beer-admin-row input:not([type=checkbox]), .beer-admin-row select, .beer-admin-row textarea {{ padding:6px 8px; border-radius:8px; font-size:11px; font-weight:400; line-height:1.25; }}
+          .beer-admin-row input[type=file] {{ max-width:138px; color:transparent; font-size:0; padding:0; border:0; background:transparent; }}
+          .beer-admin-row input[type=file]::file-selector-button {{ margin:0; border:1px solid rgba(16,88,89,.24); border-radius:8px; background:#f6f1e3; color:#172625; padding:6px 9px; font-size:11px; font-weight:700; cursor:pointer; }}
+          .beer-product-fields {{ display:grid; grid-template-columns:1.2fr 1fr .7fr 1fr 1.2fr .65fr auto auto; gap:8px; align-items:end; }}
+          .beer-asset-fields {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; align-items:end; }}
+          .beer-row-check {{ white-space:nowrap; }}
+          .beer-delete-row {{ padding:9px 10px; background:#8a1f1f; }}
+          .beer-admin-preview {{ max-width:52px; max-height:52px; object-fit:contain; display:block; margin:0 0 4px; }}
+          .admin-add-row {{ margin-top:10px; padding:9px 12px; }}
+          @media (max-width:1100px) {{ .beer-product-fields {{ grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); }} }}
           @media (max-width:760px) {{ .cms-news-preview {{ grid-template-columns:1fr; }} }}
         </style>
         {notice}
         <input class="cms-tab-input" id="cms-tab-home" name="cms_tab" type="radio" checked>
+        <input class="cms-tab-input" id="cms-tab-site" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-contacts" name="cms_tab" type="radio">
+        <input class="cms-tab-input" id="cms-tab-beer" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-business" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-typography" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-nav" name="cms_tab" type="radio">
         <div class="cms-tabs" role="tablist">
           <label for="cms-tab-home">Главная</label>
+          <label for="cms-tab-site">Сайт / Доступ</label>
           <label for="cms-tab-contacts">Контакты</label>
+          <label for="cms-tab-beer">Пиво</label>
           <label for="cms-tab-business">Бизнес / Store settings</label>
           <label for="cms-tab-typography">Типографика</label>
           <label for="cms-tab-nav">Меню / Навигация</label>
@@ -563,12 +733,33 @@ def content_management_page(user_email: str, content: dict[str, object], result:
                 {news_image_preview}
                 <div>
                   <h4>{escape(news_title)}</h4>
-                  <p>{escape(news_text)}</p>
+                  <p class="cms-text-preview">{escape(news_text)}</p>
                 </div>
               </article>
             </div>
           </div>
           <p><button type="submit">Сохранить главную</button></p>
+          </section>
+
+          <section class="cms-tab-panel cms-panel-site">
+            <div class="card">
+              <h3>Окно 18+</h3>
+              <p class="muted">Текст этого окна хранится в CMS. Окно показывается обычным посетителям при каждом посещении, но скрывается для авторизованных B2B-пользователей.</p>
+              <label>Заголовок окна 18+<input name="age_gate_title" value="{escape(age_gate_title)}"></label>
+              <label>Текст окна 18+<textarea name="age_gate_text" rows="3">{escape(age_gate_text)}</textarea></label>
+              <div class="grid">
+                <label>Кнопка подтверждения<input name="age_gate_confirm_label" value="{escape(age_gate_confirm_label)}"></label>
+                <label>Кнопка отказа<input name="age_gate_deny_label" value="{escape(age_gate_deny_label)}"></label>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Техническая шторка</h3>
+              <p class="muted">Закрывает публичные страницы для посетителей. Админка остаётся доступной, чтобы режим можно было отключить.</p>
+              <input type="hidden" name="maintenance_enabled" value="0">
+              <label><input name="maintenance_enabled" type="checkbox" value="1" {'checked' if maintenance_enabled else ''}> Закрыть сайт</label>
+              <label>Текст шторки<textarea name="maintenance_text" rows="3">{escape(maintenance_text)}</textarea></label>
+            </div>
+            <p><button type="submit">Сохранить настройки сайта</button></p>
           </section>
           <section class="cms-tab-panel cms-panel-contacts">
             <div class="card">
@@ -579,16 +770,26 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <h4>Телефоны</h4>
               {phone_rows}
               <label>Текстовый адрес</label>
-              <input id="contacts-address-input" name="contacts_address" value="{escape(contacts_address)}">
+              <textarea id="contacts-address-input" name="contacts_address" rows="3">{escape(contacts_address)}</textarea>
+              <div class="grid">
+                <input type="hidden" name="contacts_address_is_visible" value="0"><label><input name="contacts_address_is_visible" type="checkbox" value="1" {'checked' if contacts_address_is_visible else ''}> Показывать текстовый адрес</label>
+                <label>Цвет адреса<input name="contacts_address_color" type="color" value="{escape(contacts_address_color or '#F6F1E3')}"></label>
+              </div>
               <label>Описание расположения</label>
               <textarea name="contacts_description" rows="4">{escape(contacts_description)}</textarea>
               <div class="grid">
+                <input type="hidden" name="contacts_description_is_visible" value="0"><label><input name="contacts_description_is_visible" type="checkbox" value="1" {'checked' if contacts_description_is_visible else ''}> Показывать описание расположения</label>
+                <label>Цвет описания<input name="contacts_description_color" type="color" value="{escape(contacts_description_color or '#F6F1E3')}"></label>
+              </div>
+              <div class="grid">
                 <label>Zoom карты<input id="contacts-map-zoom" name="contacts_map_zoom" type="number" min="1" max="20" value="{escape(contacts_map_zoom)}"></label>
+                <label>Высота карты, px<input name="contacts_map_height_px" type="number" min="180" max="420" step="10" value="{escape(contacts_map_height_px)}"></label>
+                <label>Ширина карты, px<input name="contacts_map_width_px" type="number" min="280" max="640" step="10" value="{escape(contacts_map_width_px)}"></label>
                 <label>Подпись точки<input name="contacts_map_title" value="{escape(contacts_map_title)}"></label>
               </div>
               <input id="contacts-map-lat" type="hidden" name="contacts_map_lat" value="{escape(contacts_map_lat)}">
               <input id="contacts-map-lng" type="hidden" name="contacts_map_lng" value="{escape(contacts_map_lng)}">
-              <p class="muted">Основной способ выбора точки — клик по карте или перетаскивание маркера. Координаты сохраняются скрыто; текстовый адрес можно отредактировать вручную.</p>
+              <p class="muted">Основной способ выбора точки — клик по карте или перетаскивание маркера. Координаты сохраняются скрыто; текстовый адрес можно отредактировать вручную. Preview карты в админке компактный; публичная высота берётся из поля выше.</p>
               <div id="contacts-map-picker" class="contacts-map-picker" data-lat="{escape(contacts_map_lat)}" data-lng="{escape(contacts_map_lng)}" data-zoom="{escape(contacts_map_zoom)}"></div>
               <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU"></script>
               <script>
@@ -627,6 +828,53 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <p><button type="submit">Сохранить контакты</button></p>
             </div>
           </section>
+
+          <section class="cms-tab-panel cms-panel-beer">
+            <div class="card">
+              <h3>Пиво / Где найти Stamm Brewing</h3>
+              <label>Заголовок блока<input name="beer_partners_title" value="{escape(str(beer.get('beer_partners_title') or 'Где найти Stamm Brewing'))}"></label>
+              <label>Описание блока<textarea name="beer_partners_description" rows="3">{escape(str(beer.get('beer_partners_description') or ''))}</textarea></label>
+              <input type="hidden" name="beer_partners_is_visible" value="0"><label><input name="beer_partners_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_partners_is_visible') or '1') != '0' else ''}> Показывать блок</label>
+              <h4>Партнёры</h4>
+              <div data-dynamic-list="beer-partners">{beer_partner_rows}</div>
+              <button class="button secondary admin-add-row" type="button" data-add-beer-partner>+ партнёр</button>
+            </div>
+            <div class="card">
+              <h3>Пиво / Popup сорта</h3>
+              <p class="muted">Общие настройки модального окна для всех сортов: подложка и единый логотип Untappd. Ссылки Untappd остаются индивидуальными в строках сортов.</p>
+              <div class="grid">
+                <label>Цвет подложки popup<input name="beer_popup_backdrop_color" type="color" value="{escape(beer_popup_backdrop_color)}"></label>
+                <label>Прозрачность подложки popup, %<input name="beer_popup_backdrop_opacity" type="number" min="0" max="100" step="1" value="{escape(beer_popup_backdrop_opacity)}"></label>
+                <label>Цвет фона карточки popup<input name="beer_popup_card_color" type="color" value="{escape(beer_popup_card_color)}"></label>
+                <label>Прозрачность фона карточки popup, %<input name="beer_popup_card_opacity" type="number" min="0" max="100" step="1" value="{escape(beer_popup_card_opacity)}"></label>
+              </div>
+              <label>Лого Untappd для раздела{f"<img class='beer-admin-preview' src='{escape(beer_untappd_logo_url)}' alt=''>" if beer_untappd_logo_url else ""}<input type="hidden" name="beer_untappd_logo_url" value="{escape(beer_untappd_logo_url)}"><input name="beer_untappd_logo_file" type="file" accept="image/*"></label>
+            </div>
+            <div class="card">
+              <h3>Пиво / Наша продукция</h3>
+              <label>Заголовок блока<input name="beer_products_title" value="{escape(str(beer.get('beer_products_title') or 'Наша продукция'))}"></label>
+              <label>Отступ между блоками «Партнёры» и «Наша продукция», px<input name="beer_section_gap_px" type="number" min="0" max="220" value="{escape(str(beer.get('beer_section_gap_px') or '72'))}"></label>
+              <div class="grid">
+                <label>Заголовок новинок<input name="beer_new_title" value="{escape(str(beer.get('beer_new_title') or 'Новинки'))}"></label>
+                <label>Заголовок постоянной линейки<input name="beer_core_title" value="{escape(str(beer.get('beer_core_title') or 'Постоянная линейка'))}"></label>
+                <label>Заголовок сезонных сортов<input name="beer_seasonal_title" value="{escape(str(beer.get('beer_seasonal_title') or 'Сезонные сорта'))}"></label>
+              </div>
+              <input type="hidden" name="beer_products_is_visible" value="0"><label><input name="beer_products_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_products_is_visible') or '1') != '0' else ''}> Показывать продукцию</label>
+              <input type="hidden" name="beer_new_is_visible" value="0"><label><input name="beer_new_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_new_is_visible') or '1') != '0' else ''}> Показывать новинки</label>
+              <input type="hidden" name="beer_core_is_visible" value="0"><label><input name="beer_core_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_core_is_visible') or '1') != '0' else ''}> Показывать постоянную линейку</label>
+              <input type="hidden" name="beer_seasonal_is_visible" value="0"><label><input name="beer_seasonal_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_seasonal_is_visible') or '1') != '0' else ''}> Показывать сезонные сорта</label>
+              <h4>Новинки</h4>
+              <div data-dynamic-list="beer-products-new">{beer_product_rows_by_category['new']}</div>
+              <button class="button secondary admin-add-row" type="button" data-add-beer-product="new">+ сорт</button>
+              <h4>Постоянная линейка</h4>
+              <div data-dynamic-list="beer-products-core">{beer_product_rows_by_category['core']}</div>
+              <button class="button secondary admin-add-row" type="button" data-add-beer-product="core">+ сорт</button>
+              <h4>Сезонные сорта</h4>
+              <div data-dynamic-list="beer-products-seasonal">{beer_product_rows_by_category['seasonal']}</div>
+              <button class="button secondary admin-add-row" type="button" data-add-beer-product="seasonal">+ сорт</button>
+            </div>
+            <p><button type="submit">Сохранить раздел Пиво</button></p>
+          </section>
           <section class="cms-tab-panel cms-panel-business">
           <div class="card">
             <h3>Бизнес / Заказы</h3>
@@ -647,6 +895,9 @@ def content_management_page(user_email: str, content: dict[str, object], result:
                 <p>Обычный текст и lead выглядят компактно и используют глобальные настройки.</p>
                 <small>Label / подпись · цена · карточка товара · контакты</small>
               </div>
+              <h3>Отступы от верхнего меню</h3>
+              <p class="muted">Каждый публичный раздел получает собственный отступ между фиксированным меню и началом контента. Изменение одного значения не влияет на остальные страницы.</p>
+              <div class="grid">{menu_offset_rows}</div>
               <p><button type="submit">Сохранить типографику</button></p>
             </div>
           </section>
@@ -670,6 +921,78 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           <p><button type="submit">Сохранить навигацию</button></p>
           </section>
         </form>
+
+        <script>
+          (function () {{
+            const tabKey = 'stamm_admin_content_tab';
+            const scrollKey = 'stamm_admin_content_scroll';
+            const savedTab = window.localStorage.getItem(tabKey);
+            if (savedTab) {{
+              const input = document.getElementById(savedTab);
+              if (input) input.checked = true;
+            }}
+            document.querySelectorAll('.cms-tab-input').forEach((input) => {{
+              input.addEventListener('change', () => {{ if (input.checked) window.localStorage.setItem(tabKey, input.id); }});
+            }});
+            document.querySelectorAll('form').forEach((form) => {{
+              form.addEventListener('submit', () => window.localStorage.setItem(scrollKey, String(window.scrollY || 0)));
+            }});
+            const savedScroll = window.localStorage.getItem(scrollKey);
+            if (savedScroll) {{
+              window.requestAnimationFrame(() => window.scrollTo(0, Number(savedScroll) || 0));
+              window.localStorage.removeItem(scrollKey);
+            }}
+            function nextIndex(list, prefix) {{
+              let max = -1;
+              list.querySelectorAll(`[name^="${{prefix}}"]`).forEach((node) => {{
+                const match = node.name.match(/_(\\d+)$/);
+                if (match) max = Math.max(max, Number(match[1]));
+              }});
+              return max + 1;
+            }}
+            function cloneRow(listName, prefix, category) {{
+              const list = document.querySelector(`[data-dynamic-list="${{listName}}"]`);
+              if (!list) return;
+              const row = list.querySelector('.beer-admin-row');
+              if (!row) return;
+              const oldIndex = (row.querySelector(`[name^="${{prefix}}"]`)?.name || '').match(/_(\\d+)$/)?.[1] || '0';
+              const index = nextIndex(document, prefix);
+              const clone = row.cloneNode(true);
+              clone.hidden = false;
+              clone.querySelectorAll('input, select, textarea').forEach((field) => {{
+                if (field.name) field.name = field.name.replace(new RegExp(`_${{oldIndex}}$`), `_${{index}}`);
+                if (field.type === 'checkbox') field.checked = true;
+                else if (field.type === 'hidden' && field.name.includes('_visible_')) field.value = '0';
+                else if (field.type === 'hidden' && field.dataset.deleteFlag !== undefined) field.value = '0';
+                else if (field.type !== 'file') field.value = field.tagName === 'SELECT' ? field.value : '';
+              }});
+              if (category) {{
+                clone.dataset.category = category;
+                const select = clone.querySelector(`[name="beer_product_category_${{index}}"]`);
+                if (select) select.value = category;
+              }}
+              clone.querySelectorAll('img').forEach((img) => img.remove());
+              list.appendChild(clone);
+            }}
+            document.querySelector('[data-add-beer-partner]')?.addEventListener('click', () => cloneRow('beer-partners', 'beer_partner_name_'));
+            document.querySelectorAll('[data-add-beer-product]').forEach((button) => {{
+              button.addEventListener('click', () => {{
+                const category = button.dataset.addBeerProduct || 'seasonal';
+                cloneRow(`beer-products-${{category}}`, 'beer_product_name_', category);
+              }});
+            }});
+            document.addEventListener('click', (event) => {{
+              const button = event.target.closest('[data-delete-beer-product]');
+              if (!button) return;
+              if (!window.confirm('Удалить сорт?')) return;
+              const row = button.closest('[data-beer-product-row]');
+              if (!row) return;
+              const flag = row.querySelector('[data-delete-flag]');
+              if (flag) flag.value = '1';
+              row.hidden = true;
+            }});
+          }})();
+        </script>
         """,
         user_email,
     )
