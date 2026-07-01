@@ -721,6 +721,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
             phones = []
     address = str(contacts.get("contacts_address") or "")
     address_is_visible = is_enabled(contacts.get("contacts_address_is_visible"), True)
+    address_color = css_text_color(contacts.get("contacts_address_color"), "var(--foam)")
     description = str(contacts.get("contacts_description") or "")
     description_is_visible = is_enabled(contacts.get("contacts_description_is_visible"), True)
     description_color = css_text_color(contacts.get("contacts_description_color"), "rgba(246,241,227,.78)")
@@ -746,8 +747,10 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
         f"<li><span>{escape(str(item.get('label') or 'Телефон'))}</span><a href='tel:{escape(str(item.get('value') or ''))}'>{escape(str(item.get('value') or ''))}</a></li>"
         for item in visible_phones
     ) or "<li><span>Телефон</span><strong>Скоро появится</strong></li>"
-    map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
+    map_query = quote(title or "Stamm Brewing")
+    map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&mode=search&text={map_query}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
     description_markup = f'<p style="color:{escape(description_color)}">{cms_text(description)}</p>' if description_is_visible and description else ""
+    address_markup = f'<ul class="contact-list"><li><span>Адрес</span><strong style="color:{escape(address_color)}">{cms_text(address)}</strong></li></ul>' if address_is_visible and address else ""
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -765,11 +768,8 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; justify-items:center; gap:4px; }}
     .contact-list span {{ color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); }}
-    .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:grid; align-self:start; justify-self:center; position:relative; }}
+    .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:grid; align-self:start; justify-self:center; }}
     .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; }}
-    .map-compact-badge {{ position:absolute; left:14px; top:14px; z-index:2; max-width:min(260px,calc(100% - 28px)); padding:9px 12px; border-radius:14px; background:rgba(13,75,76,.9); border:1px solid rgba(199,177,102,.24); color:var(--foam); text-align:left; pointer-events:none; box-shadow:0 10px 24px rgba(0,0,0,.18); }}
-    .map-compact-badge strong {{ display:block; color:var(--foam); font-size:14px; line-height:1.15; }}
-    .map-compact-badge span {{ display:block; margin-top:3px; color:var(--golden-malt); font-size:12px; line-height:1.2; }}
     @media (max-width:880px) {{ .contacts-info-card {{ justify-self:stretch; }} .map-card {{ width:100%; justify-self:stretch; }} }}
   </style>
 </head>
@@ -779,6 +779,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     <section class="contacts-hero">
       <div class="contacts-card contacts-info-card">
         {description_markup}
+        {address_markup}
         <ul class="contact-list">{email_cards}</ul>
         <ul class="contact-list">{phone_cards}</ul>
       </div>
