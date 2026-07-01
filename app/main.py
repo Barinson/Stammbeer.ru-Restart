@@ -32,6 +32,7 @@ from app.modules.account.service import (
     change_customer_password,
     create_customer_account_by_admin,
     create_customer_session,
+    delete_customer_account,
     current_customer,
     customer_cookie_header,
     customer_session_from_cookie,
@@ -42,7 +43,6 @@ from app.modules.account.service import (
     refresh_customer_discount,
     register_customer,
     set_customer_account_status,
-    soft_delete_customer_account,
     utc_now_iso,
 )
 from app.modules.content.service import ensure_public_content_defaults, get_public_site_content, save_public_content
@@ -824,7 +824,7 @@ class StammApp:
                         try:
                             status = form.get("status", "")
                             set_customer_account_status(app.conn, account_id, status)
-                            message = "Пользователь активирован." if status == "active" else "Пользователь деактивирован."
+                            message = "Пользователь активирован." if status == "active" else "Пользователь приостановлен."
                             self.redirect("/admin/users?result=" + urllib.parse.quote(message))
                         except Exception as exc:
                             self.redirect("/admin/users?error=" + urllib.parse.quote(str(exc)))
@@ -833,8 +833,8 @@ class StammApp:
                         if form.get("confirm") != "yes":
                             self.redirect("/admin/users?error=" + urllib.parse.quote("Удаление требует подтверждения."))
                             return
-                        soft_delete_customer_account(app.conn, account_id)
-                        self.redirect("/admin/users?result=" + urllib.parse.quote("Пользователь мягко удалён. История заказов сохранена."))
+                        delete_customer_account(app.conn, account_id)
+                        self.redirect("/admin/users?result=" + urllib.parse.quote("Пользователь полностью удалён. Его e-mail и ИНН снова доступны для создания аккаунта."))
                         return
                     if path == "/admin/users/reset-password":
                         if account["status"] != "active":
