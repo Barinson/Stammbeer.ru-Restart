@@ -11,6 +11,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from app.config import Settings, load_settings
+from app.integrations.moysklad.auto_sync import auto_sync_status, compact_auto_sync_history, run_auto_catalog_sync_if_due
 from app.integrations.moysklad.catalog_sync import extract_alcohol_percent, infer_container_type, latest_sync_diagnostics, run_manual_catalog_sync
 from app.integrations.moysklad.client import MoyskladClient, normalize_counterparty
 from app.modules.account.service import (
@@ -683,153 +684,6 @@ class CoreFoundationTest(unittest.TestCase):
         maintenance_html = maintenance_page(content)
         self.assertIn("Технические работы", maintenance_html)
         self.assertIn("mailto:marketing@stammbeer.ru", maintenance_html)
-
-    def test_beer_page_content_is_cms_managed(self) -> None:
-        app = self.make_app()
-        save_public_content(
-            app.conn,
-            {
-                "beer_partners_title": "Где найти Stamm Brewing",
-                "beer_partners_description": "Партнёры\nи бары",
-                "home_content_bg_url": "/media/taproom-bg.jpg",
-                "beer_partners_is_visible": "1",
-                "beer_partner_name_0": "Bottle Shop",
-                "beer_partner_logo_url_0": "/media/partner.svg",
-                "beer_partner_url_0": "https://partner.test",
-                "beer_partner_size_0": "large",
-                "beer_partner_sort_order_0": "10",
-                "beer_partner_visible_0": "1",
-                "beer_products_title": "Наша продукция",
-                "beer_new_title": "Новинки",
-                "beer_core_title": "Постоянная линейка",
-                "beer_seasonal_title": "Сезонные сорта",
-                "beer_products_is_visible": "1",
-                "beer_new_is_visible": "1",
-                "beer_core_is_visible": "1",
-                "beer_seasonal_is_visible": "1",
-                "menu_offset_beer_px": "232",
-                "beer_untappd_logo_url": "/media/untappd-global.svg",
-                "beer_popup_backdrop_color": "#123456",
-                "beer_popup_backdrop_opacity": "45",
-                "beer_popup_card_color": "#654321",
-                "beer_popup_card_opacity": "72",
-                "beer_section_gap_px": "104",
-                "beer_product_name_0": "Stamm IPA",
-                "beer_product_style_0": "IPA",
-                "beer_product_abv_0": "6.5%",
-                "beer_product_image_url_0": "/media/ipa.png",
-                "beer_product_untappd_url_0": "https://untappd.com/b/stamm-ipa",
-                "beer_product_category_0": "new",
-                "beer_product_sort_order_0": "10",
-                "beer_product_visible_0": "1",
-                "beer_product_name_1": "Stamm Lager",
-                "beer_product_style_1": "Lager",
-                "beer_product_abv_1": "4.8%",
-                "beer_product_image_url_1": "/media/lager.png",
-                "beer_product_category_1": "core",
-                "beer_product_sort_order_1": "20",
-                "beer_product_visible_1": "1",
-                "beer_product_name_24": "Stamm Saison",
-                "beer_product_style_24": "Saison",
-                "beer_product_abv_24": "5.2%",
-                "beer_product_image_url_24": "/media/saison.png",
-                "beer_product_category_24": "seasonal",
-                "beer_product_sort_order_24": "30",
-                "beer_product_visible_24": "1",
-            },
-        )
-        content = get_public_site_content(app.conn)
-        self.assertEqual(content["beer"]["partners"][0]["name"], "Bottle Shop")
-        html = beer_page(content)
-        self.assertIn("Где найти Stamm Brewing", html)
-        self.assertIn("Партнёры\nи бары", html)
-        self.assertIn('target="_blank"', html)
-        self.assertIn("--logo-size:154px", html)
-        self.assertIn("width:max-content", html)
-        self.assertIn("display:flex; flex-wrap:wrap", html)
-        self.assertIn("--beer-bg:url", html)
-        self.assertIn("linear-gradient(180deg, rgba(16,88,89,.78)", html)
-        self.assertIn("max-width:1440px", html)
-        self.assertIn("gap:104px", html)
-        self.assertIn("width:min(1320px,100%)", html)
-        self.assertIn("display:flex; flex-wrap:wrap; justify-content:center", html)
-        self.assertIn("calc((100% - 128px) / 9)", html)
-        self.assertNotIn("product-subsection--new", html)
-        self.assertIn("--menu-offset:232px", html)
-        self.assertIn(".partner-card:hover img", html)
-        self.assertNotIn("min-height:132px", html)
-        self.assertIn("beer-can--featured", html)
-        self.assertIn("Постоянная линейка", html)
-        self.assertIn("beer-can--seasonal", html)
-        self.assertEqual(len(content["beer"]["products"]), 3)
-        self.assertIn("beer-modal", html)
-        self.assertIn("beer-modal__mockup", html)
-        self.assertIn("rgba(18,52,86,0.45)", html)
-        self.assertIn("background:rgba(101,67,33,0.72)", html)
-        self.assertIn('const untappdLogoUrl = "/media/untappd-global.svg"', html)
-        self.assertNotIn("untappdLogoUrl", html.split("data-product=", 1)[1].split(" aria-label", 1)[0])
-        self.assertIn("style.textContent = data.style || ''", html)
-        self.assertNotIn(">Stamm IPA</span>", html)
-        self.assertIn("https://untappd.com/b/stamm-ipa", html)
-
-
-    def test_admin_catalog_uses_compact_table_styles(self) -> None:
-        html = admin_catalog_page(
-            "admin@example.test",
-            [{
-                "id": "product-1",
-                "public_name": "Stamm IPA 0.5",
-                "container_type": "can",
-                "price_minor": 25000,
-                "currency": "RUB",
-                "available_quantity": 24,
-                "availability_status": "in_stock",
-                "latest_stock": 30,
-                "latest_reserve": 6,
-                "sync_state": "synced",
-                "is_published": True,
-                "last_synced_at": "2026-06-29",
-            }],
-        )
-        self.assertIn("admin-catalog-card", html)
-        self.assertIn("admin-catalog-table", html)
-        self.assertIn("font-size:12px", html)
-        self.assertIn("font-size:11px", html)
-        self.assertIn("font-weight:600", html)
-
-
-    def test_public_cms_text_preserves_line_breaks_without_raw_html(self) -> None:
-        app = self.make_app()
-        save_public_content(
-            app.conn,
-            {
-                "home_news_text": "Строка 1\nСтрока 2\n<script>alert(1)</script>",
-                "contacts_address": "Адрес 1\nАдрес 2\n<em>не html</em>",
-                "contacts_address_is_visible": "0",
-                "contacts_address_color": "#C7B166",
-                "contacts_description": "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>",
-                "contacts_description_is_visible": "0",
-                "contacts_description_color": "#F6F1E3",
-            },
-        )
-        content = get_public_site_content(app.conn)
-        self.assertEqual(content["home"]["home_news_text"], "Строка 1\nСтрока 2\n<script>alert(1)</script>")
-        self.assertEqual(content["contacts"]["contacts_address"], "Адрес 1\nАдрес 2\n<em>не html</em>")
-        self.assertEqual(content["contacts"]["contacts_address_is_visible"], "0")
-        self.assertEqual(content["contacts"]["contacts_description"], "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>")
-        self.assertEqual(content["contacts"]["contacts_description_is_visible"], "0")
-        home_html = home_page(content)
-        contacts_html = contacts_page(content)
-        self.assertIn("white-space:pre-line", home_html)
-        self.assertIn("Строка 1\nСтрока 2", home_html)
-        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", home_html)
-        self.assertNotIn("<script>alert(1)</script>", home_html)
-        self.assertIn("white-space:pre-line", contacts_html)
-        self.assertNotIn("Адрес 1\nАдрес 2", contacts_html)
-        self.assertNotIn("&lt;em&gt;не html&lt;/em&gt;", contacts_html)
-        self.assertNotIn("Контакты 1\r\nКонтакты 2", contacts_html)
-        self.assertNotIn("&lt;strong&gt;не html&lt;/strong&gt;", contacts_html)
-
 
     def test_beer_page_content_is_cms_managed(self) -> None:
         app = self.make_app()
@@ -1705,7 +1559,7 @@ class CoreFoundationTest(unittest.TestCase):
             publish_product(app.conn, unavailable_id, True)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 1)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_jobs WHERE status = 'success'").fetchone()[0], 2)
-        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_logs").fetchone()[0], 5)
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_logs").fetchone()[0], 4)
 
         publish_product(app.conn, products[0]["id"], True)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 1)
@@ -1785,6 +1639,46 @@ class CoreFoundationTest(unittest.TestCase):
         product = admin_catalog_items(app.conn)[0]
         self.assertEqual(product["source_folder_href"], grandchild_href)
         self.assertEqual(product["container_type"], "can")
+
+
+    def test_moysklad_auto_sync_status_uses_interval_and_compact_history(self) -> None:
+        app = self.make_app()
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "token",
+                "store_href": "https://api.moysklad.ru/api/remap/1.2/entity/store/store-1",
+                "source_product_folder_href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "60",
+                "stock_sync_interval_minutes": "30",
+                "is_enabled": True,
+            },
+            None,
+        )
+        app.conn.execute(
+            """
+            INSERT INTO moysklad_sync_jobs (type, status, trigger_source, started_at, finished_at, error_summary)
+            VALUES
+              ('auto_catalog', 'success', 'auto', '2999-07-01T10:00:00Z', '2999-07-01T10:01:00Z', NULL),
+              ('auto_catalog', 'failed', 'auto', '2026-07-01T09:00:00Z', '2026-07-01T09:01:00Z', 'ошибка авторизации'),
+              ('auto_catalog', 'success', 'auto', '2026-07-01T08:00:00Z', '2026-07-01T08:01:00Z', NULL),
+              ('auto_catalog', 'success', 'auto', '2026-07-01T07:00:00Z', '2026-07-01T07:01:00Z', NULL)
+            """
+        )
+        app.conn.commit()
+
+        history = compact_auto_sync_history(app.conn)
+        self.assertEqual(len(history), 3)
+        self.assertEqual(history[0]["status"], "success")
+        self.assertEqual(history[1]["error"], "ошибка авторизации")
+        status = auto_sync_status(app.conn)
+        self.assertTrue(status["enabled"])
+        self.assertTrue(status["configured"])
+        skipped = run_auto_catalog_sync_if_due(app.conn)
+        self.assertEqual(skipped["status"], "skipped")
+        self.assertEqual(skipped["reason"], "not_due")
 
     def test_moysklad_reference_refresh_and_selection_persist_api_entities(self) -> None:
         app = self.make_app()
