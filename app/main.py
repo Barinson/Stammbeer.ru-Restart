@@ -241,7 +241,7 @@ class StammApp:
                         self.send_html(page("404", "<main class='login'><div class='card'>Файл не найден.</div></main>"), HTTPStatus.NOT_FOUND)
                     return
                 public_content = self.public_content()
-                if not path.startswith("/admin") and not path.startswith("/api/") and self.maintenance_is_enabled(public_content) and self.admin_user() is None:
+                if not path.startswith("/admin") and self.maintenance_is_enabled(public_content) and self.admin_user() is None:
                     self.send_html(maintenance_page(public_content), HTTPStatus.SERVICE_UNAVAILABLE)
                     return
                 if path == "/":
@@ -407,6 +407,9 @@ class StammApp:
 
             def do_POST(self) -> None:  # noqa: N802
                 path = urllib.parse.urlparse(self.path).path
+                if not path.startswith("/admin") and self.maintenance_is_enabled(self.public_content()) and self.admin_user() is None:
+                    self.send_html(maintenance_page(get_public_site_content(app.conn)), HTTPStatus.SERVICE_UNAVAILABLE)
+                    return
                 if path == PUBLIC_ORDER_API_ROUTE:
                     payload = self.read_json()
                     requested_items = payload.get("items") if isinstance(payload.get("items"), list) else []

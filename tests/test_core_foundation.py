@@ -678,7 +678,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Нет", html)
         self.assertIn("window.history.back()", html)
         self.assertIn("about:blank", html)
-        self.assertNotIn("stamm_age_confirmed", html)
+        self.assertIn("stamm_age_confirmed_session", html)
         html_for_customer = home_page({**content, "viewer": {"is_customer": True}})
         self.assertNotIn("ageGate", html_for_customer)
         maintenance_html = maintenance_page(content)
@@ -1080,7 +1080,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("submitOrder", html)
         self.assertIn("/api/public/business/order", html)
         self.assertIn("Вам есть 18+?", html)
-        self.assertNotIn("stamm_age_confirmed", html)
+        self.assertIn("stamm_age_confirmed_session", html)
         self.assertIn("Stamm Brewing</a>", html)
         self.assertNotIn('href="/">Главная</a>', html)
         self.assertIn("Untappd", html)
@@ -1116,6 +1116,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Вам есть 18+?", home_html)
         self.assertIn("Да, мне есть 18", home_html)
         self.assertIn("Нет, мне нет 18", home_html)
+        self.assertIn("sessionStorage", home_html)
+        self.assertIn("stamm_age_confirmed_session", home_html)
         self.assertNotIn('href="/">Главная</a>', home_html)
 
         for path in ("/business", "/business/catalog"):
@@ -1148,6 +1150,33 @@ class CoreFoundationTest(unittest.TestCase):
             response = open_without_redirects(base + path)
             self.assertEqual(response.status, 303)
             self.assertEqual(response.headers["Location"], expected_location)
+
+    def test_maintenance_mode_closes_public_site_but_not_admin(self) -> None:
+        app = self.make_app()
+        save_public_content(
+            app.conn,
+            {
+                "maintenance_enabled": "1",
+                "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
+            },
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        for path in ("/", "/contacts", "/beer", "/business", "/visit", "/api/public/business/catalog"):
+            response = open_without_redirects(base + path)
+            self.assertEqual(response.status, 503)
+            body = response.read().decode("utf-8")
+            self.assertIn("Сайт находится на технических работах", body)
+            self.assertIn("mailto:marketing@stammbeer.ru", body)
+
+        admin_login = urllib.request.urlopen(base + "/admin/login", timeout=5)
+        self.assertEqual(admin_login.status, 200)
+        self.assertIn("Вход", admin_login.read().decode("utf-8"))
 
     def test_public_catalog_api_endpoint_returns_local_data(self) -> None:
         app = self.make_app()
