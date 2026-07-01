@@ -197,6 +197,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Временный пароль", users_html)
         self.assertIn("users-create-grid", users_html)
         self.assertIn("users-table", users_html)
+        self.assertIn("Приостановить", users_html)
+        self.assertIn("Удалить", users_html)
 
         save_settings(
             app.conn,
@@ -256,7 +258,7 @@ class CoreFoundationTest(unittest.TestCase):
 
         disable = urllib.request.Request(
             base + "/admin/users/status",
-            data=urllib.parse.urlencode({"account_id": customer_id, "status": "disabled"}).encode("utf-8"),
+            data=urllib.parse.urlencode({"account_id": customer_id, "status": "suspended"}).encode("utf-8"),
             headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
             method="POST",
         )
@@ -293,9 +295,35 @@ class CoreFoundationTest(unittest.TestCase):
         )
         self.assertEqual(open_without_redirects(delete).status, 303)
         account = app.conn.execute("SELECT status FROM customer_accounts WHERE id = ?", (customer_id,)).fetchone()
-        self.assertEqual(account["status"], "deleted")
+        self.assertIsNone(account)
         order = app.conn.execute("SELECT number, customer_account_id FROM b2b_orders WHERE number = 'B2B-ADMIN'").fetchone()
-        self.assertEqual(order["customer_account_id"], customer_id)
+        self.assertIsNone(order["customer_account_id"])
+
+        def fake_recreate_urlopen(request, timeout=0):
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            if "api.moysklad.ru" not in url:
+                return original_urlopen(request, timeout=timeout)
+            return FakeMoyskladResponse(json.dumps({"rows": [{
+                "id": "counterparty-admin",
+                "name": "ООО Админ Партнёр",
+                "inn": "7701234567",
+                "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-admin"},
+            }]}).encode("utf-8"))
+
+        urllib.request.urlopen = fake_recreate_urlopen
+        try:
+            recreate = urllib.request.Request(
+                base + "/admin/users/create",
+                data=urllib.parse.urlencode({"inn": "7701234567", "email": "partner-admin@example.com", "temporary_password": "secret123"}).encode("utf-8"),
+                headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            recreate_response = open_without_redirects(recreate)
+        finally:
+            urllib.request.urlopen = original_urlopen
+        self.assertEqual(recreate_response.status, 303)
+        self.assertIn("result=", recreate_response.headers["Location"])
+        self.assertIsNotNone(authenticate_customer(app.conn, "partner-admin@example.com", "secret123", refresh_discount=False))
 
 
     def test_admin_email_management_page_settings_logs_and_manual_actions(self) -> None:

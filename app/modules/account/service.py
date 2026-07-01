@@ -264,8 +264,15 @@ def register_customer(conn: sqlite3.Connection, inn: str, email: str, password: 
 
     normalized_email = normalize_email(email)
     normalized_inn = normalize_inn(inn)
-    if _account_by_email(conn, normalized_email) is not None:
-        return RegistrationResult(False, "Этот e-mail уже зарегистрирован.")
+    existing_account = _account_by_email(conn, normalized_email)
+    if existing_account is not None:
+        if existing_account["status"] == "deleted":
+            conn.execute("DELETE FROM customer_sessions WHERE customer_account_id = ?", (existing_account["id"],))
+            conn.execute("UPDATE b2b_orders SET customer_account_id = NULL WHERE customer_account_id = ?", (existing_account["id"],))
+            conn.execute("DELETE FROM customer_accounts WHERE id = ?", (existing_account["id"],))
+            conn.commit()
+        else:
+            return RegistrationResult(False, "Этот e-mail уже зарегистрирован.")
 
     try:
         counterparty = _build_moysklad_client(conn).find_counterparty_by_inn(normalized_inn)
@@ -428,10 +435,10 @@ def list_customer_accounts(conn: sqlite3.Connection, query: str | None = None) -
 
 
 def set_customer_account_status(conn: sqlite3.Connection, account_id: int, status: str) -> sqlite3.Row | None:
-    if status not in {"active", "disabled"}:
+    if status not in {"active", "suspended"}:
         raise ValueError("Недопустимый статус аккаунта.")
     conn.execute(
-        "UPDATE customer_accounts SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status != 'deleted'",
+        "UPDATE customer_accounts SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (status, account_id),
     )
     if status != "active":
@@ -440,14 +447,22 @@ def set_customer_account_status(conn: sqlite3.Connection, account_id: int, statu
     return _account_by_id(conn, account_id)
 
 
-def soft_delete_customer_account(conn: sqlite3.Connection, account_id: int) -> sqlite3.Row | None:
-    conn.execute(
-        "UPDATE customer_accounts SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        (account_id,),
-    )
+def delete_customer_account(conn: sqlite3.Connection, account_id: int) -> bool:
+    """Permanently delete a customer account while preserving detached order history."""
+    account = _account_by_id(conn, account_id)
+    if account is None:
+        return False
     conn.execute("DELETE FROM customer_sessions WHERE customer_account_id = ?", (account_id,))
+    conn.execute("UPDATE b2b_orders SET customer_account_id = NULL WHERE customer_account_id = ?", (account_id,))
+    conn.execute("DELETE FROM customer_accounts WHERE id = ?", (account_id,))
     conn.commit()
-    return _account_by_id(conn, account_id)
+    return True
+
+
+def soft_delete_customer_account(conn: sqlite3.Connection, account_id: int) -> sqlite3.Row | None:
+    """Backward-compatible alias: user deletion is now a hard delete."""
+    delete_customer_account(conn, account_id)
+    return None
 
 
 def create_customer_session(conn: sqlite3.Connection, account_id: int) -> str:
