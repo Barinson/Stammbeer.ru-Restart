@@ -797,6 +797,36 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("font-size:12px", html)
         self.assertIn("font-size:11px", html)
         self.assertIn("font-weight:600", html)
+        self.assertIn("stamm_admin_catalog_scroll", html)
+        self.assertIn("admin-catalog-publication-form", html)
+
+    def test_business_catalog_exactly_follows_admin_publication_flags(self) -> None:
+        app = self.make_app()
+        product_id = self.add_catalog_item(app, "Stamm Exact IPA", "keg", "stamm-exact-ipa")
+        self.assertEqual([item["productId"] for item in public_catalog(app.conn)["items"]], [product_id])
+
+        publish_product(app.conn, product_id, False)
+        self.assertEqual(public_catalog(app.conn)["items"], [])
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items WHERE product_id = ?", (product_id,)).fetchone()[0], 0)
+
+        publish_product(app.conn, product_id, True)
+        self.assertEqual([item["productId"] for item in public_catalog(app.conn)["items"]], [product_id])
+
+        app.conn.execute("UPDATE product_overrides SET is_published = 0 WHERE product_id = ?", (product_id,))
+        app.conn.execute(
+            """
+            INSERT INTO business_catalog_items (product_id, slug, public_name, price_minor, currency, container_type, availability_status, search_text)
+            VALUES (?, 'stale-visible', 'Stale visible row', 10000, 'RUB', 'keg', 'available', 'Stale visible row')
+            """,
+            (product_id,),
+        )
+        app.conn.commit()
+        self.assertEqual(public_catalog(app.conn)["items"], [])
+
+        app.conn.execute("UPDATE product_overrides SET is_published = 1 WHERE product_id = ?", (product_id,))
+        app.conn.execute("DELETE FROM business_catalog_items WHERE product_id = ?", (product_id,))
+        app.conn.commit()
+        self.assertEqual([item["productId"] for item in public_catalog(app.conn)["items"]], [product_id])
 
 
     def test_public_cms_text_preserves_line_breaks_without_raw_html(self) -> None:
@@ -1177,6 +1207,16 @@ class CoreFoundationTest(unittest.TestCase):
         admin_login = urllib.request.urlopen(base + "/admin/login", timeout=5)
         self.assertEqual(admin_login.status, 200)
         self.assertIn("Вход", admin_login.read().decode("utf-8"))
+        admin_user = authenticate(app.conn, "admin", "1")
+        admin_cookie = cookie_header(create_session(app.conn, admin_user["id"]))
+        admin_public_request = urllib.request.Request(base + "/contacts", headers={"Cookie": admin_cookie})
+        opener = urllib.request.build_opener(NoRedirect)
+        try:
+            opener.open(admin_public_request, timeout=5)
+            self.fail("Public contacts must remain behind maintenance even with an admin cookie")
+        except urllib.error.HTTPError as exc:
+            self.assertEqual(exc.status, 503)
+            self.assertIn("Сайт находится на технических работах", exc.read().decode("utf-8"))
 
     def test_public_catalog_api_endpoint_returns_local_data(self) -> None:
         app = self.make_app()

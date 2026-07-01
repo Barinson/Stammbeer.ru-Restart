@@ -246,7 +246,7 @@ def admin_catalog_page(user_email: str, items: list[dict[str, object]], result: 
               <td>{'Опубликовано' if item.get('is_published') else 'Скрыто'}</td>
               <td>{escape(str(item.get('last_synced_at') or '—'))}</td>
               <td>
-                <form method="post" action="/admin/catalog/publication">
+                <form class="admin-catalog-publication-form" method="post" action="/admin/catalog/publication">
                   <input type="hidden" name="product_id" value="{escape(str(item.get('id')))}">
                   <input type="hidden" name="publish" value="{'0' if item.get('is_published') else '1'}">
                   <button type="submit">{'Скрыть' if item.get('is_published') else 'Опубликовать'}</button>
@@ -272,6 +272,19 @@ def admin_catalog_page(user_email: str, items: list[dict[str, object]], result: 
                 <thead><tr><th>Название</th><th>Тара</th><th>Цена продажи / 1 SKU</th><th>Доступно</th><th>Источник</th><th>Публикация</th><th>Sync</th><th></th></tr></thead>
                 <tbody>{rows}</tbody>
               </table>
+              <script>
+                (function () {{
+                  const key = 'stamm_admin_catalog_scroll';
+                  document.querySelectorAll('.admin-catalog-publication-form').forEach((form) => {{
+                    form.addEventListener('submit', () => window.sessionStorage.setItem(key, String(window.scrollY || 0)));
+                  }});
+                  const saved = window.sessionStorage.getItem(key);
+                  if (saved) {{
+                    window.requestAnimationFrame(() => window.scrollTo(0, Number(saved) || 0));
+                    window.sessionStorage.removeItem(key);
+                  }}
+                }})();
+              </script>
             """
     else:
         table = "<div class='card'><p>Локальный каталог пока пуст. Запустите ручную синхронизацию в разделе МойСклад.</p></div>"
