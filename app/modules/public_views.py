@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from html import escape
-from urllib.parse import quote
 from typing import Any
 
 from app.modules.content.service import ACTION_DEFAULTS, BUSINESS_DEFAULTS, CONTACT_DEFAULTS, HOME_DEFAULTS, LAYOUT_DEFAULTS, MENU_DEFAULTS, TYPOGRAPHY_DEFAULTS
@@ -721,7 +720,6 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
             phones = []
     address = str(contacts.get("contacts_address") or "")
     address_is_visible = is_enabled(contacts.get("contacts_address_is_visible"), True)
-    address_color = css_text_color(contacts.get("contacts_address_color"), "var(--foam)")
     description = str(contacts.get("contacts_description") or "")
     description_is_visible = is_enabled(contacts.get("contacts_description_is_visible"), True)
     description_color = css_text_color(contacts.get("contacts_description_color"), "rgba(246,241,227,.78)")
@@ -747,10 +745,8 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
         f"<li><span>{escape(str(item.get('label') or 'Телефон'))}</span><a href='tel:{escape(str(item.get('value') or ''))}'>{escape(str(item.get('value') or ''))}</a></li>"
         for item in visible_phones
     ) or "<li><span>Телефон</span><strong>Скоро появится</strong></li>"
-    map_query = quote(title or "Stamm Brewing")
-    map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&mode=search&text={map_query}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
+    map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
     description_markup = f'<p style="color:{escape(description_color)}">{cms_text(description)}</p>' if description_is_visible and description else ""
-    map_info_address = f'<strong style="color:{escape(address_color)}">{cms_text(address)}</strong>' if address_is_visible and address else ""
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -759,20 +755,20 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .contacts-page {{ min-height:calc(100vh - 88px); padding:104px min(6vw,72px) 64px; display:grid; align-items:start; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
-    .contacts-hero {{ width:min(100%,1040px); margin:0 auto; display:grid; grid-template-columns:1fr; gap:28px; align-items:start; justify-items:center; }}
+    .contacts-page {{ min-height:calc(100vh - 88px); padding:104px min(6vw,72px) 64px; display:grid; place-items:start center; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .contacts-hero {{ width:min(100%,1040px); margin:0 auto; display:grid; grid-template-columns:1fr; gap:28px; align-items:start; justify-items:center; text-align:center; }}
     .contacts-card {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:24px; padding:28px; box-shadow:0 18px 44px rgba(0,0,0,.18); }}
-    .contacts-info-card {{ width:min(760px,100%); border:0; background:transparent; box-shadow:none; padding:10px 0; justify-self:start; }}
+    .contacts-info-card {{ width:min(760px,100%); border:0; background:transparent; box-shadow:none; padding:10px 0; justify-self:center; }}
     .contacts-card p {{ color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-lead-font-size,18px); white-space:pre-line; }}
     .contact-list {{ list-style:none; margin:22px 0 0; padding:0; display:grid; gap:12px; }}
-    .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; gap:4px; }}
+    .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; justify-items:center; gap:4px; }}
     .contact-list span {{ color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); }}
-    .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:grid; align-self:start; justify-self:center; }}
+    .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:grid; align-self:start; justify-self:center; position:relative; }}
     .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; }}
-    .map-info {{ padding:18px 20px 20px; border-top:1px solid rgba(199,177,102,.18); background:rgba(11,63,64,.34); }}
-    .map-info span {{ display:block; margin-bottom:6px; color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
-    .map-info strong {{ display:block; color:var(--foam); font-size:var(--stamm-contact-text-font-size,18px); line-height:1.35; white-space:pre-line; }}
+    .map-compact-badge {{ position:absolute; left:14px; top:14px; z-index:2; max-width:min(260px,calc(100% - 28px)); padding:9px 12px; border-radius:14px; background:rgba(13,75,76,.9); border:1px solid rgba(199,177,102,.24); color:var(--foam); text-align:left; pointer-events:none; box-shadow:0 10px 24px rgba(0,0,0,.18); }}
+    .map-compact-badge strong {{ display:block; color:var(--foam); font-size:14px; line-height:1.15; }}
+    .map-compact-badge span {{ display:block; margin-top:3px; color:var(--golden-malt); font-size:12px; line-height:1.2; }}
     @media (max-width:880px) {{ .contacts-info-card {{ justify-self:stretch; }} .map-card {{ width:100%; justify-self:stretch; }} }}
   </style>
 </head>
@@ -787,7 +783,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
       </div>
       <div class="contacts-card map-card" style="--contacts-map-height:{map_height}; --contacts-map-width:{map_width}">
         <iframe title="Яндекс.Карта: {escape(title)}" src="{map_src}" loading="lazy" allowfullscreen></iframe>
-        <div class="map-info"><span>{escape(title)}</span>{map_info_address}</div>
+        <div class="map-compact-badge"><strong>{escape(title)}</strong><span>★ оценка на Яндекс Картах</span></div>
       </div>
     </section>
   </main>
