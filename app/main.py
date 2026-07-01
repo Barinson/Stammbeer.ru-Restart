@@ -14,7 +14,8 @@ from app.config import Settings, load_settings
 from app.db.connection import connect
 from app.db.migrations import run_migrations
 from app.db.seed import seed_core
-from app.integrations.moysklad.catalog_sync import latest_sync_diagnostics, run_manual_catalog_sync
+from app.integrations.moysklad.auto_sync import compact_auto_sync_history, start_auto_sync_worker
+from app.integrations.moysklad.catalog_sync import run_manual_catalog_sync
 from app.integrations.moysklad.settings_service import (
     get_settings,
     refresh_integration_references,
@@ -111,6 +112,9 @@ class StammApp:
         run_migrations(self.conn)
         seed_core(self.conn, settings.admin_email, settings.admin_password)
         ensure_public_content_defaults(self.conn)
+        self.auto_sync_thread = None
+        if settings.env != "test":
+            self.auto_sync_thread = start_auto_sync_worker(settings.sqlite_path, settings.admin_email, settings.admin_password)
 
     def handler_class(self):
         app = self
@@ -354,7 +358,7 @@ class StammApp:
                             return
                         settings = serialize_settings(get_settings(app.conn))
                         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-                        self.send_html(moysklad_settings_page(user["email"], settings, result=query.get("result", [None])[0], error=query.get("error", [None])[0], diagnostics=latest_sync_diagnostics(app.conn)))
+                        self.send_html(moysklad_settings_page(user["email"], settings, result=query.get("result", [None])[0], error=query.get("error", [None])[0], auto_history=compact_auto_sync_history(app.conn)))
                         return
                     if path == "/admin/b2b-orders":
                         self.send_html(placeholder("B2B-заявки", "Здесь будет список заявок, статусы, детали и заметки менеджера.", user["email"]))
@@ -730,7 +734,7 @@ class StammApp:
                         return
                     if path == "/admin/moysklad/sync-products":
                         try:
-                            result = run_manual_catalog_sync(app.conn, user["id"], diagnostic_mode="diagnostic_mode" in form)
+                            result = run_manual_catalog_sync(app.conn, user["id"])
                             stats = result["stats"]
                             message = f"Sync завершён: найдено {stats['found']}, создано {stats['created']}, обновлено {stats['updated']}"
                             self.redirect("/admin/moysklad?result=" + urllib.parse.quote(message))

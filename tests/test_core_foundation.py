@@ -11,6 +11,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from app.config import Settings, load_settings
+from app.integrations.moysklad.auto_sync import auto_sync_status, compact_auto_sync_history, run_auto_catalog_sync_if_due
 from app.integrations.moysklad.catalog_sync import extract_alcohol_percent, infer_container_type, latest_sync_diagnostics, run_manual_catalog_sync
 from app.integrations.moysklad.client import MoyskladClient, normalize_counterparty
 from app.modules.account.service import (
@@ -1558,7 +1559,7 @@ class CoreFoundationTest(unittest.TestCase):
             publish_product(app.conn, unavailable_id, True)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 1)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_jobs WHERE status = 'success'").fetchone()[0], 2)
-        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_logs").fetchone()[0], 5)
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_logs").fetchone()[0], 4)
 
         publish_product(app.conn, products[0]["id"], True)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 1)
@@ -1638,6 +1639,46 @@ class CoreFoundationTest(unittest.TestCase):
         product = admin_catalog_items(app.conn)[0]
         self.assertEqual(product["source_folder_href"], grandchild_href)
         self.assertEqual(product["container_type"], "can")
+
+
+    def test_moysklad_auto_sync_status_uses_interval_and_compact_history(self) -> None:
+        app = self.make_app()
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "token",
+                "store_href": "https://api.moysklad.ru/api/remap/1.2/entity/store/store-1",
+                "source_product_folder_href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "60",
+                "stock_sync_interval_minutes": "30",
+                "is_enabled": True,
+            },
+            None,
+        )
+        app.conn.execute(
+            """
+            INSERT INTO moysklad_sync_jobs (type, status, trigger_source, started_at, finished_at, error_summary)
+            VALUES
+              ('auto_catalog', 'success', 'auto', '2999-07-01T10:00:00Z', '2999-07-01T10:01:00Z', NULL),
+              ('auto_catalog', 'failed', 'auto', '2026-07-01T09:00:00Z', '2026-07-01T09:01:00Z', 'ошибка авторизации'),
+              ('auto_catalog', 'success', 'auto', '2026-07-01T08:00:00Z', '2026-07-01T08:01:00Z', NULL),
+              ('auto_catalog', 'success', 'auto', '2026-07-01T07:00:00Z', '2026-07-01T07:01:00Z', NULL)
+            """
+        )
+        app.conn.commit()
+
+        history = compact_auto_sync_history(app.conn)
+        self.assertEqual(len(history), 3)
+        self.assertEqual(history[0]["status"], "success")
+        self.assertEqual(history[1]["error"], "ошибка авторизации")
+        status = auto_sync_status(app.conn)
+        self.assertTrue(status["enabled"])
+        self.assertTrue(status["configured"])
+        skipped = run_auto_catalog_sync_if_due(app.conn)
+        self.assertEqual(skipped["status"], "skipped")
+        self.assertEqual(skipped["reason"], "not_due")
 
     def test_moysklad_reference_refresh_and_selection_persist_api_entities(self) -> None:
         app = self.make_app()
