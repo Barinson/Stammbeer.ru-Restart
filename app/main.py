@@ -72,6 +72,7 @@ from app.modules.public_views import (
     beer_page,
     contacts_page,
     home_page,
+    maintenance_page,
     password_reset_confirm_page,
     password_reset_request_page,
     public_placeholder_page,
@@ -213,6 +214,16 @@ class StammApp:
                     self.redirect("/admin/login")
                 return user
 
+            def public_content(self) -> dict[str, Any]:
+                content = get_public_site_content(app.conn)
+                if current_customer(app.conn, self.headers.get("Cookie")) is not None:
+                    content["viewer"] = {"is_customer": True}
+                return content
+
+            def maintenance_is_enabled(self, content: dict[str, Any]) -> bool:
+                site = content.get("site") or {}
+                return str(site.get("maintenance_enabled") or "0").strip().lower() not in {"0", "false", "off", "no", ""}
+
             def do_GET(self) -> None:  # noqa: N802
                 path = urllib.parse.urlparse(self.path).path
                 if path == "/healthz":
@@ -225,29 +236,37 @@ class StammApp:
                     else:
                         self.send_html(page("404", "<main class='login'><div class='card'>Файл не найден.</div></main>"), HTTPStatus.NOT_FOUND)
                     return
+                public_content = self.public_content()
+                if not path.startswith("/admin") and not path.startswith("/api/") and self.maintenance_is_enabled(public_content) and self.admin_user() is None:
+                    self.send_html(maintenance_page(public_content), HTTPStatus.SERVICE_UNAVAILABLE)
+                    return
                 if path == "/":
-                    self.send_html(home_page(get_public_site_content(app.conn)))
+                    self.send_html(home_page(public_content))
                     return
                 if path == "/contacts":
-                    self.send_html(contacts_page(get_public_site_content(app.conn)))
+                    self.send_html(contacts_page(public_content))
+                    return
+                if path == "/beer":
+                    self.send_html(beer_page(public_content))
                     return
                 if path == "/beer":
                     self.send_html(beer_page(get_public_site_content(app.conn)))
                     return
                 if path in PUBLIC_PLACEHOLDER_ROUTES:
                     title, active = PUBLIC_PLACEHOLDER_ROUTES[path]
-                    self.send_html(public_placeholder_page(title, active, get_public_site_content(app.conn)))
+                    self.send_html(public_placeholder_page(title, active, public_content))
                     return
                 if path in BUSINESS_STOREFRONT_REDIRECTS:
                     self.redirect(BUSINESS_STOREFRONT_REDIRECTS[path])
                     return
                 if path in BUSINESS_STOREFRONT_ROUTES:
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
-                    content = get_public_site_content(app.conn)
+                    content = self.public_content()
                     if customer is None:
                         self.send_html(business_guest_page(content))
                         return
                     refresh_customer_discount(app.conn, customer)
+                    content["viewer"] = {"is_customer": True}
                     self.send_html(business_storefront_page(content))
                     return
                 if path == PUBLIC_CATALOG_API_ROUTE:
@@ -271,10 +290,10 @@ class StammApp:
                     self.send_json(catalog)
                     return
                 if path == "/account/register":
-                    self.send_html(account_register_page(get_public_site_content(app.conn)))
+                    self.send_html(account_register_page(public_content))
                     return
                 if path == "/account/login":
-                    self.send_html(account_login_page(get_public_site_content(app.conn)))
+                    self.send_html(account_login_page(public_content))
                     return
                 if path == "/account/verify-email":
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -283,18 +302,18 @@ class StammApp:
                         account_message_page(
                             "E-mail подтверждён" if ok else "Ссылка недействительна",
                             "Спасибо, e-mail личного кабинета подтверждён." if ok else "Ссылка подтверждения недействительна или устарела.",
-                            get_public_site_content(app.conn),
+                            public_content,
                             is_error=not ok,
                         ),
                         HTTPStatus.OK if ok else HTTPStatus.BAD_REQUEST,
                     )
                     return
                 if path == "/account/password-reset":
-                    self.send_html(password_reset_request_page(get_public_site_content(app.conn)))
+                    self.send_html(password_reset_request_page(public_content))
                     return
                 if path == "/account/password-reset/confirm":
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-                    self.send_html(password_reset_confirm_page(query.get("token", [""])[0], get_public_site_content(app.conn)))
+                    self.send_html(password_reset_confirm_page(query.get("token", [""])[0], public_content))
                     return
                 if path == "/account":
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -306,7 +325,7 @@ class StammApp:
                     self.send_html(
                         account_dashboard_page(
                             customer,
-                            get_public_site_content(app.conn),
+                            {**public_content, "viewer": {"is_customer": True}},
                             list_customer_orders(app.conn, customer["id"]),
                             password_result=query.get("password_result", [None])[0],
                             password_error=query.get("password_error", [None])[0],

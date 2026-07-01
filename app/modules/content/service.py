@@ -55,6 +55,15 @@ BUSINESS_DEFAULTS = {
     "business_min_order_amount_minor": "1500000",
 }
 
+SITE_DEFAULTS = {
+    "age_gate_title": "Вам есть 18+?",
+    "age_gate_text": "Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет",
+    "age_gate_confirm_label": "Да, мне есть 18",
+    "age_gate_deny_label": "Нет, мне нет 18",
+    "maintenance_enabled": "0",
+    "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
+}
+
 LAYOUT_DEFAULTS = {
     "menu_offset_home_px": "176",
     "menu_offset_beer_px": "176",
@@ -111,6 +120,8 @@ def ensure_public_content_defaults(conn: sqlite3.Connection) -> None:
     for key, value in TYPOGRAPHY_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for key, value in BUSINESS_DEFAULTS.items():
+        conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
+    for key, value in SITE_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for key, value in LAYOUT_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
@@ -184,6 +195,7 @@ def get_public_site_content(conn: sqlite3.Connection, include_hidden: bool = Fal
         "contacts": contacts,
         "typography": {**TYPOGRAPHY_DEFAULTS, **settings},
         "business": {**BUSINESS_DEFAULTS, **settings},
+        "site": {**SITE_DEFAULTS, **settings},
         "layout": {**LAYOUT_DEFAULTS, **settings},
         "beer": beer,
         "menu": menu,
@@ -257,6 +269,18 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
                 """,
                 (key, str(data.get(key) or "")),
+            )
+    for key in SITE_DEFAULTS:
+        if key in data:
+            value = str(data.get(key) or SITE_DEFAULTS[key])
+            if key == "maintenance_enabled":
+                value = "1" if value.strip().lower() not in {"0", "false", "off", "no"} else "0"
+            conn.execute(
+                """
+                INSERT INTO site_content_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, value),
             )
     for key in LAYOUT_DEFAULTS:
         if key in data:
