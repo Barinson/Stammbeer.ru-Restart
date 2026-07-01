@@ -11,14 +11,17 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from app.config import Settings, load_settings
+from app.integrations.moysklad.auto_sync import auto_sync_status, compact_auto_sync_history, run_auto_catalog_sync_if_due
 from app.integrations.moysklad.catalog_sync import extract_alcohol_percent, infer_container_type, latest_sync_diagnostics, run_manual_catalog_sync
 from app.integrations.moysklad.client import MoyskladClient, normalize_counterparty
 from app.modules.account.service import (
     DiscountRefreshError,
     authenticate_customer,
+    change_customer_password,
     create_customer_session,
     current_customer,
     customer_session_from_cookie,
+    list_customer_orders,
     register_customer,
 )
 from app.integrations.moysklad.settings_service import get_settings, refresh_integration_references, save_settings, serialize_settings
@@ -26,7 +29,8 @@ from app.modules.email import service as email_service
 from app.main import StammApp, admin_stats
 from app.modules.catalog.service import admin_catalog_items, public_catalog, publish_product
 from app.modules.content.service import get_public_site_content, save_public_content
-from app.modules.public_views import business_storefront_page, contacts_page, home_page
+from app.modules.admin.views import admin_catalog_page
+from app.modules.public_views import account_dashboard_page, beer_page, business_storefront_page, contacts_page, home_page, maintenance_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
 
 
@@ -188,11 +192,73 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("ООО Админ Партнёр", users_html)
         self.assertIn("B2B 10%", users_html)
         self.assertIn("подтверждён", users_html)
-        self.assertIn("Сброс пароля", users_html)
+        self.assertIn("Сброс", users_html)
+        self.assertIn("/admin/users/create", users_html)
+        self.assertIn("Временный пароль", users_html)
+        self.assertIn("users-create-grid", users_html)
+        self.assertIn("users-table", users_html)
+        self.assertIn("Приостановить", users_html)
+        self.assertIn("Удалить", users_html)
+
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "token-123",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "360",
+                "stock_sync_interval_minutes": "120",
+                "is_enabled": True,
+            },
+            admin["id"],
+        )
+        original_urlopen = urllib.request.urlopen
+
+        def fake_urlopen(request, timeout=0):
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            if "api.moysklad.ru" not in url:
+                return original_urlopen(request, timeout=timeout)
+            rows = [] if "filter=inn%3D7700000000" in url else [
+                {
+                    "id": "counterparty-created",
+                    "name": "ООО Новый Партнёр",
+                    "inn": "7709998887",
+                    "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-created"},
+                }
+            ]
+            return FakeMoyskladResponse(json.dumps({"rows": rows}).encode("utf-8"))
+
+        urllib.request.urlopen = fake_urlopen
+        try:
+            create_missing = urllib.request.Request(
+                base + "/admin/users/create",
+                data=urllib.parse.urlencode({"inn": "7700000000", "email": "missing-admin@example.com", "temporary_password": "secret123"}).encode("utf-8"),
+                headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            missing_response = open_without_redirects(create_missing)
+            self.assertEqual(missing_response.status, 303)
+            self.assertIn("error=", missing_response.headers["Location"])
+            self.assertIsNone(app.conn.execute("SELECT * FROM customer_accounts WHERE email = 'missing-admin@example.com'").fetchone())
+
+            create_ok = urllib.request.Request(
+                base + "/admin/users/create",
+                data=urllib.parse.urlencode({"inn": "7709998887", "email": "created-admin@example.com", "temporary_password": "secret123"}).encode("utf-8"),
+                headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            created_response = open_without_redirects(create_ok)
+        finally:
+            urllib.request.urlopen = original_urlopen
+        self.assertEqual(created_response.status, 303)
+        self.assertIn("result=", created_response.headers["Location"])
+        created_account = authenticate_customer(app.conn, "created-admin@example.com", "secret123", refresh_discount=False)
+        self.assertIsNotNone(created_account)
+        self.assertEqual(created_account["counterparty_name"], "ООО Новый Партнёр")
 
         disable = urllib.request.Request(
             base + "/admin/users/status",
-            data=urllib.parse.urlencode({"account_id": customer_id, "status": "disabled"}).encode("utf-8"),
+            data=urllib.parse.urlencode({"account_id": customer_id, "status": "suspended"}).encode("utf-8"),
             headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
             method="POST",
         )
@@ -229,9 +295,35 @@ class CoreFoundationTest(unittest.TestCase):
         )
         self.assertEqual(open_without_redirects(delete).status, 303)
         account = app.conn.execute("SELECT status FROM customer_accounts WHERE id = ?", (customer_id,)).fetchone()
-        self.assertEqual(account["status"], "deleted")
+        self.assertIsNone(account)
         order = app.conn.execute("SELECT number, customer_account_id FROM b2b_orders WHERE number = 'B2B-ADMIN'").fetchone()
-        self.assertEqual(order["customer_account_id"], customer_id)
+        self.assertIsNone(order["customer_account_id"])
+
+        def fake_recreate_urlopen(request, timeout=0):
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            if "api.moysklad.ru" not in url:
+                return original_urlopen(request, timeout=timeout)
+            return FakeMoyskladResponse(json.dumps({"rows": [{
+                "id": "counterparty-admin",
+                "name": "ООО Админ Партнёр",
+                "inn": "7701234567",
+                "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-admin"},
+            }]}).encode("utf-8"))
+
+        urllib.request.urlopen = fake_recreate_urlopen
+        try:
+            recreate = urllib.request.Request(
+                base + "/admin/users/create",
+                data=urllib.parse.urlencode({"inn": "7701234567", "email": "partner-admin@example.com", "temporary_password": "secret123"}).encode("utf-8"),
+                headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            recreate_response = open_without_redirects(recreate)
+        finally:
+            urllib.request.urlopen = original_urlopen
+        self.assertEqual(recreate_response.status, 303)
+        self.assertIn("result=", recreate_response.headers["Location"])
+        self.assertIsNotNone(authenticate_customer(app.conn, "partner-admin@example.com", "secret123", refresh_discount=False))
 
 
     def test_admin_email_management_page_settings_logs_and_manual_actions(self) -> None:
@@ -462,6 +554,12 @@ class CoreFoundationTest(unittest.TestCase):
                 "home_news_link_url": "/business/catalog",
                 "home_news_link_label": "Order now",
                 "business_min_order_amount_minor": "2500000",
+                "age_gate_title": "Проверка возраста",
+                "age_gate_text": "Вам уже исполнилось 18 лет?",
+                "age_gate_confirm_label": "Да, можно",
+                "age_gate_deny_label": "Нет",
+                "maintenance_enabled": "1",
+                "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
                 "contact_email_label_0": "Основной",
                 "contact_email_value_0": "hello@stamm.test",
                 "contact_email_sort_order_0": "20",
@@ -473,11 +571,15 @@ class CoreFoundationTest(unittest.TestCase):
                 "contact_phone_value_0": "+7 999 111-22-33",
                 "contact_phone_sort_order_0": "10",
                 "contact_phone_visible_0": "on",
-                "contacts_address": "Москва, тестовый завод",
+                "contacts_address": "Москва, тестовый завод\nстроение 2",
+                "contacts_address_color": "#C7B166",
                 "contacts_description": "Контакты производства Stamm",
+                "contacts_description_color": "#F6F1E3",
                 "contacts_map_lat": "55.7001",
                 "contacts_map_lng": "37.6002",
                 "contacts_map_zoom": "15",
+                "contacts_map_height_px": "280",
+                "contacts_map_width_px": "360",
                 "contacts_map_title": "Stamm Test Brewery",
                 "typography_nav_font_size_px": "18",
                 "typography_page_title_font_size_px": "52",
@@ -526,6 +628,8 @@ class CoreFoundationTest(unittest.TestCase):
         )
         content = get_public_site_content(app.conn)
         self.assertEqual(content["business"]["business_min_order_amount_minor"], "2500000")
+        self.assertEqual(content["site"]["age_gate_title"], "Проверка возраста")
+        self.assertEqual(content["site"]["maintenance_enabled"], "1")
         self.assertEqual(content["contacts"]["emails"][0]["value"], "hidden@stamm.test")
         self.assertFalse(content["contacts"]["emails"][0]["is_visible"])
         self.assertEqual(content["contacts"]["emails"][1]["value"], "hello@stamm.test")
@@ -535,8 +639,25 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("hello@stamm.test", contacts_html)
         self.assertNotIn("hidden@stamm.test", contacts_html)
         self.assertIn("+7 999 111-22-33", contacts_html)
-        self.assertIn("Москва, тестовый завод", contacts_html)
+        self.assertIn("Москва, тестовый завод\nстроение 2", contacts_html)
+        self.assertIn("color:#F6F1E3", contacts_html)
+        self.assertIn("<span>Адрес</span>", contacts_html)
+        self.assertNotIn("map-info", contacts_html)
+        self.assertNotIn("map-compact-badge", contacts_html)
+        self.assertNotIn("оценка на Яндекс Картах", contacts_html)
+        self.assertNotIn("Stamm Brewing★ оценка на Яндекс Картах", contacts_html)
+        self.assertIn("display:block; line-height:0", contacts_html)
+        self.assertIn("contacts-info-card", contacts_html)
+        self.assertNotIn("<h1>Контакты</h1>", contacts_html)
+        self.assertIn("grid-template-columns:1fr", contacts_html)
+        self.assertIn("justify-self:center", contacts_html)
+        self.assertIn("mode=search", contacts_html)
+        self.assertIn("text=Stamm%20Test%20Brewery", contacts_html)
+        self.assertIn("font-weight:500; white-space:pre-line", contacts_html)
+        self.assertIn("min-height:180px; max-height:420px", contacts_html)
         self.assertIn("Stamm Test Brewery", contacts_html)
+        self.assertIn("--contacts-map-height:280px; --contacts-map-width:360px", contacts_html)
+        self.assertIn("width:min(100%, var(--contacts-map-width))", contacts_html)
         self.assertIn("yandex.ru/map-widget", contacts_html)
         self.assertIn("55.7001", contacts_html)
         self.assertIn("37.6002", contacts_html)
@@ -579,13 +700,195 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Beer list", html)
         self.assertIn("https://untappd.com/stamm", html)
         self.assertIn("/media/untappd.svg", html)
-        self.assertIn("Вам есть 18+?", html)
-        self.assertIn("Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет", html)
-        self.assertIn("Да, мне есть 18", html)
-        self.assertIn("Нет, мне нет 18", html)
+        self.assertIn("Проверка возраста", html)
+        self.assertIn("Вам уже исполнилось 18 лет?", html)
+        self.assertIn("Да, можно", html)
+        self.assertIn("Нет", html)
         self.assertIn("window.history.back()", html)
         self.assertIn("about:blank", html)
-        self.assertIn("stamm_age_confirmed", html)
+        self.assertIn("stamm_age_confirmed_session", html)
+        html_for_customer = home_page({**content, "viewer": {"is_customer": True}})
+        self.assertNotIn("ageGate", html_for_customer)
+        maintenance_html = maintenance_page(content)
+        self.assertIn("Технические работы", maintenance_html)
+        self.assertIn("mailto:marketing@stammbeer.ru", maintenance_html)
+
+    def test_beer_page_content_is_cms_managed(self) -> None:
+        app = self.make_app()
+        save_public_content(
+            app.conn,
+            {
+                "beer_partners_title": "Где найти Stamm Brewing",
+                "beer_partners_description": "Партнёры\nи бары",
+                "home_content_bg_url": "/media/taproom-bg.jpg",
+                "beer_partners_is_visible": "1",
+                "beer_partner_name_0": "Bottle Shop",
+                "beer_partner_logo_url_0": "/media/partner.svg",
+                "beer_partner_url_0": "https://partner.test",
+                "beer_partner_size_0": "large",
+                "beer_partner_sort_order_0": "10",
+                "beer_partner_visible_0": "1",
+                "beer_products_title": "Наша продукция",
+                "beer_new_title": "Новинки",
+                "beer_core_title": "Постоянная линейка",
+                "beer_seasonal_title": "Сезонные сорта",
+                "beer_products_is_visible": "1",
+                "beer_new_is_visible": "1",
+                "beer_core_is_visible": "1",
+                "beer_seasonal_is_visible": "1",
+                "menu_offset_beer_px": "232",
+                "beer_untappd_logo_url": "/media/untappd-global.svg",
+                "beer_popup_backdrop_color": "#123456",
+                "beer_popup_backdrop_opacity": "45",
+                "beer_popup_card_color": "#654321",
+                "beer_popup_card_opacity": "72",
+                "beer_section_gap_px": "104",
+                "beer_product_name_0": "Stamm IPA",
+                "beer_product_style_0": "IPA",
+                "beer_product_abv_0": "6.5%",
+                "beer_product_image_url_0": "/media/ipa.png",
+                "beer_product_untappd_url_0": "https://untappd.com/b/stamm-ipa",
+                "beer_product_category_0": "new",
+                "beer_product_sort_order_0": "10",
+                "beer_product_visible_0": "1",
+                "beer_product_name_1": "Stamm Lager",
+                "beer_product_style_1": "Lager",
+                "beer_product_abv_1": "4.8%",
+                "beer_product_image_url_1": "/media/lager.png",
+                "beer_product_category_1": "core",
+                "beer_product_sort_order_1": "20",
+                "beer_product_visible_1": "1",
+                "beer_product_name_24": "Stamm Saison",
+                "beer_product_style_24": "Saison",
+                "beer_product_abv_24": "5.2%",
+                "beer_product_image_url_24": "/media/saison.png",
+                "beer_product_category_24": "seasonal",
+                "beer_product_sort_order_24": "30",
+                "beer_product_visible_24": "1",
+            },
+        )
+        content = get_public_site_content(app.conn)
+        self.assertEqual(content["beer"]["partners"][0]["name"], "Bottle Shop")
+        html = beer_page(content)
+        self.assertIn("Где найти Stamm Brewing", html)
+        self.assertIn("Партнёры\nи бары", html)
+        self.assertIn('target="_blank"', html)
+        self.assertIn("--logo-size:154px", html)
+        self.assertIn("width:max-content", html)
+        self.assertIn("display:flex; flex-wrap:wrap", html)
+        self.assertIn("--beer-bg:url", html)
+        self.assertIn("linear-gradient(180deg, rgba(16,88,89,.78)", html)
+        self.assertIn("max-width:1440px", html)
+        self.assertIn("gap:104px", html)
+        self.assertIn("width:min(1320px,100%)", html)
+        self.assertIn("display:flex; flex-wrap:wrap; justify-content:center", html)
+        self.assertIn("calc((100% - 128px) / 9)", html)
+        self.assertNotIn("product-subsection--new", html)
+        self.assertIn("--menu-offset:232px", html)
+        self.assertIn(".partner-card:hover img", html)
+        self.assertNotIn("min-height:132px", html)
+        self.assertIn("beer-can--featured", html)
+        self.assertIn("Постоянная линейка", html)
+        self.assertIn("beer-can--seasonal", html)
+        self.assertEqual(len(content["beer"]["products"]), 3)
+        self.assertIn("beer-modal", html)
+        self.assertIn("beer-modal__mockup", html)
+        self.assertIn("rgba(18,52,86,0.45)", html)
+        self.assertIn("background:rgba(101,67,33,0.72)", html)
+        self.assertIn('const untappdLogoUrl = "/media/untappd-global.svg"', html)
+        self.assertNotIn("untappdLogoUrl", html.split("data-product=", 1)[1].split(" aria-label", 1)[0])
+        self.assertIn("style.textContent = data.style || ''", html)
+        self.assertNotIn(">Stamm IPA</span>", html)
+        self.assertIn("https://untappd.com/b/stamm-ipa", html)
+
+
+    def test_admin_catalog_uses_compact_table_styles(self) -> None:
+        html = admin_catalog_page(
+            "admin@example.test",
+            [{
+                "id": "product-1",
+                "public_name": "Stamm IPA 0.5",
+                "container_type": "can",
+                "price_minor": 25000,
+                "currency": "RUB",
+                "available_quantity": 24,
+                "availability_status": "in_stock",
+                "latest_stock": 30,
+                "latest_reserve": 6,
+                "sync_state": "synced",
+                "is_published": True,
+                "last_synced_at": "2026-06-29",
+            }],
+        )
+        self.assertIn("admin-catalog-card", html)
+        self.assertIn("admin-catalog-table", html)
+        self.assertIn("font-size:12px", html)
+        self.assertIn("font-size:11px", html)
+        self.assertIn("font-weight:600", html)
+        self.assertIn("stamm_admin_catalog_scroll", html)
+        self.assertIn("admin-catalog-publication-form", html)
+
+    def test_business_catalog_exactly_follows_admin_publication_flags(self) -> None:
+        app = self.make_app()
+        product_id = self.add_catalog_item(app, "Stamm Exact IPA", "keg", "stamm-exact-ipa")
+        self.assertEqual([item["productId"] for item in public_catalog(app.conn)["items"]], [product_id])
+
+        publish_product(app.conn, product_id, False)
+        self.assertEqual(public_catalog(app.conn)["items"], [])
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items WHERE product_id = ?", (product_id,)).fetchone()[0], 0)
+
+        publish_product(app.conn, product_id, True)
+        self.assertEqual([item["productId"] for item in public_catalog(app.conn)["items"]], [product_id])
+
+        app.conn.execute("UPDATE product_overrides SET is_published = 0 WHERE product_id = ?", (product_id,))
+        app.conn.execute(
+            """
+            INSERT INTO business_catalog_items (product_id, slug, public_name, price_minor, currency, container_type, availability_status, search_text)
+            VALUES (?, 'stale-visible', 'Stale visible row', 10000, 'RUB', 'keg', 'available', 'Stale visible row')
+            """,
+            (product_id,),
+        )
+        app.conn.commit()
+        self.assertEqual(public_catalog(app.conn)["items"], [])
+
+        app.conn.execute("UPDATE product_overrides SET is_published = 1 WHERE product_id = ?", (product_id,))
+        app.conn.execute("DELETE FROM business_catalog_items WHERE product_id = ?", (product_id,))
+        app.conn.commit()
+        self.assertEqual([item["productId"] for item in public_catalog(app.conn)["items"]], [product_id])
+
+
+    def test_public_cms_text_preserves_line_breaks_without_raw_html(self) -> None:
+        app = self.make_app()
+        save_public_content(
+            app.conn,
+            {
+                "home_news_text": "Строка 1\nСтрока 2\n<script>alert(1)</script>",
+                "contacts_address": "Адрес 1\nАдрес 2\n<em>не html</em>",
+                "contacts_address_is_visible": "0",
+                "contacts_address_color": "#C7B166",
+                "contacts_description": "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>",
+                "contacts_description_is_visible": "0",
+                "contacts_description_color": "#F6F1E3",
+            },
+        )
+        content = get_public_site_content(app.conn)
+        self.assertEqual(content["home"]["home_news_text"], "Строка 1\nСтрока 2\n<script>alert(1)</script>")
+        self.assertEqual(content["contacts"]["contacts_address"], "Адрес 1\nАдрес 2\n<em>не html</em>")
+        self.assertEqual(content["contacts"]["contacts_address_is_visible"], "0")
+        self.assertEqual(content["contacts"]["contacts_description"], "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>")
+        self.assertEqual(content["contacts"]["contacts_description_is_visible"], "0")
+        home_html = home_page(content)
+        contacts_html = contacts_page(content)
+        self.assertIn("white-space:pre-line", home_html)
+        self.assertIn("Строка 1\nСтрока 2", home_html)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", home_html)
+        self.assertNotIn("<script>alert(1)</script>", home_html)
+        self.assertIn("white-space:pre-line", contacts_html)
+        self.assertNotIn("Адрес 1\nАдрес 2", contacts_html)
+        self.assertNotIn("&lt;em&gt;не html&lt;/em&gt;", contacts_html)
+        self.assertNotIn("Контакты 1\r\nКонтакты 2", contacts_html)
+        self.assertNotIn("&lt;strong&gt;не html&lt;/strong&gt;", contacts_html)
+
 
     def test_admin_content_uploads_logo_and_nav_icon_assets(self) -> None:
         app = self.make_app()
@@ -615,6 +918,33 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('for="cms-tab-contacts"', admin_content_html)
         self.assertIn("Контакты", admin_content_html)
         self.assertIn("contacts-map-picker", admin_content_html)
+        self.assertIn('for="cms-tab-beer"', admin_content_html)
+        self.assertIn("beer_core_title", admin_content_html)
+        self.assertIn("data-add-beer-product", admin_content_html)
+        self.assertIn('data-dynamic-list="beer-products-new"', admin_content_html)
+        self.assertIn('data-dynamic-list="beer-products-core"', admin_content_html)
+        self.assertIn('data-dynamic-list="beer-products-seasonal"', admin_content_html)
+        self.assertIn("data-delete-beer-product", admin_content_html)
+        self.assertIn("beer-product-fields", admin_content_html)
+        self.assertIn("beer-asset-fields", admin_content_html)
+        self.assertIn("beer_untappd_logo_file", admin_content_html)
+        self.assertIn("beer_popup_backdrop_color", admin_content_html)
+        self.assertIn("beer_popup_backdrop_opacity", admin_content_html)
+        self.assertIn("beer_popup_card_color", admin_content_html)
+        self.assertIn("beer_popup_card_opacity", admin_content_html)
+        self.assertIn("beer_section_gap_px", admin_content_html)
+        self.assertNotIn("beer_product_untappd_logo_file_0", admin_content_html)
+        self.assertIn("stamm_admin_content_scroll", admin_content_html)
+        self.assertIn("contacts_map_height_px", admin_content_html)
+        self.assertIn("contacts_map_width_px", admin_content_html)
+        self.assertIn("Высота карты, px", admin_content_html)
+        self.assertIn("Ширина карты, px", admin_content_html)
+        self.assertIn("contacts_address_is_visible", admin_content_html)
+        self.assertIn("contacts_description_is_visible", admin_content_html)
+        self.assertIn("contacts_address_color", admin_content_html)
+        self.assertIn("contacts_description_color", admin_content_html)
+        self.assertIn('min="180" max="420"', admin_content_html)
+        self.assertIn('min="280" max="640"', admin_content_html)
         self.assertIn("api-maps.yandex.ru", admin_content_html)
         self.assertNotIn("Широта<input", admin_content_html)
         self.assertNotIn("Долгота<input", admin_content_html)
@@ -623,6 +953,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('for="cms-tab-typography"', admin_content_html)
         self.assertIn("Типографика", admin_content_html)
         self.assertIn("typography_product_title_font_size_px", admin_content_html)
+        self.assertIn("menu_offset_home_px", admin_content_html)
+        self.assertIn("Отступ контента от меню — Пиво", admin_content_html)
 
         parts = [
             field("home_hero_title", "STAMM"),
@@ -646,14 +978,24 @@ class CoreFoundationTest(unittest.TestCase):
             field("contact_email_label_0", "Основной"), field("contact_email_value_0", "admin@stamm.test"), field("contact_email_sort_order_0", "10"), field("contact_email_visible_0", "on"),
             field("contact_email_label_1", "Скрытая почта"), field("contact_email_value_1", "hidden-admin@stamm.test"), field("contact_email_sort_order_1", "20"),
             field("contact_phone_label_0", "Отдел продаж"), field("contact_phone_value_0", "+7 999 000-00-00"), field("contact_phone_sort_order_0", "10"), field("contact_phone_visible_0", "on"),
-            field("contacts_address", "Админский адрес завода"),
+            field("contacts_address", "Админский адрес завода\nкорпус 1"),
+            field("contacts_address_is_visible", "1"), field("contacts_address_color", "#C7B166"),
             field("contacts_description", "Описание контактов из админки"),
+            field("contacts_description_is_visible", "1"), field("contacts_description_color", "#F6F1E3"),
             field("contacts_map_lat", "55.7100"), field("contacts_map_lng", "37.6100"),
-            field("contacts_map_zoom", "14"), field("contacts_map_title", "Админская точка Stamm"),
+            field("contacts_map_zoom", "14"), field("contacts_map_height_px", "260"), field("contacts_map_width_px", "380"), field("contacts_map_title", "Админская точка Stamm"),
             field("typography_nav_font_size_px", "19"), field("typography_page_title_font_size_px", "54"),
             field("typography_body_font_size_px", "18"), field("typography_contact_text_font_size_px", "22"),
             field("typography_product_title_font_size_px", "20"), field("typography_price_font_size_px", "24"),
             field("typography_cart_font_size_px", "16"),
+            field("menu_offset_home_px", "210"), field("menu_offset_beer_px", "230"),
+            field("menu_offset_visit_px", "190"), field("menu_offset_history_px", "200"),
+            field("menu_offset_business_px", "240"), field("menu_offset_contacts_px", "220"),
+            field("beer_untappd_logo_url", ""),
+            file_field("beer_untappd_logo_file", "untappd.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'></svg>"),
+            field("beer_popup_backdrop_color", "#224466"), field("beer_popup_backdrop_opacity", "35"),
+            field("beer_popup_card_color", "#335577"), field("beer_popup_card_opacity", "80"),
+            field("beer_section_gap_px", "96"),
             field("menu_beer_label", "Пиво"), field("menu_beer_sort_order", "10"), field("menu_beer_visible", "on"),
             field("menu_visit_label", "Посетить пивоварню"), field("menu_visit_sort_order", "20"), field("menu_visit_visible", "on"),
             field("menu_history_label", "История"), field("menu_history_sort_order", "30"), field("menu_history_visible", "on"),
@@ -694,6 +1036,16 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("--stamm-page-title-font-size:54px", contacts_page(content))
         self.assertIn("--stamm-product-title-font-size:20px", business_storefront_page(content))
         self.assertIn("--stamm-price-font-size:24px", business_storefront_page(content))
+        self.assertEqual(content["layout"]["menu_offset_home_px"], "210")
+        self.assertTrue(content["beer"]["beer_untappd_logo_url"].startswith("/media/beer-untappd-"))
+        self.assertEqual(content["beer"]["beer_popup_backdrop_color"], "#224466")
+        self.assertEqual(content["beer"]["beer_popup_backdrop_opacity"], "35")
+        self.assertEqual(content["beer"]["beer_popup_card_color"], "#335577")
+        self.assertEqual(content["beer"]["beer_popup_card_opacity"], "80")
+        self.assertEqual(content["beer"]["beer_section_gap_px"], "96")
+        self.assertIn("--menu-offset:210px", home_page(content))
+        self.assertIn("--menu-offset:220px", contacts_page(content))
+        self.assertIn("--menu-offset:240px", business_storefront_page(content))
         tg = next(item for item in content["actions"] if item["key"] == "tg")
         self.assertTrue(tg["icon_url"].startswith("/media/nav-tg-"))
         self.assertIn(content["home"]["home_logo_url"], home_page(content))
@@ -786,7 +1138,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("submitOrder", html)
         self.assertIn("/api/public/business/order", html)
         self.assertIn("Вам есть 18+?", html)
-        self.assertIn("stamm_age_confirmed", html)
+        self.assertIn("stamm_age_confirmed_session", html)
         self.assertIn("Stamm Brewing</a>", html)
         self.assertNotIn('href="/">Главная</a>', html)
         self.assertIn("Untappd", html)
@@ -822,20 +1174,77 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Вам есть 18+?", home_html)
         self.assertIn("Да, мне есть 18", home_html)
         self.assertIn("Нет, мне нет 18", home_html)
+        self.assertIn("sessionStorage", home_html)
+        self.assertIn("stamm_age_confirmed_session", home_html)
         self.assertNotIn('href="/">Главная</a>', home_html)
 
         for path in ("/business", "/business/catalog"):
             response = urllib.request.urlopen(base + path, timeout=5)
             self.assertEqual(response.status, 200)
             body = response.read().decode("utf-8")
-            self.assertIn("Корзина", body)
-            self.assertNotIn("<h1>БИЗНЕС</h1>", body)
+            self.assertIn("Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru", body)
+            self.assertIn("business-guest__message", body)
+            self.assertNotIn("business-guest__card", body)
+            self.assertNotIn("Корзина", body)
+            self.assertNotIn("/api/public/business/catalog", body)
+
+        from app.modules.auth.security import hash_password
+        customer_id = app.conn.execute(
+            """
+            INSERT INTO customer_accounts (email, password_hash, inn, counterparty_id, counterparty_href, counterparty_name, counterparty_meta_json)
+            VALUES ('route-buyer@example.com', ?, '7701234567', 'counterparty-route', 'https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-route', 'ООО Route Buyer', '{}')
+            """,
+            (hash_password("secret123"),),
+        ).lastrowid
+        app.conn.commit()
+        session_id = create_customer_session(app.conn, customer_id)
+        auth_request = urllib.request.Request(base + "/business", headers={"Cookie": f"stamm_customer_session={session_id}"})
+        auth_body = urllib.request.urlopen(auth_request, timeout=5).read().decode("utf-8")
+        self.assertIn("Корзина", auth_body)
+        self.assertIn("/api/public/business/catalog", auth_body)
 
         redirects = {"/business/": "/business", "/business/catalog/": "/business/catalog"}
         for path, expected_location in redirects.items():
             response = open_without_redirects(base + path)
             self.assertEqual(response.status, 303)
             self.assertEqual(response.headers["Location"], expected_location)
+
+    def test_maintenance_mode_closes_public_site_but_not_admin(self) -> None:
+        app = self.make_app()
+        save_public_content(
+            app.conn,
+            {
+                "maintenance_enabled": "1",
+                "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
+            },
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        for path in ("/", "/contacts", "/beer", "/business", "/visit", "/api/public/business/catalog"):
+            response = open_without_redirects(base + path)
+            self.assertEqual(response.status, 503)
+            body = response.read().decode("utf-8")
+            self.assertIn("Сайт находится на технических работах", body)
+            self.assertIn("mailto:marketing@stammbeer.ru", body)
+
+        admin_login = urllib.request.urlopen(base + "/admin/login", timeout=5)
+        self.assertEqual(admin_login.status, 200)
+        self.assertIn("Вход", admin_login.read().decode("utf-8"))
+        admin_user = authenticate(app.conn, "admin", "1")
+        admin_cookie = cookie_header(create_session(app.conn, admin_user["id"]))
+        admin_public_request = urllib.request.Request(base + "/contacts", headers={"Cookie": admin_cookie})
+        opener = urllib.request.build_opener(NoRedirect)
+        try:
+            opener.open(admin_public_request, timeout=5)
+            self.fail("Public contacts must remain behind maintenance even with an admin cookie")
+        except urllib.error.HTTPError as exc:
+            self.assertEqual(exc.status, 503)
+            self.assertIn("Сайт находится на технических работах", exc.read().decode("utf-8"))
 
     def test_public_catalog_api_endpoint_returns_local_data(self) -> None:
         app = self.make_app()
@@ -845,8 +1254,21 @@ class CoreFoundationTest(unittest.TestCase):
         thread.start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
+        from app.modules.auth.security import hash_password
+        customer_id = app.conn.execute(
+            """
+            INSERT INTO customer_accounts (email, password_hash, inn, counterparty_id, counterparty_href, counterparty_name, counterparty_meta_json)
+            VALUES ('catalog-buyer@example.com', ?, '7701234567', 'counterparty-catalog', 'https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-catalog', 'ООО Catalog Buyer', '{}')
+            """,
+            (hash_password("secret123"),),
+        ).lastrowid
+        app.conn.commit()
+        session_id = create_customer_session(app.conn, customer_id)
         url = f"http://127.0.0.1:{server.server_port}/api/public/business/catalog?containerType=keg"
-        payload = urllib.request.urlopen(url, timeout=5).read().decode("utf-8")
+        anonymous = open_without_redirects(url)
+        self.assertEqual(anonymous.code, 401)
+        self.assertIn("Чтобы стать нашим партнёром", anonymous.read().decode("utf-8"))
+        payload = urllib.request.urlopen(urllib.request.Request(url, headers={"Cookie": f"stamm_customer_session={session_id}"}), timeout=5).read().decode("utf-8")
         data = json.loads(payload)
         self.assertEqual(data["meta"]["source"], "local_read_model")
         self.assertEqual(len(data["items"]), 1)
@@ -1234,7 +1656,7 @@ class CoreFoundationTest(unittest.TestCase):
             publish_product(app.conn, unavailable_id, True)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 1)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_jobs WHERE status = 'success'").fetchone()[0], 2)
-        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_logs").fetchone()[0], 5)
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_logs").fetchone()[0], 4)
 
         publish_product(app.conn, products[0]["id"], True)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 1)
@@ -1314,6 +1736,46 @@ class CoreFoundationTest(unittest.TestCase):
         product = admin_catalog_items(app.conn)[0]
         self.assertEqual(product["source_folder_href"], grandchild_href)
         self.assertEqual(product["container_type"], "can")
+
+
+    def test_moysklad_auto_sync_status_uses_interval_and_compact_history(self) -> None:
+        app = self.make_app()
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "token",
+                "store_href": "https://api.moysklad.ru/api/remap/1.2/entity/store/store-1",
+                "source_product_folder_href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "60",
+                "stock_sync_interval_minutes": "30",
+                "is_enabled": True,
+            },
+            None,
+        )
+        app.conn.execute(
+            """
+            INSERT INTO moysklad_sync_jobs (type, status, trigger_source, started_at, finished_at, error_summary)
+            VALUES
+              ('auto_catalog', 'success', 'auto', '2999-07-01T10:00:00Z', '2999-07-01T10:01:00Z', NULL),
+              ('auto_catalog', 'failed', 'auto', '2026-07-01T09:00:00Z', '2026-07-01T09:01:00Z', 'ошибка авторизации'),
+              ('auto_catalog', 'success', 'auto', '2026-07-01T08:00:00Z', '2026-07-01T08:01:00Z', NULL),
+              ('auto_catalog', 'success', 'auto', '2026-07-01T07:00:00Z', '2026-07-01T07:01:00Z', NULL)
+            """
+        )
+        app.conn.commit()
+
+        history = compact_auto_sync_history(app.conn)
+        self.assertEqual(len(history), 3)
+        self.assertEqual(history[0]["status"], "success")
+        self.assertEqual(history[1]["error"], "ошибка авторизации")
+        status = auto_sync_status(app.conn)
+        self.assertTrue(status["enabled"])
+        self.assertTrue(status["configured"])
+        skipped = run_auto_catalog_sync_if_due(app.conn)
+        self.assertEqual(skipped["status"], "skipped")
+        self.assertEqual(skipped["reason"], "not_due")
 
     def test_moysklad_reference_refresh_and_selection_persist_api_entities(self) -> None:
         app = self.make_app()
@@ -1558,6 +2020,28 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIsNotNone(loaded)
         self.assertEqual(loaded["counterparty_name"], "ООО Штамм Партнёр")
         self.assertIsNone(current_user(app.conn, cookie))
+        order_id = app.conn.execute(
+            """
+            INSERT INTO b2b_orders (
+                number, status, contact_name, company_name, inn, email, phone, city,
+                total_minor, currency, source_json, customer_account_id, counterparty_href
+            ) VALUES (
+                'B2B-LK-1', 'sent_to_moysklad', 'partner@example.com', 'ООО Штамм Партнёр',
+                '7701234567', 'partner@example.com', '—', '—', 1250000, 'RUB', '{}', ?, ?
+            )
+            """,
+            (customer["id"], customer["counterparty_href"]),
+        ).lastrowid
+        app.conn.execute(
+            """
+            INSERT INTO b2b_order_items (
+                order_id, product_id, variant_id, quantity, price_minor, line_total_minor,
+                product_snapshot_json, availability_snapshot_json
+            ) VALUES (?, NULL, NULL, 24, 50000, 1200000, ?, '{}')
+            """,
+            (order_id, json.dumps({"name": "Stamm IPA банка"}, ensure_ascii=False)),
+        )
+        app.conn.commit()
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -1569,8 +2053,52 @@ class CoreFoundationTest(unittest.TestCase):
         request = urllib.request.Request(base + "/account", headers={"Cookie": cookie})
         page_html = urllib.request.urlopen(request, timeout=5).read().decode("utf-8")
         self.assertIn("ООО Штамм Партнёр", page_html)
-        self.assertIn("Контрагент МойСклад найден", page_html)
-        self.assertIn("Диагностика скидки МойСклад", page_html)
+        self.assertIn("История заказов", page_html)
+        self.assertIn("Заказ 1", page_html)
+        self.assertNotIn("B2B-LK-1", page_html)
+        self.assertIn("Stamm IPA банка", page_html)
+        self.assertIn("Смена пароля", page_html)
+        self.assertIn("Забыл пароль", page_html)
+        self.assertIn("Выйти", page_html)
+        self.assertIn("account-actions account-actions--single-row", page_html)
+        self.assertIn('form="logoutForm"', page_html)
+        self.assertNotIn("Здесь собраны данные B2B-аккаунта, история заказов и управление паролем.", page_html)
+        self.assertIn('form="forgotPasswordForm"', page_html)
+        self.assertIn('action="/account/password-reset"', page_html)
+        self.assertNotIn("Контрагент МойСклад найден", page_html)
+        self.assertNotIn("Диагностика скидки МойСклад", page_html)
+        self.assertNotIn("Персональный тип цен", page_html)
+        self.assertNotIn("Персональная скидка", page_html)
+        self.assertNotIn("Обновлена", page_html)
+        self.assertNotIn("Статус связи", page_html)
+        self.assertNotIn("Статус: sent_to_moysklad", page_html)
+        self.assertNotIn("2026-06-29T", page_html)
+        app.conn.execute("UPDATE customer_accounts SET discount_percent = 7.5, discount_synced_at = '2026-06-29T00:00:00Z' WHERE id = ?", (customer["id"],))
+        app.conn.commit()
+        discounted_html = urllib.request.urlopen(request, timeout=5).read().decode("utf-8")
+        self.assertIn("Персональная скидка", discounted_html)
+        self.assertIn("7.5%", discounted_html)
+        bad_password = open_without_redirects(
+            urllib.request.Request(
+                base + "/account/password",
+                data=urllib.parse.urlencode({"current_password": "wrong", "new_password": "newsecret123", "new_password_confirm": "newsecret123"}).encode("utf-8"),
+                headers={"Cookie": cookie},
+                method="POST",
+            )
+        )
+        self.assertEqual(bad_password.code, 303)
+        self.assertIn("password_error", bad_password.headers["Location"])
+        ok_password = open_without_redirects(
+            urllib.request.Request(
+                base + "/account/password",
+                data=urllib.parse.urlencode({"current_password": "secret123", "new_password": "newsecret123", "new_password_confirm": "newsecret123"}).encode("utf-8"),
+                headers={"Cookie": cookie},
+                method="POST",
+            )
+        )
+        self.assertEqual(ok_password.code, 303)
+        self.assertIn("password_result", ok_password.headers["Location"])
+        self.assertIsNotNone(authenticate_customer(app.conn, "partner@example.com", "newsecret123", refresh_discount=False))
 
         anonymous = open_without_redirects(base + "/account")
         self.assertEqual(anonymous.code, 303)
@@ -1708,13 +2236,13 @@ class CoreFoundationTest(unittest.TestCase):
         self.addCleanup(server.shutdown)
         base = f"http://127.0.0.1:{server.server_port}"
 
-        guest = json.loads(urllib.request.urlopen(base + "/api/public/business/catalog", timeout=5).read().decode("utf-8"))
+        guest_response = open_without_redirects(base + "/api/public/business/catalog")
+        self.assertEqual(guest_response.code, 401)
         request_a = urllib.request.Request(base + "/api/public/business/catalog", headers={"Cookie": f"stamm_customer_session={session_a}"})
         request_b = urllib.request.Request(base + "/api/public/business/catalog", headers={"Cookie": f"stamm_customer_session={session_b}"})
         response_a = json.loads(urllib.request.urlopen(request_a, timeout=5).read().decode("utf-8"))
         response_b = json.loads(urllib.request.urlopen(request_b, timeout=5).read().decode("utf-8"))
 
-        self.assertEqual(guest["items"][0]["price"]["amountMinor"], 12300)
         self.assertEqual(response_a["items"][0]["price"]["amountMinor"], 9800)
         self.assertEqual(response_b["items"][0]["price"]["amountMinor"], 8700)
         self.assertEqual(response_a["meta"]["customerPriceType"]["name"], "B2B A")
