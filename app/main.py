@@ -28,6 +28,8 @@ from app.modules.catalog.service import admin_catalog_items, business_min_order_
 from app.modules.account.service import (
     DiscountRefreshError,
     authenticate_customer,
+    change_customer_password,
+    create_customer_account_by_admin,
     create_customer_session,
     current_customer,
     customer_cookie_header,
@@ -35,6 +37,7 @@ from app.modules.account.service import (
     destroy_customer_session,
     expired_customer_cookie_header,
     list_customer_accounts,
+    list_customer_orders,
     refresh_customer_discount,
     register_customer,
     set_customer_account_status,
@@ -64,7 +67,9 @@ from app.modules.public_views import (
     account_login_page,
     account_message_page,
     account_register_page,
+    business_guest_page,
     business_storefront_page,
+    beer_page,
     contacts_page,
     home_page,
     password_reset_confirm_page,
@@ -86,7 +91,6 @@ from app.modules.auth.service import (
 BUSINESS_STOREFRONT_ROUTES = {"/business", "/business/catalog"}
 BUSINESS_STOREFRONT_REDIRECTS = {"/business/": "/business", "/business/catalog/": "/business/catalog"}
 PUBLIC_PLACEHOLDER_ROUTES = {
-    "/beer": ("Пиво", "beer"),
     "/visit": ("Посетить пивоварню", "visit"),
     "/history": ("История", "history"),
 }
@@ -227,6 +231,9 @@ class StammApp:
                 if path == "/contacts":
                     self.send_html(contacts_page(get_public_site_content(app.conn)))
                     return
+                if path == "/beer":
+                    self.send_html(beer_page(get_public_site_content(app.conn)))
+                    return
                 if path in PUBLIC_PLACEHOLDER_ROUTES:
                     title, active = PUBLIC_PLACEHOLDER_ROUTES[path]
                     self.send_html(public_placeholder_page(title, active, get_public_site_content(app.conn)))
@@ -236,24 +243,29 @@ class StammApp:
                     return
                 if path in BUSINESS_STOREFRONT_ROUTES:
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
-                    if customer is not None:
-                        refresh_customer_discount(app.conn, customer)
-                    self.send_html(business_storefront_page(get_public_site_content(app.conn)))
+                    content = get_public_site_content(app.conn)
+                    if customer is None:
+                        self.send_html(business_guest_page(content))
+                        return
+                    refresh_customer_discount(app.conn, customer)
+                    self.send_html(business_storefront_page(content))
                     return
                 if path == PUBLIC_CATALOG_API_ROUTE:
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
-                    if customer is not None:
-                        customer = refresh_customer_discount(app.conn, customer)
+                    if customer is None:
+                        self.send_json({"ok": False, "error": "Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru"}, HTTPStatus.UNAUTHORIZED)
+                        return
+                    customer = refresh_customer_discount(app.conn, customer)
                     content = get_public_site_content(app.conn)
                     minimum_order_minor = business_min_order_amount_minor((content.get("business") or {}).get("business_min_order_amount_minor"))
                     catalog = public_catalog(
                         app.conn,
                         query.get("containerType", [None])[0],
-                        customer["discount_percent"] if customer is not None else 0,
-                        customer["price_type_href"] if customer is not None else None,
-                        customer["price_type_id"] if customer is not None else None,
-                        customer["price_type_name"] if customer is not None else None,
+                        customer["discount_percent"],
+                        customer["price_type_href"],
+                        customer["price_type_id"],
+                        customer["price_type_name"],
                         minimum_order_minor,
                     )
                     self.send_json(catalog)
@@ -285,12 +297,21 @@ class StammApp:
                     self.send_html(password_reset_confirm_page(query.get("token", [""])[0], get_public_site_content(app.conn)))
                     return
                 if path == "/account":
+                    query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
                     if customer is None:
                         self.redirect("/account/login")
                         return
                     customer = refresh_customer_discount(app.conn, customer)
-                    self.send_html(account_dashboard_page(customer, get_public_site_content(app.conn)))
+                    self.send_html(
+                        account_dashboard_page(
+                            customer,
+                            get_public_site_content(app.conn),
+                            list_customer_orders(app.conn, customer["id"]),
+                            password_result=query.get("password_result", [None])[0],
+                            password_error=query.get("password_error", [None])[0],
+                        )
+                    )
                     return
                 if path == "/admin/login":
                     self.send_html(login_page())
@@ -381,10 +402,10 @@ class StammApp:
                     catalog = public_catalog(
                         app.conn,
                         None,
-                        customer["discount_percent"] if customer is not None else 0,
-                        customer["price_type_href"] if customer is not None else None,
-                        customer["price_type_id"] if customer is not None else None,
-                        customer["price_type_name"] if customer is not None else None,
+                        customer["discount_percent"],
+                        customer["price_type_href"],
+                        customer["price_type_id"],
+                        customer["price_type_name"],
                         minimum_order_minor,
                     )
                     catalog_by_id = {str(item["productId"]): item for item in catalog["items"]}
@@ -629,6 +650,22 @@ class StammApp:
                         return
                     self.send_html(account_message_page("Пароль обновлён", message, get_public_site_content(app.conn)))
                     return
+                if path == "/account/password":
+                    customer = current_customer(app.conn, self.headers.get("Cookie"))
+                    if customer is None:
+                        self.redirect("/account/login")
+                        return
+                    form = self.read_form()
+                    ok, message = change_customer_password(
+                        app.conn,
+                        customer["id"],
+                        form.get("current_password", ""),
+                        form.get("new_password", ""),
+                        form.get("new_password_confirm", ""),
+                    )
+                    target = "password_result" if ok else "password_error"
+                    self.redirect(f"/account?{target}=" + urllib.parse.quote(message))
+                    return
                 if path == "/account/logout":
                     destroy_customer_session(app.conn, customer_session_from_cookie(self.headers.get("Cookie")))
                     self.redirect("/account/login", {"Set-Cookie": expired_customer_cookie_header()})
@@ -737,6 +774,15 @@ class StammApp:
                     except Exception as exc:
                         self.redirect("/admin/email?error=" + urllib.parse.quote(str(exc)))
                         return
+                if path == "/admin/users/create":
+                    user = self.require_admin()
+                    if user is None:
+                        return
+                    form = self.read_form()
+                    result = create_customer_account_by_admin(app.conn, form.get("inn", ""), form.get("email", ""), form.get("temporary_password", ""))
+                    target = "result" if result.ok else "error"
+                    self.redirect(f"/admin/users?{target}=" + urllib.parse.quote(result.message))
+                    return
                 if path in {"/admin/users/status", "/admin/users/delete", "/admin/users/reset-password"}:
                     user = self.require_admin()
                     if user is None:
@@ -791,10 +837,19 @@ class StammApp:
                     news_file = files.get("home_news_image_file")
                     if news_file:
                         form["home_news_image_url"] = self.save_uploaded_media(news_file, "home-news")
+                    beer_untappd_logo_file = files.get("beer_untappd_logo_file")
+                    if beer_untappd_logo_file:
+                        form["beer_untappd_logo_url"] = self.save_uploaded_media(beer_untappd_logo_file, "beer-untappd")
                     for field_name, upload in files.items():
                         if field_name.startswith("action_") and field_name.endswith("_icon_file"):
                             key = field_name.removeprefix("action_").removesuffix("_icon_file")
                             form[f"action_{key}_icon_url"] = self.save_uploaded_media(upload, f"nav-{key}")
+                        if field_name.startswith("beer_partner_logo_file_"):
+                            index = field_name.removeprefix("beer_partner_logo_file_")
+                            form[f"beer_partner_logo_url_{index}"] = self.save_uploaded_media(upload, f"beer-partner-{index}")
+                        if field_name.startswith("beer_product_image_file_"):
+                            index = field_name.removeprefix("beer_product_image_file_")
+                            form[f"beer_product_image_url_{index}"] = self.save_uploaded_media(upload, f"beer-product-{index}")
                     save_public_content(app.conn, form)
                     self.redirect("/admin/content?result=" + urllib.parse.quote("Контент сохранён"))
                     return
