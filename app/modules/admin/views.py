@@ -473,7 +473,6 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     contacts_map_height_px = str(contacts.get("contacts_map_height_px") or "240")
     contacts_map_width_px = str(contacts.get("contacts_map_width_px") or "420")
     contacts_map_title = str(contacts.get("contacts_map_title") or "Stamm Brewing")
-    map_preview_src = f"https://yandex.ru/map-widget/v1/?ll={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}&z={escape(contacts_map_zoom)}&pt={escape(contacts_map_lng)}%2C{escape(contacts_map_lat)}%2Cpm2goldm"
     typography_tokens = [
         ("typography_nav_font_size_px", "Пункты меню"),
         ("typography_page_title_font_size_px", "Главный заголовок страницы"),
