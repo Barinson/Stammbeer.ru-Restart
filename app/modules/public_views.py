@@ -767,8 +767,8 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; justify-items:center; gap:4px; }}
     .contact-list span {{ color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
     .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); font-weight:500; white-space:pre-line; }}
-    .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:grid; align-self:start; justify-self:center; }}
-    .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; }}
+    .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:block; line-height:0; align-self:start; justify-self:center; }}
+    .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; vertical-align:top; }}
     @media (max-width:880px) {{ .contacts-info-card {{ justify-self:stretch; }} .map-card {{ width:100%; justify-self:stretch; }} }}
   </style>
 </head>
