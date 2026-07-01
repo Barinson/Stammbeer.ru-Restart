@@ -5,7 +5,7 @@ from html import escape
 from urllib.parse import quote
 from typing import Any
 
-from app.modules.content.service import ACTION_DEFAULTS, BUSINESS_DEFAULTS, CONTACT_DEFAULTS, HOME_DEFAULTS, LAYOUT_DEFAULTS, MENU_DEFAULTS, TYPOGRAPHY_DEFAULTS
+from app.modules.content.service import ACTION_DEFAULTS, BUSINESS_DEFAULTS, CONTACT_DEFAULTS, HOME_DEFAULTS, LAYOUT_DEFAULTS, MENU_DEFAULTS, SITE_DEFAULTS, TYPOGRAPHY_DEFAULTS
 
 
 PUBLIC_HEAD = """<meta charset=\"utf-8\">
@@ -49,6 +49,8 @@ def public_content_or_defaults(content: dict[str, Any] | None = None) -> dict[st
         "contacts": {**CONTACT_DEFAULTS, **((content or {}).get("contacts") or {})},
         "typography": {**TYPOGRAPHY_DEFAULTS, **((content or {}).get("typography") or {})},
         "layout": {**LAYOUT_DEFAULTS, **((content or {}).get("layout") or {})},
+        "site": {**SITE_DEFAULTS, **((content or {}).get("site") or {})},
+        "viewer": (content or {}).get("viewer") or {},
         "menu": (content or {}).get("menu") or MENU_DEFAULTS,
         "actions": (content or {}).get("actions") or ACTION_DEFAULTS,
     }
@@ -105,50 +107,76 @@ def public_nav(active: str, content: dict[str, Any] | None = None) -> str:
   </nav>"""
 
 
-def age_gate_markup() -> str:
-    return """
+def age_gate_markup(content: dict[str, Any] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
+    if (site_content.get("viewer") or {}).get("is_customer"):
+        return ""
+    site = site_content.get("site") or {}
+    title = escape(str(site.get("age_gate_title") or SITE_DEFAULTS["age_gate_title"]))
+    text = cms_text(site.get("age_gate_text") or SITE_DEFAULTS["age_gate_text"])
+    confirm_label = escape(str(site.get("age_gate_confirm_label") or SITE_DEFAULTS["age_gate_confirm_label"]))
+    deny_label = escape(str(site.get("age_gate_deny_label") or SITE_DEFAULTS["age_gate_deny_label"]))
+    return f"""
   <div class="age-gate" id="ageGate" role="dialog" aria-modal="true" aria-labelledby="ageGateTitle">
     <div class="age-gate__card">
-      <h2 id="ageGateTitle">Вам есть 18+?</h2>
-      <p>Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет</p>
+      <h2 id="ageGateTitle">{title}</h2>
+      <p>{text}</p>
       <div class="age-gate__actions">
-        <button type="button" id="ageGateConfirm">Да, мне есть 18</button>
-        <button type="button" class="age-gate__deny" id="ageGateReject">Нет, мне нет 18</button>
+        <button type="button" id="ageGateConfirm">{confirm_label}</button>
+        <button type="button" class="age-gate__deny" id="ageGateReject">{deny_label}</button>
       </div>
     </div>
   </div>
   <script>
-    (function () {
-      const storageKey = "stamm_age_confirmed";
+    (function () {{
       const gate = document.getElementById("ageGate");
       const button = document.getElementById("ageGateConfirm");
       const rejectButton = document.getElementById("ageGateReject");
       if (!gate || !button || !rejectButton) return;
-      function unlock() {
+      function unlock() {{
         gate.classList.add("is-hidden");
         document.body.classList.remove("age-gate-pending");
-      }
-      try {
-        if (window.localStorage.getItem(storageKey) === "yes") {
-          unlock();
-          return;
-        }
-      } catch (error) {}
+      }}
       document.body.classList.add("age-gate-pending");
-      button.addEventListener("click", function () {
-        try { window.localStorage.setItem(storageKey, "yes"); } catch (error) {}
-        unlock();
-      });
-      rejectButton.addEventListener("click", function () {
-        if (window.history.length > 1) {
+      button.addEventListener("click", unlock);
+      rejectButton.addEventListener("click", function () {{
+        if (window.history.length > 1) {{
           window.history.back();
           return;
-        }
+        }}
         window.location.href = "about:blank";
-      });
-    })();
+      }});
+    }})();
   </script>"""
 
+
+def maintenance_page(content: dict[str, Any] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
+    site = site_content.get("site") or {}
+    raw_text = str(site.get("maintenance_text") or SITE_DEFAULTS["maintenance_text"])
+    text_html = cms_text(raw_text).replace(
+        "marketing@stammbeer.ru",
+        '<a href="mailto:marketing@stammbeer.ru">marketing@stammbeer.ru</a>',
+    )
+    return f"""<!doctype html>
+<html lang="ru">
+<head>
+  {PUBLIC_HEAD}
+  <title>Stamm Brewing · Технические работы</title>
+  <style>
+{BASE_CSS}
+{typography_style(site_content)}
+    .maintenance-shell {{ min-height:100vh; display:grid; place-items:center; padding:120px min(6vw,72px) 72px; text-align:center; background:radial-gradient(circle at 50% 18%, rgba(199,177,102,.16), transparent 30%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .maintenance-message {{ width:min(760px,100%); margin:0; color:var(--foam); font-size:clamp(18px,2.2vw,28px); line-height:1.45; white-space:pre-line; }}
+    .maintenance-message a {{ color:var(--golden-malt); text-decoration:none; }}
+  </style>
+</head>
+<body>
+  <main class="maintenance-shell" aria-label="Технические работы">
+    <p class="maintenance-message">{text_html}</p>
+  </main>
+</body>
+</html>"""
 
 def css_px(value: object, fallback: int) -> str:
     try:
@@ -312,7 +340,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
       </section>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
@@ -356,6 +384,7 @@ ACCOUNT_CSS = """
 
 
 def account_register_page(content: dict[str, Any] | None = None, error: str | None = None, values: dict[str, str] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
     values = values or {}
     message = f'<div class="account-message is-error">{escape(error)}</div>' if error else ""
     return f"""<!doctype html>
@@ -365,12 +394,12 @@ def account_register_page(content: dict[str, Any] | None = None, error: str | No
   <title>Регистрация · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>Регистрация</h1>
@@ -396,12 +425,13 @@ def account_register_page(content: dict[str, Any] | None = None, error: str | No
       </form>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
 
 def account_login_page(content: dict[str, Any] | None = None, error: str | None = None, values: dict[str, str] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
     values = values or {}
     message = f'<div class="account-message is-error">{escape(error)}</div>' if error else ""
     return f"""<!doctype html>
@@ -411,12 +441,12 @@ def account_login_page(content: dict[str, Any] | None = None, error: str | None 
   <title>Вход · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>Вход</h1>
@@ -437,12 +467,13 @@ def account_login_page(content: dict[str, Any] | None = None, error: str | None 
       </form>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
 
 def account_message_page(title: str, message: str, content: dict[str, Any] | None = None, is_error: bool = False) -> str:
+    site_content = public_content_or_defaults(content)
     message_class = "account-message is-error" if is_error else "account-message"
     return f"""<!doctype html>
 <html lang="ru">
@@ -451,12 +482,12 @@ def account_message_page(title: str, message: str, content: dict[str, Any] | Non
   <title>{escape(title)} · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>{escape(title)}</h1>
@@ -467,12 +498,13 @@ def account_message_page(title: str, message: str, content: dict[str, Any] | Non
       </div>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
 
 def password_reset_request_page(content: dict[str, Any] | None = None, message: str | None = None, error: str | None = None, values: dict[str, str] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
     values = values or {}
     notice = ""
     if error:
@@ -486,12 +518,12 @@ def password_reset_request_page(content: dict[str, Any] | None = None, message: 
   <title>Восстановление пароля · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>Восстановление пароля</h1>
@@ -508,12 +540,13 @@ def password_reset_request_page(content: dict[str, Any] | None = None, message: 
       </form>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
 
 def password_reset_confirm_page(token: str, content: dict[str, Any] | None = None, error: str | None = None) -> str:
+    site_content = public_content_or_defaults(content)
     notice = f'<div class="account-message is-error">{escape(error)}</div>' if error else ""
     return f"""<!doctype html>
 <html lang="ru">
@@ -522,12 +555,12 @@ def password_reset_confirm_page(token: str, content: dict[str, Any] | None = Non
   <title>Новый пароль · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>Новый пароль</h1>
@@ -548,7 +581,7 @@ def password_reset_confirm_page(token: str, content: dict[str, Any] | None = Non
       </form>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
@@ -617,6 +650,8 @@ def account_dashboard_page(
     password_result: str | None = None,
     password_error: str | None = None,
 ) -> str:
+    site_content = public_content_or_defaults(content)
+    site_content["viewer"] = {"is_customer": True}
     orders = orders or []
     notice = ""
     if password_error:
@@ -650,12 +685,12 @@ def account_dashboard_page(
   <title>Личный кабинет · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>Кабинет</h1>
@@ -698,7 +733,7 @@ def account_dashboard_page(
       </section>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
@@ -787,7 +822,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
       </div>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
@@ -916,7 +951,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
       document.addEventListener('keydown', function (event) {{ if (event.key === 'Escape') close(); }});
     }})();
   </script>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
@@ -937,9 +972,9 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
   </style>
 </head>
 <body>
-{public_nav(active, content)}
+{public_nav(active, site_content)}
   <main class="placeholder" style="--menu-offset:{menu_offset_px(site_content, active)};"><section class="placeholder__card"><h1>{title}</h1><p>Раздел будет собираться после ядра B2B-магазина и админки.</p></section></main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
@@ -965,7 +1000,7 @@ def business_guest_page(content: dict[str, Any] | None = None) -> str:
   <main class="business-guest" style="--menu-offset:{menu_offset_px(site_content, 'business')};">
     <p class="business-guest__message">{escape(message)}</p>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
@@ -1297,6 +1332,6 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     renderCart();
     loadCatalog();
   </script>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
