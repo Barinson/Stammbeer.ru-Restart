@@ -124,12 +124,17 @@ def customer_accounts_page(user_email: str, accounts: list[object], query: str =
         notice = f"<div class='error'>{escape(error)}</div>"
 
     def status_label(status: object) -> str:
-        labels = {"active": "активен", "disabled": "деактивирован", "deleted": "удалён"}
+        labels = {"active": "активен", "suspended": "приостановлен", "disabled": "приостановлен"}
         return labels.get(str(status), str(status or "—"))
 
-    if accounts:
-        rows = "".join(
-            f"""
+    def render_account_row(account: object) -> str:
+        account_status = str(account["status"] or "")
+        if account_status == "disabled":
+            account_status = "suspended"
+        next_status = "suspended" if account_status == "active" else "active"
+        status_button = "Приостановить" if account_status == "active" else "Активировать"
+        reset_disabled = "" if account_status == "active" else "disabled"
+        return f"""
             <tr>
               <td class='users-id'>#{escape(str(account['id']))}</td>
               <td><strong>{escape(str(account['email']))}</strong><small>{'подтверждён' if account['email_verified_at'] else 'не подтверждён'}</small></td>
@@ -142,24 +147,25 @@ def customer_accounts_page(user_email: str, accounts: list[object], query: str =
                 <div class='users-actions'>
                   <form method='post' action='/admin/users/status'>
                     <input type='hidden' name='account_id' value='{escape(str(account['id']))}'>
-                    <input type='hidden' name='status' value='{'disabled' if account['status'] == 'active' else 'active'}'>
-                    <button class='users-button' type='submit' {'disabled' if account['status'] == 'deleted' else ''}>{'Деакт.' if account['status'] == 'active' else 'Актив.'}</button>
+                    <input type='hidden' name='status' value='{next_status}'>
+                    <button class='users-button' type='submit'>{status_button}</button>
                   </form>
                   <form method='post' action='/admin/users/reset-password'>
                     <input type='hidden' name='account_id' value='{escape(str(account['id']))}'>
-                    <button class='users-button secondary' type='submit' {'disabled' if account['status'] != 'active' else ''}>Сброс</button>
+                    <button class='users-button secondary' type='submit' {reset_disabled}>Сброс</button>
                   </form>
-                  <form method='post' action='/admin/users/delete' onsubmit="return confirm('Мягко удалить пользователя и закрыть активные сессии? История заказов сохранится.');">
+                  <form method='post' action='/admin/users/delete' onsubmit="return confirm('Полностью удалить аккаунт? E-mail и ИНН снова станут доступны для создания нового пользователя. История заказов будет сохранена без привязки к удалённому аккаунту.');">
                     <input type='hidden' name='account_id' value='{escape(str(account['id']))}'>
                     <input type='hidden' name='confirm' value='yes'>
-                    <button class='users-button' type='submit' {'disabled' if account['status'] == 'deleted' else ''}>Удалить</button>
+                    <button class='users-button danger' type='submit'>Удалить</button>
                   </form>
                 </div>
               </td>
             </tr>
             """
-            for account in accounts
-        )
+
+    if accounts:
+        rows = "".join(render_account_row(account) for account in accounts)
         table = f"""
         <div class='users-table-wrap'>
           <table class='users-table'>
@@ -213,7 +219,7 @@ def customer_accounts_page(user_email: str, accounts: list[object], query: str =
         </div>
         <div class='card'>
           <h3>Зарегистрированные пользователи</h3>
-          <p class='muted'>Деактивация и мягкое удаление закрывают активные сессии, но сохраняют связь с контрагентом и историю заказов.</p>
+          <p class='muted'>Приостановка закрывает активные сессии и запрещает вход, не удаляя связь с контрагентом. Удаление полностью убирает аккаунт и освобождает e-mail/ИНН для повторного создания.</p>
           <form method='get' action='/admin/users' class='users-filter'>
             <label>Поиск по e-mail, ИНН или организации
               <input name='q' value='{escape(query)}' placeholder='partner@example.com / 770... / ООО'>
