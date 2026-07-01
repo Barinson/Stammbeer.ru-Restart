@@ -129,6 +129,7 @@ def age_gate_markup(content: dict[str, Any] | None = None) -> str:
   </div>
   <script>
     (function () {{
+      const storageKey = "stamm_age_confirmed_session";
       const gate = document.getElementById("ageGate");
       const button = document.getElementById("ageGateConfirm");
       const rejectButton = document.getElementById("ageGateReject");
@@ -137,8 +138,17 @@ def age_gate_markup(content: dict[str, Any] | None = None) -> str:
         gate.classList.add("is-hidden");
         document.body.classList.remove("age-gate-pending");
       }}
+      try {{
+        if (window.sessionStorage.getItem(storageKey) === "yes") {{
+          unlock();
+          return;
+        }}
+      }} catch (error) {{}}
       document.body.classList.add("age-gate-pending");
-      button.addEventListener("click", unlock);
+      button.addEventListener("click", function () {{
+        try {{ window.sessionStorage.setItem(storageKey, "yes"); }} catch (error) {{}}
+        unlock();
+      }});
       rejectButton.addEventListener("click", function () {{
         if (window.history.length > 1) {{
           window.history.back();
