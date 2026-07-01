@@ -608,6 +608,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertNotIn("map-info", contacts_html)
         self.assertNotIn("map-compact-badge", contacts_html)
         self.assertNotIn("оценка на Яндекс Картах", contacts_html)
+        self.assertNotIn("Stamm Brewing★ оценка на Яндекс Картах", contacts_html)
+        self.assertIn("display:block; line-height:0", contacts_html)
         self.assertIn("contacts-info-card", contacts_html)
         self.assertNotIn("<h1>Контакты</h1>", contacts_html)
         self.assertIn("grid-template-columns:1fr", contacts_html)
