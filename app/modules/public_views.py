@@ -721,7 +721,6 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
             phones = []
     address = str(contacts.get("contacts_address") or "")
     address_is_visible = is_enabled(contacts.get("contacts_address_is_visible"), True)
-    address_color = css_text_color(contacts.get("contacts_address_color"), "var(--foam)")
     description = str(contacts.get("contacts_description") or "")
     description_is_visible = is_enabled(contacts.get("contacts_description_is_visible"), True)
     description_color = css_text_color(contacts.get("contacts_description_color"), "rgba(246,241,227,.78)")
@@ -750,7 +749,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     map_query = quote(title or "Stamm Brewing")
     map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&mode=search&text={map_query}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
     description_markup = f'<p style="color:{escape(description_color)}">{cms_text(description)}</p>' if description_is_visible and description else ""
-    address_markup = f'<ul class="contact-list"><li><span>Адрес</span><strong style="color:{escape(address_color)}">{cms_text(address)}</strong></li></ul>' if address_is_visible and address else ""
+    address_markup = f'<ul class="contact-list"><li><span>Адрес</span><strong>{cms_text(address)}</strong></li></ul>' if address_is_visible and address else ""
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -767,7 +766,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     .contact-list {{ list-style:none; margin:22px 0 0; padding:0; display:grid; gap:12px; }}
     .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; justify-items:center; gap:4px; }}
     .contact-list span {{ color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
-    .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); }}
+    .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); font-weight:500; white-space:pre-line; }}
     .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:grid; align-self:start; justify-self:center; }}
     .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; }}
     @media (max-width:880px) {{ .contacts-info-card {{ justify-self:stretch; }} .map-card {{ width:100%; justify-self:stretch; }} }}
