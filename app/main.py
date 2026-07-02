@@ -72,6 +72,7 @@ from app.modules.public_views import (
     business_storefront_page,
     beer_page,
     contacts_page,
+    gallery_page,
     home_page,
     maintenance_page,
     password_reset_confirm_page,
@@ -94,7 +95,6 @@ BUSINESS_STOREFRONT_ROUTES = {"/business", "/business/catalog"}
 BUSINESS_STOREFRONT_REDIRECTS = {"/business/": "/business", "/business/catalog/": "/business/catalog"}
 PUBLIC_PLACEHOLDER_ROUTES = {
     "/visit": ("Посетить пивоварню", "visit"),
-    "/history": ("История", "history"),
 }
 PUBLIC_CATALOG_API_ROUTE = "/api/public/business/catalog"
 PUBLIC_ORDER_API_ROUTE = "/api/public/business/order"
@@ -105,7 +105,7 @@ INDEXABLE_PUBLIC_ROUTES = {
     "/business": "Бизнес",
     "/contacts": "Контакты",
     "/visit": "Stammhaus",
-    "/history": "История",
+    "/gallery": "Галерея",
 }
 
 def _site_base_url(content: dict[str, Any], settings: Settings) -> str:
@@ -293,6 +293,12 @@ class StammApp:
                     return
                 if path == "/beer":
                     self.send_html(beer_page(public_content))
+                    return
+                if path == "/gallery":
+                    self.send_html(gallery_page(public_content))
+                    return
+                if path == "/history":
+                    self.redirect("/gallery")
                     return
                 if path in PUBLIC_PLACEHOLDER_ROUTES:
                     title, active = PUBLIC_PLACEHOLDER_ROUTES[path]
@@ -923,6 +929,9 @@ class StammApp:
                         if field_name.startswith("beer_product_image_file_"):
                             index = field_name.removeprefix("beer_product_image_file_")
                             form[f"beer_product_image_url_{index}"] = self.save_uploaded_media(upload, f"beer-product-{index}")
+                        if field_name.startswith("gallery_item_image_file_"):
+                            index = field_name.removeprefix("gallery_item_image_file_")
+                            form[f"gallery_item_image_url_{index}"] = self.save_uploaded_media(upload, f"gallery-{index}")
                     save_public_content(app.conn, form)
                     self.redirect("/admin/content?result=" + urllib.parse.quote("Контент сохранён"))
                     return

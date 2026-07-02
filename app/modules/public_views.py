@@ -5,7 +5,7 @@ from html import escape
 from urllib.parse import quote
 from typing import Any
 
-from app.modules.content.service import ACTION_DEFAULTS, BUSINESS_DEFAULTS, CONTACT_DEFAULTS, HOME_DEFAULTS, LAYOUT_DEFAULTS, MENU_DEFAULTS, SITE_DEFAULTS, TYPOGRAPHY_DEFAULTS
+from app.modules.content.service import ACTION_DEFAULTS, BUSINESS_DEFAULTS, CONTACT_DEFAULTS, GALLERY_DEFAULTS, HOME_DEFAULTS, LAYOUT_DEFAULTS, MENU_DEFAULTS, SITE_DEFAULTS, TYPOGRAPHY_DEFAULTS
 
 
 PUBLIC_HEAD = """<meta charset=\"utf-8\">
@@ -20,7 +20,7 @@ SEO_DEFAULTS = {
     "business": ("Бизнес · Stamm Brewing", "B2B-раздел Stamm Brewing для партнёров, заказов и сотрудничества."),
     "contacts": ("Контакты Stamm Brewing", "Контакты Stamm Brewing: e-mail, телефоны, адрес производства и карта."),
     "visit": ("Stammhaus · Посетить пивоварню", "Информация о посещении пивоварни Stamm Brewing и будущих гостевых разделах."),
-    "history": ("История Stamm Brewing", "История и развитие Stamm Brewing."),
+    "gallery": ("Галерея Stamm Brewing", "Фотогалерея Stamm Brewing: производство, команда, события и атмосфера пивоварни."),
     "maintenance": ("Технические работы · Stamm Brewing", "Сайт Stamm Brewing временно находится на технических работах."),
 }
 
@@ -106,6 +106,7 @@ def public_content_or_defaults(content: dict[str, Any] | None = None) -> dict[st
         "typography": {**TYPOGRAPHY_DEFAULTS, **((content or {}).get("typography") or {})},
         "layout": {**LAYOUT_DEFAULTS, **((content or {}).get("layout") or {})},
         "site": {**SITE_DEFAULTS, **((content or {}).get("site") or {})},
+        "gallery": {**GALLERY_DEFAULTS, **((content or {}).get("gallery") or {})},
         "viewer": (content or {}).get("viewer") or {},
         "menu": (content or {}).get("menu") or MENU_DEFAULTS,
         "actions": (content or {}).get("actions") or ACTION_DEFAULTS,
@@ -1035,6 +1036,111 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
         if (event.target === modal || event.target.closest('.beer-modal__close')) close();
       }});
       document.addEventListener('keydown', function (event) {{ if (event.key === 'Escape') close(); }});
+    }})();
+  </script>
+{age_gate_markup(site_content)}
+</body>
+</html>"""
+
+def gallery_page(content: dict[str, Any] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
+    gallery = site_content.get("gallery") or {}
+    visible_items = [
+        item for item in gallery.get("items", [])
+        if item.get("image_url") and is_enabled(item.get("is_visible"), True)
+    ]
+    gallery_cards = []
+    for index, item in enumerate(visible_items):
+        image_url = escape(str(item.get("image_url") or ""))
+        caption = str(item.get("caption") or "")
+        caption_html = f"<span>{escape(caption)}</span>" if caption else ""
+        size = str(item.get("size") or "medium")
+        if size not in {"small", "medium", "large"}:
+            size = "medium"
+        gallery_cards.append(
+            f"""
+            <button class="gallery-card gallery-card--{escape(size)}" type="button" data-gallery-open data-gallery-src="{image_url}" data-gallery-caption="{escape(caption)}" aria-label="Открыть фото {index + 1}">
+              <img src="{image_url}" alt="{escape(caption or 'Фото Stamm Brewing')}" loading="lazy">
+              {caption_html}
+            </button>
+            """
+        )
+    cards_html = "".join(gallery_cards) or "<p class='gallery-empty'>Галерея скоро пополнится новыми фотографиями Stamm Brewing.</p>"
+    title = str(gallery.get("gallery_title") or GALLERY_DEFAULTS["gallery_title"])
+    description = str(gallery.get("gallery_description") or "")
+    description_html = f"<p>{cms_text(description)}</p>" if description else ""
+    return f"""<!doctype html>
+<html lang="ru">
+<head>
+  {seo_head(site_content, "gallery", "/gallery")}
+  <style>
+{BASE_CSS}
+{typography_style(site_content)}
+    .gallery-page {{ min-height:100vh; padding:calc(var(--menu-offset,176px) + 22px) min(5vw,64px) 84px; background:radial-gradient(circle at 18% 12%, rgba(199,177,102,.16), transparent 30%), linear-gradient(180deg, rgba(16,88,89,.96), rgba(11,63,64,.98)); }}
+    .gallery-shell {{ width:min(1440px,100%); margin:0 auto; }}
+    .gallery-hero {{ max-width:820px; margin:0 auto 42px; text-align:center; }}
+    .gallery-hero h1 {{ margin:0; color:var(--golden-malt); font-size:var(--stamm-page-title-font-size,42px); line-height:.95; text-transform:uppercase; letter-spacing:.08em; }}
+    .gallery-hero p {{ margin:16px auto 0; color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.55; white-space:pre-line; }}
+    .gallery-grid {{ display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); grid-auto-flow:dense; gap:14px; }}
+    .gallery-card {{ position:relative; min-height:230px; grid-column:span 2; border:0; padding:0; overflow:hidden; border-radius:28px; background:rgba(246,241,227,.08); cursor:pointer; box-shadow:0 22px 60px rgba(0,0,0,.2); }}
+    .gallery-card--small {{ grid-column:span 2; min-height:220px; }}
+    .gallery-card--medium {{ grid-column:span 3; min-height:300px; }}
+    .gallery-card--large {{ grid-column:span 4; grid-row:span 2; min-height:430px; }}
+    .gallery-card img {{ width:100%; height:100%; position:absolute; inset:0; object-fit:cover; display:block; transform:scale(1.01); transition:transform .45s ease, filter .45s ease; }}
+    .gallery-card::after {{ content:""; position:absolute; inset:0; background:linear-gradient(180deg, transparent 50%, rgba(11,63,64,.78)); opacity:.74; transition:opacity .35s ease; }}
+    .gallery-card span {{ position:absolute; left:18px; right:18px; bottom:16px; z-index:1; color:var(--foam); font-weight:700; font-size:15px; line-height:1.25; text-align:left; }}
+    .gallery-card:hover img {{ transform:scale(1.07); filter:saturate(1.05); }}
+    .gallery-card:hover::after {{ opacity:.92; }}
+    .gallery-empty {{ margin:0 auto; max-width:620px; color:rgba(246,241,227,.72); text-align:center; }}
+    .gallery-lightbox {{ position:fixed; inset:0; z-index:900; display:none; place-items:center; padding:28px; background:rgba(7,32,33,.88); backdrop-filter:blur(12px); }}
+    .gallery-lightbox.is-open {{ display:grid; }}
+    .gallery-lightbox__inner {{ width:min(1120px,100%); display:grid; gap:14px; justify-items:center; }}
+    .gallery-lightbox img {{ max-width:100%; max-height:78vh; object-fit:contain; border-radius:22px; box-shadow:0 30px 90px rgba(0,0,0,.42); }}
+    .gallery-lightbox p {{ margin:0; color:var(--foam); font-weight:600; text-align:center; }}
+    .gallery-lightbox button {{ border:0; border-radius:999px; padding:10px 16px; background:var(--golden-malt); color:var(--ink); font-weight:900; cursor:pointer; }}
+    @media (max-width:980px) {{ .gallery-grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} .gallery-card, .gallery-card--small, .gallery-card--medium, .gallery-card--large {{ grid-column:span 1; grid-row:span 1; min-height:260px; }} }}
+    @media (max-width:620px) {{ .gallery-page {{ padding-left:18px; padding-right:18px; }} .gallery-grid {{ grid-template-columns:1fr; }} .gallery-card {{ min-height:280px; border-radius:22px; }} }}
+  </style>
+</head>
+<body>
+{public_nav("history", site_content)}
+  <main class="gallery-page" style="--menu-offset:{menu_offset_px(site_content, 'history')};">
+    <section class="gallery-shell">
+      <div class="gallery-hero"><h1>{escape(title)}</h1>{description_html}</div>
+      <div class="gallery-grid">{cards_html}</div>
+    </section>
+  </main>
+  <div class="gallery-lightbox" id="galleryLightbox" aria-hidden="true">
+    <div class="gallery-lightbox__inner">
+      <img src="" alt="">
+      <p></p>
+      <button type="button" data-gallery-close>Закрыть</button>
+    </div>
+  </div>
+  <script>
+    (function () {{
+      const lightbox = document.getElementById('galleryLightbox');
+      if (!lightbox) return;
+      const image = lightbox.querySelector('img');
+      const caption = lightbox.querySelector('p');
+      function close() {{
+        lightbox.classList.remove('is-open');
+        lightbox.setAttribute('aria-hidden', 'true');
+        if (image) image.src = '';
+      }}
+      document.querySelectorAll('[data-gallery-open]').forEach((button) => {{
+        button.addEventListener('click', () => {{
+          if (!image || !caption) return;
+          image.src = button.dataset.gallerySrc || '';
+          image.alt = button.dataset.galleryCaption || 'Фото Stamm Brewing';
+          caption.textContent = button.dataset.galleryCaption || '';
+          lightbox.classList.add('is-open');
+          lightbox.setAttribute('aria-hidden', 'false');
+        }});
+      }});
+      lightbox.addEventListener('click', (event) => {{ if (event.target === lightbox) close(); }});
+      lightbox.querySelector('[data-gallery-close]')?.addEventListener('click', close);
+      document.addEventListener('keydown', (event) => {{ if (event.key === 'Escape') close(); }});
     }})();
   </script>
 {age_gate_markup(site_content)}
