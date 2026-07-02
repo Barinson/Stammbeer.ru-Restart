@@ -30,6 +30,7 @@ from app.main import StammApp, admin_stats
 from app.modules.catalog.service import admin_catalog_items, public_catalog, publish_product
 from app.modules.content.service import get_public_site_content, save_public_content
 from app.modules.admin.views import admin_catalog_page
+from app.modules import public_views as public_views_module
 from app.modules.public_views import account_dashboard_page, beer_page, business_guest_page, business_storefront_page, contacts_page, home_page, maintenance_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
 
@@ -553,6 +554,11 @@ class CoreFoundationTest(unittest.TestCase):
                 "home_news_image_url": "/media/news.jpg",
                 "home_news_link_url": "/business/catalog",
                 "home_news_link_label": "Order now",
+                "site_public_base_url": "https://example.test",
+                "site_title": "Stamm Test",
+                "site_description": "Тестовое описание Stamm для поиска.",
+                "site_favicon_url": "/media/favicon.svg",
+                "site_og_image_url": "/media/og.jpg",
                 "business_min_order_amount_minor": "2500000",
                 "business_guest_text": "Партнёрам — напишите на marketing@stammbeer.ru",
                 "business_guest_font_size_px": "28",
@@ -637,6 +643,8 @@ class CoreFoundationTest(unittest.TestCase):
             },
         )
         content = get_public_site_content(app.conn)
+        self.assertEqual(content["site"]["site_public_base_url"], "https://example.test")
+        self.assertEqual(content["site"]["site_favicon_url"], "/media/favicon.svg")
         self.assertEqual(content["business"]["business_min_order_amount_minor"], "2500000")
         self.assertEqual(content["business"]["business_guest_text"], "Партнёрам — напишите на marketing@stammbeer.ru")
         self.assertEqual(content["business"]["business_guest_font_size_px"], "28")
@@ -681,6 +689,12 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertNotIn("map-caption", contacts_html)
         html = home_page(content)
         self.assertIn("CUSTOM", html)
+        self.assertIn('<meta name="description" content="Stamm Brewing: крафтовая пивоварня, новости, партнёры и контакты.">', html)
+        self.assertIn('<meta name="robots" content="index,follow">', html)
+        self.assertIn('<link rel="canonical" href="https://example.test/">', html)
+        self.assertIn('<link rel="icon" href="/media/favicon.svg">', html)
+        self.assertIn('<meta property="og:title" content="Stamm Brewing — крафтовая пивоварня">', html)
+        self.assertIn('<meta property="og:image" content="https://example.test/media/og.jpg">', html)
         self.assertIn("GOLD", html)
         self.assertIn("/media/custom-logo.svg", html)
         self.assertIn("Fresh release", html)
@@ -743,6 +757,34 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("/media/maintenance.png", maintenance_html)
         self.assertIn("--maintenance-font-size:30px", maintenance_html)
         self.assertIn("--maintenance-font-weight:700", maintenance_html)
+
+    def test_maintenance_page_uses_safe_fallbacks_with_incomplete_defaults(self) -> None:
+        original_defaults = dict(public_views_module.SITE_DEFAULTS)
+        try:
+            for key in (
+                "maintenance_font_size_px",
+                "maintenance_font_weight",
+                "maintenance_text",
+                "maintenance_image_url",
+                "site_public_base_url",
+            ):
+                public_views_module.SITE_DEFAULTS.pop(key, None)
+            html = public_views_module.maintenance_page(
+                {
+                    "site": {
+                        "maintenance_enabled": "1",
+                        "maintenance_text": "Сервисное окно\nmarketing@stammbeer.ru",
+                    }
+                }
+            )
+        finally:
+            public_views_module.SITE_DEFAULTS.clear()
+            public_views_module.SITE_DEFAULTS.update(original_defaults)
+        self.assertIn("Сервисное окно", html)
+        self.assertIn("mailto:marketing@stammbeer.ru", html)
+        self.assertIn("--maintenance-font-size:24px", html)
+        self.assertIn("--maintenance-font-weight:500", html)
+        self.assertIn('<link rel="canonical" href="https://stammbeer.ru/">', html)
 
     def test_beer_page_content_is_cms_managed(self) -> None:
         app = self.make_app()
@@ -964,6 +1006,11 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("beer_popup_card_color", admin_content_html)
         self.assertIn("beer_popup_card_opacity", admin_content_html)
         self.assertIn("beer_section_gap_px", admin_content_html)
+        self.assertIn("site_public_base_url", admin_content_html)
+        self.assertIn("site_title", admin_content_html)
+        self.assertIn("site_description", admin_content_html)
+        self.assertIn("site_favicon_file", admin_content_html)
+        self.assertIn("site_og_image_file", admin_content_html)
         self.assertIn("age_gate_text_font_size_px", admin_content_html)
         self.assertIn("age_gate_text_font_weight", admin_content_html)
         self.assertIn("maintenance_font_size_px", admin_content_html)
@@ -1013,6 +1060,13 @@ class CoreFoundationTest(unittest.TestCase):
             file_field("home_news_image_file", "news.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"),
             field("home_news_link_url", "/news/admin"),
             field("home_news_link_label", "Читать"),
+            field("site_public_base_url", "https://admin.example"),
+            field("site_title", "Admin Stamm"),
+            field("site_description", "Admin SEO description"),
+            field("site_favicon_url", ""),
+            file_field("site_favicon_file", "favicon.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'></svg>"),
+            field("site_og_image_url", ""),
+            file_field("site_og_image_file", "og.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='630'></svg>"),
             field("business_min_order_amount_minor", "2500000"),
             field("business_guest_text", "Админский текст для партнёров"),
             field("business_guest_font_size_px", "26"),
@@ -1076,9 +1130,18 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertTrue(content["home"]["home_logo_url"].startswith("/media/home-logo-"))
         self.assertTrue(content["home"]["home_news_image_url"].startswith("/media/home-news-"))
         self.assertTrue(content["home"]["home_content_bg_url"].startswith("/media/home-content-bg-"))
+        self.assertTrue(content["site"]["site_favicon_url"].startswith("/media/favicon-"))
+        self.assertTrue(content["site"]["site_og_image_url"].startswith("/media/og-image-"))
+        self.assertEqual(content["site"]["site_public_base_url"], "https://admin.example")
+        self.assertEqual(content["site"]["site_title"], "Admin Stamm")
         self.assertTrue(content["site"]["maintenance_image_url"].startswith("/media/maintenance-"))
         self.assertEqual(content["site"]["maintenance_font_size_px"], "32")
         self.assertEqual(content["site"]["age_gate_text_font_weight"], "550")
+        maintenance_html = maintenance_page(content)
+        self.assertIn(content["site"]["maintenance_image_url"], maintenance_html)
+        self.assertIn("maintenance-image", maintenance_html)
+        self.assertIn("--maintenance-font-size:32px", maintenance_html)
+        self.assertIn("--maintenance-font-weight:750", maintenance_html)
         self.assertEqual(content["business"]["business_guest_text"], "Админский текст для партнёров")
         self.assertEqual(content["business"]["business_guest_font_weight"], "650")
         self.assertEqual(content["home"]["home_news_title"], "Админская новость")
@@ -1238,6 +1301,17 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("sessionStorage", home_html)
         self.assertIn("stamm_age_confirmed_session", home_html)
         self.assertNotIn('href="/">Главная</a>', home_html)
+
+        robots_body = urllib.request.urlopen(base + "/robots.txt", timeout=5).read().decode("utf-8")
+        self.assertIn("User-agent: *", robots_body)
+        self.assertIn("Disallow: /admin", robots_body)
+        self.assertIn("Disallow: /api/", robots_body)
+        self.assertIn("Sitemap: https://stammbeer.ru/sitemap.xml", robots_body)
+        sitemap_body = urllib.request.urlopen(base + "/sitemap.xml", timeout=5).read().decode("utf-8")
+        self.assertIn("<loc>https://stammbeer.ru/beer</loc>", sitemap_body)
+        self.assertIn("<loc>https://stammbeer.ru/contacts</loc>", sitemap_body)
+        self.assertNotIn("/admin", sitemap_body)
+        self.assertNotIn("/api/", sitemap_body)
 
         for path in ("/business", "/business/catalog"):
             response = urllib.request.urlopen(base + path, timeout=5)
@@ -2166,6 +2240,30 @@ class CoreFoundationTest(unittest.TestCase):
         anonymous = open_without_redirects(base + "/account")
         self.assertEqual(anonymous.code, 303)
         self.assertEqual(anonymous.headers["Location"], "/account/login")
+
+        save_public_content(
+            app.conn,
+            {
+                "maintenance_enabled": "1",
+                "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
+            },
+        )
+        logout_response = open_without_redirects(
+            urllib.request.Request(
+                base + "/account/logout",
+                data=b"",
+                headers={"Cookie": cookie},
+                method="POST",
+            )
+        )
+        self.assertEqual(logout_response.code, 303)
+        self.assertEqual(logout_response.headers["Location"], "/account/login")
+        self.assertIn("stamm_customer_session=;", logout_response.headers["Set-Cookie"])
+        maintenance_login = open_without_redirects(base + "/account/login")
+        self.assertEqual(maintenance_login.status, 503)
+        maintenance_body = maintenance_login.read().decode("utf-8")
+        self.assertIn("Сайт находится на технических работах", maintenance_body)
+        self.assertIn("mailto:marketing@stammbeer.ru", maintenance_body)
 
     def test_public_catalog_applies_customer_discount_without_changing_base_catalog_price(self) -> None:
         app = self.make_app()
