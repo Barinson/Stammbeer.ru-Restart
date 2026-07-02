@@ -99,6 +99,41 @@ PUBLIC_PLACEHOLDER_ROUTES = {
 PUBLIC_CATALOG_API_ROUTE = "/api/public/business/catalog"
 PUBLIC_ORDER_API_ROUTE = "/api/public/business/order"
 
+INDEXABLE_PUBLIC_ROUTES = {
+    "/": "Главная",
+    "/beer": "Пиво",
+    "/business": "Бизнес",
+    "/contacts": "Контакты",
+    "/visit": "Stammhaus",
+    "/history": "История",
+}
+
+def _site_base_url(content: dict[str, Any], settings: Settings) -> str:
+    site = content.get("site") or {}
+    return str(site.get("site_public_base_url") or settings.public_base_url).rstrip("/")
+
+def robots_txt(content: dict[str, Any], settings: Settings) -> str:
+    base_url = _site_base_url(content, settings)
+    return "\n".join([
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /admin",
+        "Disallow: /api/",
+        "Disallow: /account",
+        f"Sitemap: {base_url}/sitemap.xml",
+        "",
+    ])
+
+def sitemap_xml(content: dict[str, Any], settings: Settings) -> str:
+    base_url = _site_base_url(content, settings)
+    urls = "".join(
+        f"  <url><loc>{base_url}{path}</loc><changefreq>weekly</changefreq><priority>{'1.0' if path == '/' else '0.8'}</priority></url>\n"
+        for path in INDEXABLE_PUBLIC_ROUTES
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{urls}</urlset>"""
+
 
 def parse_form(body: bytes) -> dict[str, Any]:
     parsed = urllib.parse.parse_qs(body.decode("utf-8"), keep_blank_values=True)
@@ -232,6 +267,12 @@ class StammApp:
                 path = urllib.parse.urlparse(self.path).path
                 if path == "/healthz":
                     self.send_json({"ok": True, "app": app.settings.app_name})
+                    return
+                if path == "/robots.txt":
+                    self.send_bytes(robots_txt(get_public_site_content(app.conn), app.settings).encode("utf-8"), "text/plain; charset=utf-8")
+                    return
+                if path == "/sitemap.xml":
+                    self.send_bytes(sitemap_xml(get_public_site_content(app.conn), app.settings).encode("utf-8"), "application/xml; charset=utf-8")
                     return
                 if path.startswith("/media/"):
                     media_path = Path("var/media") / path.removeprefix("/media/")
@@ -407,6 +448,10 @@ class StammApp:
 
             def do_POST(self) -> None:  # noqa: N802
                 path = urllib.parse.urlparse(self.path).path
+                if path == "/account/logout":
+                    destroy_customer_session(app.conn, customer_session_from_cookie(self.headers.get("Cookie")))
+                    self.redirect("/account/login", {"Set-Cookie": expired_customer_cookie_header()})
+                    return
                 if not path.startswith("/admin") and self.maintenance_is_enabled(self.public_content()):
                     self.send_html(maintenance_page(get_public_site_content(app.conn)), HTTPStatus.SERVICE_UNAVAILABLE)
                     return
@@ -689,10 +734,6 @@ class StammApp:
                     target = "password_result" if ok else "password_error"
                     self.redirect(f"/account?{target}=" + urllib.parse.quote(message))
                     return
-                if path == "/account/logout":
-                    destroy_customer_session(app.conn, customer_session_from_cookie(self.headers.get("Cookie")))
-                    self.redirect("/account/login", {"Set-Cookie": expired_customer_cookie_header()})
-                    return
                 if path == "/admin/login":
                     form = self.read_form()
                     user = authenticate(app.conn, form.get("email", ""), form.get("password", ""))
@@ -860,6 +901,12 @@ class StammApp:
                     news_file = files.get("home_news_image_file")
                     if news_file:
                         form["home_news_image_url"] = self.save_uploaded_media(news_file, "home-news")
+                    site_favicon_file = files.get("site_favicon_file")
+                    if site_favicon_file:
+                        form["site_favicon_url"] = self.save_uploaded_media(site_favicon_file, "favicon")
+                    site_og_image_file = files.get("site_og_image_file")
+                    if site_og_image_file:
+                        form["site_og_image_url"] = self.save_uploaded_media(site_og_image_file, "og-image")
                     maintenance_image_file = files.get("maintenance_image_file")
                     if maintenance_image_file:
                         form["maintenance_image_url"] = self.save_uploaded_media(maintenance_image_file, "maintenance")

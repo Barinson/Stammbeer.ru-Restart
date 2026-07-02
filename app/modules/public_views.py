@@ -14,6 +14,62 @@ PUBLIC_HEAD = """<meta charset=\"utf-8\">
   <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>
   <link href=\"https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700;800;900&display=swap\" rel=\"stylesheet\">"""
 
+SEO_DEFAULTS = {
+    "home": ("Stamm Brewing — крафтовая пивоварня", "Stamm Brewing: крафтовая пивоварня, новости, партнёры и контакты."),
+    "beer": ("Пиво Stamm Brewing", "Раздел пива Stamm Brewing: новинки, постоянная линейка, сезонные сорта и точки продаж."),
+    "business": ("Бизнес · Stamm Brewing", "B2B-раздел Stamm Brewing для партнёров, заказов и сотрудничества."),
+    "contacts": ("Контакты Stamm Brewing", "Контакты Stamm Brewing: e-mail, телефоны, адрес производства и карта."),
+    "visit": ("Stammhaus · Посетить пивоварню", "Информация о посещении пивоварни Stamm Brewing и будущих гостевых разделах."),
+    "history": ("История Stamm Brewing", "История и развитие Stamm Brewing."),
+    "maintenance": ("Технические работы · Stamm Brewing", "Сайт Stamm Brewing временно находится на технических работах."),
+}
+
+
+def _absolute_url(base_url: str, path_or_url: object) -> str:
+    value = str(path_or_url or "").strip()
+    if not value:
+        return ""
+    if value.startswith(("http://", "https://")):
+        return value
+    if not value.startswith("/"):
+        value = "/" + value
+    return base_url.rstrip("/") + value
+
+
+def _site_default(key: str, fallback: str) -> str:
+    value = SITE_DEFAULTS.get(key, fallback)
+    return str(value if value is not None else fallback)
+
+
+def _site_default_int(key: str, fallback: int) -> int:
+    try:
+        return int(str(SITE_DEFAULTS.get(key, fallback) or fallback))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def seo_head(content: dict[str, Any] | None, page_key: str, path: str, title: str | None = None, description: str | None = None, robots: str = "index,follow") -> str:
+    site_content = public_content_or_defaults(content)
+    site = site_content.get("site") or {}
+    default_title, default_description = SEO_DEFAULTS.get(page_key, (str(site.get("site_title") or "Stamm Brewing"), str(site.get("site_description") or "")))
+    title_value = str(title or default_title or site.get("site_title") or "Stamm Brewing")
+    description_value = str(description or default_description or site.get("site_description") or "Stamm Brewing")
+    base_url = str(site.get("site_public_base_url") or _site_default("site_public_base_url", "https://stammbeer.ru")).rstrip("/")
+    canonical = _absolute_url(base_url, path)
+    og_image = _absolute_url(base_url, site.get("site_og_image_url") or site.get("site_favicon_url") or "")
+    favicon = str(site.get("site_favicon_url") or SITE_DEFAULTS.get("site_favicon_url") or "").strip()
+    favicon_link = f'\n  <link rel="icon" href="{escape(favicon)}">' if favicon else ""
+    image_meta = f'\n  <meta property="og:image" content="{escape(og_image)}">' if og_image else ""
+    return f"""{PUBLIC_HEAD}
+  <title>{escape(title_value)}</title>
+  <meta name="description" content="{escape(description_value)}">
+  <meta name="robots" content="{escape(robots)}">
+  <link rel="canonical" href="{escape(canonical)}">{favicon_link}
+  <meta property="og:title" content="{escape(title_value)}">
+  <meta property="og:description" content="{escape(description_value)}">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{escape(canonical)}">{image_meta}"""
+
 
 BASE_CSS = """
     :root { --golden-malt:#C7B166; --noble-hop:#105859; --deep-hop:#0b3f40; --card-hop:#0d4b4c; --card-hop-soft:#145f60; --foam:#F6F1E3; --ink:#172625; --muted:#b8c7c4; --white:#fff; }
@@ -115,14 +171,14 @@ def age_gate_markup(content: dict[str, Any] | None = None) -> str:
     if (site_content.get("viewer") or {}).get("is_customer"):
         return ""
     site = site_content.get("site") or {}
-    title = escape(str(site.get("age_gate_title") or SITE_DEFAULTS["age_gate_title"]))
-    text = cms_text(site.get("age_gate_text") or SITE_DEFAULTS["age_gate_text"])
-    title_size = css_font_px(site.get("age_gate_title_font_size_px"), int(SITE_DEFAULTS["age_gate_title_font_size_px"]), 18, 96)
-    title_weight = css_weight(site.get("age_gate_title_font_weight"), int(SITE_DEFAULTS["age_gate_title_font_weight"]))
-    text_size = css_font_px(site.get("age_gate_text_font_size_px"), int(SITE_DEFAULTS["age_gate_text_font_size_px"]), 12, 64)
-    text_weight = css_weight(site.get("age_gate_text_font_weight"), int(SITE_DEFAULTS["age_gate_text_font_weight"]))
-    confirm_label = escape(str(site.get("age_gate_confirm_label") or SITE_DEFAULTS["age_gate_confirm_label"]))
-    deny_label = escape(str(site.get("age_gate_deny_label") or SITE_DEFAULTS["age_gate_deny_label"]))
+    title = escape(str(site.get("age_gate_title") or _site_default("age_gate_title", "Вам есть 18+?")))
+    text = cms_text(site.get("age_gate_text") or _site_default("age_gate_text", "Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет"))
+    title_size = css_font_px(site.get("age_gate_title_font_size_px"), _site_default_int("age_gate_title_font_size_px", 48), 18, 96)
+    title_weight = css_weight(site.get("age_gate_title_font_weight"), _site_default_int("age_gate_title_font_weight", 900))
+    text_size = css_font_px(site.get("age_gate_text_font_size_px"), _site_default_int("age_gate_text_font_size_px", 18), 12, 64)
+    text_weight = css_weight(site.get("age_gate_text_font_weight"), _site_default_int("age_gate_text_font_weight", 500))
+    confirm_label = escape(str(site.get("age_gate_confirm_label") or _site_default("age_gate_confirm_label", "Да, мне есть 18")))
+    deny_label = escape(str(site.get("age_gate_deny_label") or _site_default("age_gate_deny_label", "Нет, мне нет 18")))
     return f"""
   <div class="age-gate" id="ageGate" role="dialog" aria-modal="true" aria-labelledby="ageGateTitle">
     <div class="age-gate__card" style="--age-gate-title-size:{title_size}; --age-gate-title-weight:{title_weight}; --age-gate-text-size:{text_size}; --age-gate-text-weight:{text_weight};">
@@ -170,20 +226,19 @@ def age_gate_markup(content: dict[str, Any] | None = None) -> str:
 def maintenance_page(content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
     site = site_content.get("site") or {}
-    raw_text = str(site.get("maintenance_text") or SITE_DEFAULTS["maintenance_text"])
+    raw_text = str(site.get("maintenance_text") or _site_default("maintenance_text", "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru"))
     text_html = cms_text(raw_text).replace(
         "marketing@stammbeer.ru",
         '<a href="mailto:marketing@stammbeer.ru">marketing@stammbeer.ru</a>',
     )
-    message_size = css_font_px(site.get("maintenance_font_size_px"), int(SITE_DEFAULTS["maintenance_font_size_px"]), 12, 80)
-    message_weight = css_weight(site.get("maintenance_font_weight"), int(SITE_DEFAULTS["maintenance_font_weight"]))
-    image_url = str(site.get("maintenance_image_url") or "").strip()
+    message_size = css_font_px(site.get("maintenance_font_size_px"), _site_default_int("maintenance_font_size_px", 24), 12, 80)
+    message_weight = css_weight(site.get("maintenance_font_weight"), _site_default_int("maintenance_font_weight", 500))
+    image_url = str(site.get("maintenance_image_url") or _site_default("maintenance_image_url", "")).strip()
     image_html = f'<img class="maintenance-image" src="{escape(image_url)}" alt="">' if image_url else ""
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
-  <title>Stamm Brewing · Технические работы</title>
+  {seo_head(site_content, "maintenance", "/", robots="noindex,follow")}
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
@@ -326,8 +381,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
-  <title>Stamm Brewing · Главная</title>
+  {seo_head(site_content, "home", "/")}
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
@@ -822,8 +876,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
-  <title>Контакты · Stamm Brewing</title>
+  {seo_head(site_content, "contacts", "/contacts")}
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
@@ -911,8 +964,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
-  <title>Пиво · Stamm Brewing</title>
+  {seo_head(site_content, "beer", "/beer")}
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
@@ -995,8 +1047,7 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
-  <title>{title} · Stamm Brewing</title>
+  {seo_head(site_content, active, "/" + active)}
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
@@ -1024,8 +1075,7 @@ def business_guest_page(content: dict[str, Any] | None = None) -> str:
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
-  <title>Бизнес · Stamm Brewing</title>
+  {seo_head(site_content, "business", "/business")}
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
@@ -1049,8 +1099,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
-  <title>Бизнес · Stamm Brewing</title>
+  {seo_head(site_content, "business", "/business")}
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
