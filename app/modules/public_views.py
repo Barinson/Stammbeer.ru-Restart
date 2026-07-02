@@ -242,9 +242,9 @@ def maintenance_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .maintenance-shell {{ min-height:100vh; display:grid; place-items:center; padding:120px min(6vw,72px) 72px; text-align:center; background:radial-gradient(circle at 50% 18%, rgba(199,177,102,.16), transparent 30%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
-    .maintenance-content {{ width:min(800px,100%); display:grid; justify-items:center; gap:22px; }}
-    .maintenance-image {{ max-width:min(520px,86vw); max-height:42vh; width:auto; height:auto; object-fit:contain; border-radius:22px; box-shadow:0 20px 60px rgba(0,0,0,.24); }}
+    .maintenance-shell {{ min-height:100vh; display:grid; place-items:start center; padding:clamp(56px,9vh,96px) min(6vw,72px) 72px; text-align:center; background:radial-gradient(circle at 50% 18%, rgba(199,177,102,.16), transparent 30%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .maintenance-content {{ width:min(800px,100%); display:grid; justify-items:center; gap:28px; }}
+    .maintenance-image {{ max-width:min(520px,86vw); max-height:38vh; width:auto; height:auto; object-fit:contain; display:block; background:transparent; border-radius:0; box-shadow:none; }}
     .maintenance-message {{ width:min(760px,100%); margin:0; color:var(--foam); font-size:var(--maintenance-font-size); font-weight:var(--maintenance-font-weight); line-height:1.45; white-space:pre-line; }}
     .maintenance-message a {{ color:var(--golden-malt); text-decoration:none; }}
   </style>
