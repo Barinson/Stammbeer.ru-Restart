@@ -673,6 +673,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("/media/news.jpg", html)
         self.assertIn("/business/catalog", html)
         self.assertIn("Order now", html)
+        self.assertNotIn('aria-label="Корзина"', html)
+        self.assertNotIn('/business#cart', html)
         self.assertIn("/media/taproom-bg.jpg", html)
         self.assertIn("--home-content-bg:url", html)
         self.assertIn("background-attachment:fixed", html)
@@ -708,6 +710,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("about:blank", html)
         self.assertIn("stamm_age_confirmed_session", html)
         html_for_customer = home_page({**content, "viewer": {"is_customer": True}})
+        self.assertIn('aria-label="Корзина"', html_for_customer)
+        self.assertIn('/business#cart', html_for_customer)
         self.assertNotIn("ageGate", html_for_customer)
         maintenance_html = maintenance_page(content)
         self.assertIn("Технические работы", maintenance_html)
@@ -1186,6 +1190,7 @@ class CoreFoundationTest(unittest.TestCase):
             self.assertIn("business-guest__message", body)
             self.assertNotIn("business-guest__card", body)
             self.assertNotIn("Корзина", body)
+            self.assertNotIn('/business#cart', body)
             self.assertNotIn("/api/public/business/catalog", body)
 
         from app.modules.auth.security import hash_password
@@ -1201,6 +1206,7 @@ class CoreFoundationTest(unittest.TestCase):
         auth_request = urllib.request.Request(base + "/business", headers={"Cookie": f"stamm_customer_session={session_id}"})
         auth_body = urllib.request.urlopen(auth_request, timeout=5).read().decode("utf-8")
         self.assertIn("Корзина", auth_body)
+        self.assertIn('/business#cart', auth_body)
         self.assertIn("/api/public/business/catalog", auth_body)
 
         redirects = {"/business/": "/business", "/business/catalog/": "/business/catalog"}

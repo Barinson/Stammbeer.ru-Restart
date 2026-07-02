@@ -88,9 +88,12 @@ def public_nav(active: str, content: dict[str, Any] | None = None) -> str:
         for item in site_content["menu"]
         if item.get("is_visible", True)
     )
+    viewer_is_customer = bool((site_content.get("viewer") or {}).get("is_customer"))
     action_links = []
     for item in site_content["actions"]:
         if not item.get("is_visible", True):
+            continue
+        if item.get("key") == "cart" and not viewer_is_customer:
             continue
         label = escape(str(item.get("label") or ""))
         icon_url = str(item.get("icon_url") or "")
@@ -103,7 +106,7 @@ def public_nav(active: str, content: dict[str, Any] | None = None) -> str:
   <nav class="top-nav" aria-label="Главная навигация">
     <a class="brand" href="/">Stamm Brewing</a>
     <div class="nav-links">{links}</div>
-    <div class="nav-actions" aria-label="Соцсети и корзина">{actions}</div>
+    <div class="nav-actions" aria-label="Быстрые ссылки">{actions}</div>
   </nav>"""
 
 
