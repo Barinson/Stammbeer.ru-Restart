@@ -413,6 +413,11 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     typography = content.get("typography") or {}
     layout = content.get("layout") or {}
     site = content.get("site") or {}
+    site_public_base_url = str(site.get("site_public_base_url") or "https://stammbeer.ru")
+    site_title = str(site.get("site_title") or "Stamm Brewing")
+    site_description = str(site.get("site_description") or "Stamm Brewing — независимая крафтовая пивоварня, пиво, партнёры и контакты.")
+    site_favicon_url = str(site.get("site_favicon_url") or "")
+    site_og_image_url = str(site.get("site_og_image_url") or "")
     age_gate_title = str(site.get("age_gate_title") or "Вам есть 18+?")
     age_gate_text = str(site.get("age_gate_text") or "Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет")
     age_gate_title_font_size = str(site.get("age_gate_title_font_size_px") or "48")
@@ -771,6 +776,21 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           </section>
 
           <section class="cms-tab-panel cms-panel-site">
+            <div class="card">
+              <h3>SEO и favicon</h3>
+              <p class="muted">Базовые мета-данные используются в публичных страницах, robots.txt и sitemap.xml.</p>
+              <label>Публичный адрес сайта<input name="site_public_base_url" value="{escape(site_public_base_url)}" placeholder="https://stammbeer.ru"></label>
+              <label>Базовый title<input name="site_title" value="{escape(site_title)}"></label>
+              <label>Базовое description<textarea name="site_description" rows="3">{escape(site_description)}</textarea></label>
+              <label>Favicon</label>
+              {f"<p><img src='{escape(site_favicon_url)}' alt='Favicon' style='width:48px; height:48px; object-fit:contain; border-radius:8px;'></p>" if site_favicon_url else "<p class='muted'>Favicon ещё не загружен.</p>"}
+              <input type="hidden" name="site_favicon_url" value="{escape(site_favicon_url)}">
+              <input name="site_favicon_file" type="file" accept="image/*,.ico">
+              <label>OG image</label>
+              {f"<p><img src='{escape(site_og_image_url)}' alt='OG image' style='max-width:220px; max-height:120px; object-fit:contain; border-radius:12px;'></p>" if site_og_image_url else "<p class='muted'>OG image не загружен. Если пусто, для og:image будет использован favicon при наличии.</p>"}
+              <input type="hidden" name="site_og_image_url" value="{escape(site_og_image_url)}">
+              <input name="site_og_image_file" type="file" accept="image/*">
+            </div>
             <div class="card">
               <h3>Окно 18+</h3>
               <p class="muted">Текст этого окна хранится в CMS. Окно показывается обычным посетителям при каждом посещении, но скрывается для авторизованных B2B-пользователей.</p>
