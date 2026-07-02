@@ -547,7 +547,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         ("menu_offset_home_px", "Отступ контента от меню — Главная"),
         ("menu_offset_beer_px", "Отступ контента от меню — Пиво"),
         ("menu_offset_visit_px", "Отступ контента от меню — Stammhaus / Посетить пивоварню"),
-        ("menu_offset_history_px", "Отступ контента от меню — История"),
+        ("menu_offset_history_px", "Отступ контента от меню — Галерея"),
         ("menu_offset_business_px", "Отступ контента от меню — Бизнес"),
         ("menu_offset_contacts_px", "Отступ контента от меню — Контакты"),
     ]
@@ -614,6 +614,27 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         if not beer_product_rows_by_category[category]:
             beer_product_rows_by_category[category] = beer_product_row(len(beer_products) + {'new': 0, 'core': 1, 'seasonal': 2}[category], {"name": "", "style": "", "abv": "", "image_url": "", "untappd_url": "", "category": category, "sort_order": 10, "is_visible": True}, category)
 
+    gallery = content.get("gallery") or {}
+    gallery_items = list(gallery.get("items") or [])
+    if not gallery_items:
+        gallery_items.append({"caption": "", "image_url": "", "size": "medium", "sort_order": 10, "is_visible": True})
+    gallery_rows = "".join(
+        f"""
+        <div class='gallery-admin-row' data-gallery-row>
+          <input type='hidden' name='gallery_item_delete_{index}' value='0' data-gallery-delete-flag>
+          <div class='gallery-admin-fields'>
+            <label>Подпись<input name='gallery_item_caption_{index}' value='{escape(str(item.get('caption') or ''))}'></label>
+            <label>Размер<select name='gallery_item_size_{index}'><option value='small' {'selected' if item.get('size') == 'small' else ''}>маленькая</option><option value='medium' {'selected' if item.get('size') in (None, '', 'medium') else ''}>средняя</option><option value='large' {'selected' if item.get('size') == 'large' else ''}>большая</option></select></label>
+            <label>Порядок<input name='gallery_item_sort_order_{index}' type='number' value='{escape(str(item.get('sort_order') or ((index + 1) * 10)))}'></label>
+            <label class='gallery-row-check'><input type='hidden' name='gallery_item_visible_{index}' value='0'><input name='gallery_item_visible_{index}' type='checkbox' value='1' {'checked' if item.get('is_visible', True) else ''}> Показывать</label>
+            <button class='button secondary gallery-delete-row' type='button' data-delete-gallery-item>Удалить</button>
+          </div>
+          <label class='gallery-asset-field'>Фото{f"<img class='gallery-admin-preview' src='{escape(str(item.get('image_url') or ''))}' alt=''>" if item.get('image_url') else ""}<input type='hidden' name='gallery_item_image_url_{index}' value='{escape(str(item.get('image_url') or ''))}'><input name='gallery_item_image_file_{index}' type='file' accept='image/*'></label>
+        </div>
+        """
+        for index, item in enumerate(gallery_items)
+    )
+
     return page(
         "Контент",
         f"""
@@ -622,7 +643,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .cms-tabs label {{ margin:0; padding:10px 14px; border-radius:999px; background:white; border:1px solid rgba(16,88,89,.16); cursor:pointer; }}
           .cms-tab-input {{ position:absolute; opacity:0; pointer-events:none; }}
           .cms-tab-panel {{ display:none; }}
-          #cms-tab-home:checked ~ form .cms-panel-home, #cms-tab-site:checked ~ form .cms-panel-site, #cms-tab-contacts:checked ~ form .cms-panel-contacts, #cms-tab-beer:checked ~ form .cms-panel-beer, #cms-tab-business:checked ~ form .cms-panel-business, #cms-tab-typography:checked ~ form .cms-panel-typography, #cms-tab-nav:checked ~ form .cms-panel-nav {{ display:block; }}
+          #cms-tab-home:checked ~ form .cms-panel-home, #cms-tab-site:checked ~ form .cms-panel-site, #cms-tab-contacts:checked ~ form .cms-panel-contacts, #cms-tab-beer:checked ~ form .cms-panel-beer, #cms-tab-gallery:checked ~ form .cms-panel-gallery, #cms-tab-business:checked ~ form .cms-panel-business, #cms-tab-typography:checked ~ form .cms-panel-typography, #cms-tab-nav:checked ~ form .cms-panel-nav {{ display:block; }}
           .cms-preview-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; align-items:stretch; }}
           .contact-row {{ display:grid; grid-template-columns:minmax(140px,1fr) minmax(220px,1.5fr) 110px 140px; gap:10px; align-items:end; padding:10px 0; border-top:1px solid rgba(16,88,89,.12); }}
           .contact-row__visible {{ display:flex; gap:8px; align-items:center; padding-bottom:12px; }}
@@ -661,7 +682,16 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .beer-delete-row {{ padding:9px 10px; background:#8a1f1f; }}
           .beer-admin-preview {{ max-width:52px; max-height:52px; object-fit:contain; display:block; margin:0 0 4px; }}
           .admin-add-row {{ margin-top:10px; padding:9px 12px; }}
+          .gallery-admin-row {{ display:grid; grid-template-columns:minmax(0,1fr) minmax(190px,260px); gap:10px; align-items:end; padding:10px 0; border-top:1px solid rgba(16,88,89,.12); }}
+          .gallery-admin-fields {{ display:grid; grid-template-columns:1.4fr .9fr .6fr auto auto; gap:8px; align-items:end; }}
+          .gallery-admin-row label {{ margin:0; font-size:11px; font-weight:600; color:#52615f; }}
+          .gallery-admin-row input:not([type=checkbox]), .gallery-admin-row select {{ padding:6px 8px; border-radius:8px; font-size:11px; font-weight:400; line-height:1.25; }}
+          .gallery-admin-row input[type=file] {{ max-width:138px; color:transparent; font-size:0; padding:0; border:0; background:transparent; }}
+          .gallery-admin-row input[type=file]::file-selector-button {{ margin:0; border:1px solid rgba(16,88,89,.24); border-radius:8px; background:#f6f1e3; color:#172625; padding:6px 9px; font-size:11px; font-weight:700; cursor:pointer; }}
+          .gallery-admin-preview {{ width:70px; height:52px; object-fit:cover; display:block; margin:0 0 5px; border-radius:10px; }}
+          .gallery-delete-row {{ padding:9px 10px; background:#8a1f1f; }}
           @media (max-width:1100px) {{ .beer-product-fields {{ grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); }} }}
+          @media (max-width:1100px) {{ .gallery-admin-row, .gallery-admin-fields {{ grid-template-columns:1fr; }} }}
           @media (max-width:760px) {{ .cms-news-preview {{ grid-template-columns:1fr; }} }}
         </style>
         {notice}
@@ -669,6 +699,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         <input class="cms-tab-input" id="cms-tab-site" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-contacts" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-beer" name="cms_tab" type="radio">
+        <input class="cms-tab-input" id="cms-tab-gallery" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-business" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-typography" name="cms_tab" type="radio">
         <input class="cms-tab-input" id="cms-tab-nav" name="cms_tab" type="radio">
@@ -677,6 +708,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           <label for="cms-tab-site">Сайт / Доступ</label>
           <label for="cms-tab-contacts">Контакты</label>
           <label for="cms-tab-beer">Пиво</label>
+          <label for="cms-tab-gallery">Галерея</label>
           <label for="cms-tab-business">Бизнес / Store settings</label>
           <label for="cms-tab-typography">Типографика</label>
           <label for="cms-tab-nav">Меню / Навигация</label>
@@ -949,6 +981,18 @@ def content_management_page(user_email: str, content: dict[str, object], result:
             </div>
             <p><button type="submit">Сохранить раздел Пиво</button></p>
           </section>
+          <section class="cms-tab-panel cms-panel-gallery">
+            <div class="card">
+              <h3>Галерея</h3>
+              <p class="muted">Современная публичная фотогалерея. Можно добавлять фото, менять порядок, скрывать отдельные карточки и выбирать размер плитки.</p>
+              <label>Заголовок страницы<input name="gallery_title" value="{escape(str(gallery.get('gallery_title') or 'Галерея'))}"></label>
+              <label>Описание<textarea name="gallery_description" rows="3">{escape(str(gallery.get('gallery_description') or ''))}</textarea></label>
+              <h4>Фотографии</h4>
+              <div data-dynamic-list="gallery-items">{gallery_rows}</div>
+              <button class="button secondary admin-add-row" type="button" data-add-gallery-item>+ фото</button>
+            </div>
+            <p><button type="submit">Сохранить галерею</button></p>
+          </section>
           <section class="cms-tab-panel cms-panel-business">
           <div class="card">
             <h3>Бизнес / Заказы</h3>
@@ -1055,6 +1099,25 @@ def content_management_page(user_email: str, content: dict[str, object], result:
                 cloneRow(`beer-products-${{category}}`, 'beer_product_name_', category);
               }});
             }});
+            document.querySelector('[data-add-gallery-item]')?.addEventListener('click', () => {{
+              const list = document.querySelector('[data-dynamic-list="gallery-items"]');
+              if (!list) return;
+              const row = list.querySelector('.gallery-admin-row');
+              if (!row) return;
+              const oldIndex = (row.querySelector('[name^="gallery_item_caption_"]')?.name || '').match(/_(\\d+)$/)?.[1] || '0';
+              const index = nextIndex(document, 'gallery_item_caption_');
+              const clone = row.cloneNode(true);
+              clone.hidden = false;
+              clone.querySelectorAll('input, select').forEach((field) => {{
+                if (field.name) field.name = field.name.replace(new RegExp(`_${{oldIndex}}$`), `_${{index}}`);
+                if (field.type === 'checkbox') field.checked = true;
+                else if (field.type === 'hidden' && field.name.includes('_visible_')) field.value = '0';
+                else if (field.type === 'hidden' && field.dataset.galleryDeleteFlag !== undefined) field.value = '0';
+                else if (field.type !== 'file') field.value = field.tagName === 'SELECT' ? 'medium' : '';
+              }});
+              clone.querySelectorAll('img').forEach((img) => img.remove());
+              list.appendChild(clone);
+            }});
             document.addEventListener('click', (event) => {{
               const button = event.target.closest('[data-delete-beer-product]');
               if (!button) return;
@@ -1062,6 +1125,16 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               const row = button.closest('[data-beer-product-row]');
               if (!row) return;
               const flag = row.querySelector('[data-delete-flag]');
+              if (flag) flag.value = '1';
+              row.hidden = true;
+            }});
+            document.addEventListener('click', (event) => {{
+              const button = event.target.closest('[data-delete-gallery-item]');
+              if (!button) return;
+              if (!window.confirm('Удалить фото из галереи?')) return;
+              const row = button.closest('[data-gallery-row]');
+              if (!row) return;
+              const flag = row.querySelector('[data-gallery-delete-flag]');
               if (flag) flag.value = '1';
               row.hidden = true;
             }});

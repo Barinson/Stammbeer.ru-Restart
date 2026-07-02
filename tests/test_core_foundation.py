@@ -31,7 +31,7 @@ from app.modules.catalog.service import admin_catalog_items, public_catalog, pub
 from app.modules.content.service import get_public_site_content, save_public_content
 from app.modules.admin.views import admin_catalog_page
 from app.modules import public_views as public_views_module
-from app.modules.public_views import account_dashboard_page, beer_page, business_guest_page, business_storefront_page, contacts_page, home_page, maintenance_page
+from app.modules.public_views import account_dashboard_page, beer_page, business_guest_page, business_storefront_page, contacts_page, gallery_page, home_page, maintenance_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
 
 
@@ -576,6 +576,18 @@ class CoreFoundationTest(unittest.TestCase):
                 "maintenance_font_size_px": "30",
                 "maintenance_font_weight": "700",
                 "maintenance_image_url": "/media/maintenance.png",
+                "gallery_title": "Галерея Stamm",
+                "gallery_description": "Производство\nи события",
+                "gallery_item_caption_0": "Варочный порядок",
+                "gallery_item_image_url_0": "/media/gallery-brew.jpg",
+                "gallery_item_size_0": "large",
+                "gallery_item_sort_order_0": "20",
+                "gallery_item_visible_0": "1",
+                "gallery_item_caption_1": "Скрытое фото",
+                "gallery_item_image_url_1": "/media/gallery-hidden.jpg",
+                "gallery_item_size_1": "small",
+                "gallery_item_sort_order_1": "10",
+                "gallery_item_visible_1": "0",
                 "contact_email_label_0": "Основной",
                 "contact_email_value_0": "hello@stamm.test",
                 "contact_email_sort_order_0": "20",
@@ -757,6 +769,15 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("/media/maintenance.png", maintenance_html)
         self.assertIn("--maintenance-font-size:30px", maintenance_html)
         self.assertIn("--maintenance-font-weight:700", maintenance_html)
+        self.assertEqual(content["gallery"]["gallery_title"], "Галерея Stamm")
+        gallery_html = gallery_page(content)
+        self.assertIn("Галерея Stamm", gallery_html)
+        self.assertIn("Производство\nи события", gallery_html)
+        self.assertIn("/media/gallery-brew.jpg", gallery_html)
+        self.assertIn("gallery-card--large", gallery_html)
+        self.assertIn("data-gallery-open", gallery_html)
+        self.assertIn("galleryLightbox", gallery_html)
+        self.assertNotIn("/media/gallery-hidden.jpg", gallery_html)
 
     def test_maintenance_page_uses_safe_fallbacks_with_incomplete_defaults(self) -> None:
         original_defaults = dict(public_views_module.SITE_DEFAULTS)
@@ -1006,6 +1027,11 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("beer_popup_card_color", admin_content_html)
         self.assertIn("beer_popup_card_opacity", admin_content_html)
         self.assertIn("beer_section_gap_px", admin_content_html)
+        self.assertIn('for="cms-tab-gallery"', admin_content_html)
+        self.assertIn("gallery_title", admin_content_html)
+        self.assertIn("gallery_item_image_file_0", admin_content_html)
+        self.assertIn("data-add-gallery-item", admin_content_html)
+        self.assertIn("data-delete-gallery-item", admin_content_html)
         self.assertIn("site_public_base_url", admin_content_html)
         self.assertIn("site_title", admin_content_html)
         self.assertIn("site_description", admin_content_html)
@@ -1081,6 +1107,20 @@ class CoreFoundationTest(unittest.TestCase):
             field("maintenance_font_size_px", "32"), field("maintenance_font_weight", "750"),
             field("maintenance_image_url", ""),
             file_field("maintenance_image_file", "maintenance.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='800' height='400'></svg>"),
+            field("gallery_title", "Админская галерея"),
+            field("gallery_description", "Фото из админки"),
+            field("gallery_item_caption_0", "Зал варки"),
+            field("gallery_item_image_url_0", ""),
+            file_field("gallery_item_image_file_0", "gallery.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='900'></svg>"),
+            field("gallery_item_size_0", "large"),
+            field("gallery_item_sort_order_0", "10"),
+            field("gallery_item_visible_0", "1"),
+            field("gallery_item_caption_1", "Удалить фото"),
+            field("gallery_item_image_url_1", "/media/delete-me.jpg"),
+            field("gallery_item_size_1", "small"),
+            field("gallery_item_sort_order_1", "20"),
+            field("gallery_item_visible_1", "1"),
+            field("gallery_item_delete_1", "1"),
             field("contact_email_label_0", "Основной"), field("contact_email_value_0", "admin@stamm.test"), field("contact_email_sort_order_0", "10"), field("contact_email_visible_0", "on"),
             field("contact_email_label_1", "Скрытая почта"), field("contact_email_value_1", "hidden-admin@stamm.test"), field("contact_email_sort_order_1", "20"),
             field("contact_phone_label_0", "Отдел продаж"), field("contact_phone_value_0", "+7 999 000-00-00"), field("contact_phone_sort_order_0", "10"), field("contact_phone_visible_0", "on"),
@@ -1104,7 +1144,7 @@ class CoreFoundationTest(unittest.TestCase):
             field("beer_section_gap_px", "96"),
             field("menu_beer_label", "Пиво"), field("menu_beer_sort_order", "10"), field("menu_beer_visible", "on"),
             field("menu_visit_label", "Посетить пивоварню"), field("menu_visit_sort_order", "20"), field("menu_visit_visible", "on"),
-            field("menu_history_label", "История"), field("menu_history_sort_order", "30"), field("menu_history_visible", "on"),
+            field("menu_history_label", "Галерея"), field("menu_history_sort_order", "30"), field("menu_history_visible", "on"),
             field("menu_business_label", "Бизнес"), field("menu_business_sort_order", "40"), field("menu_business_visible", "on"),
             field("menu_contacts_label", "Контакты"), field("menu_contacts_sort_order", "50"), field("menu_contacts_visible", "on"),
             field("action_tg_label", "TG"), field("action_tg_href", "https://t.me/"), field("action_tg_icon_url", ""), field("action_tg_sort_order", "10"), field("action_tg_visible", "on"),
@@ -1166,6 +1206,10 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(content["beer"]["beer_popup_card_color"], "#335577")
         self.assertEqual(content["beer"]["beer_popup_card_opacity"], "80")
         self.assertEqual(content["beer"]["beer_section_gap_px"], "96")
+        self.assertEqual(content["gallery"]["gallery_title"], "Админская галерея")
+        self.assertTrue(content["gallery"]["items"][0]["image_url"].startswith("/media/gallery-0-"))
+        self.assertEqual(content["gallery"]["items"][0]["size"], "large")
+        self.assertNotIn("/media/delete-me.jpg", gallery_page(content))
         self.assertIn("--menu-offset:210px", home_page(content))
         self.assertIn("--menu-offset:220px", contacts_page(content))
         self.assertIn("--menu-offset:240px", business_storefront_page(content))
@@ -1312,9 +1356,20 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Sitemap: https://stammbeer.ru/sitemap.xml", robots_body)
         sitemap_body = urllib.request.urlopen(base + "/sitemap.xml", timeout=5).read().decode("utf-8")
         self.assertIn("<loc>https://stammbeer.ru/beer</loc>", sitemap_body)
+        self.assertIn("<loc>https://stammbeer.ru/gallery</loc>", sitemap_body)
         self.assertIn("<loc>https://stammbeer.ru/contacts</loc>", sitemap_body)
+        self.assertNotIn("/history", sitemap_body)
         self.assertNotIn("/admin", sitemap_body)
         self.assertNotIn("/api/", sitemap_body)
+
+        gallery_response = urllib.request.urlopen(base + "/gallery", timeout=5)
+        self.assertEqual(gallery_response.status, 200)
+        gallery_body = gallery_response.read().decode("utf-8")
+        self.assertIn("Галерея", gallery_body)
+        self.assertIn("gallery-grid", gallery_body)
+        legacy_history = open_without_redirects(base + "/history")
+        self.assertEqual(legacy_history.status, 303)
+        self.assertEqual(legacy_history.headers["Location"], "/gallery")
 
         for path in ("/business", "/business/catalog"):
             response = urllib.request.urlopen(base + path, timeout=5)

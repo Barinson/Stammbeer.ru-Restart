@@ -110,10 +110,16 @@ BEER_DEFAULTS = {
     "beer_products_json": "[]",
 }
 
+GALLERY_DEFAULTS = {
+    "gallery_title": "Галерея",
+    "gallery_description": "Фотографии Stamm Brewing: производство, команда, события и настроение пивоварни.",
+    "gallery_items_json": "[]",
+}
+
 MENU_DEFAULTS = [
     {"key": "beer", "href": "/beer", "label": "Пиво", "sort_order": 10, "is_visible": True},
     {"key": "visit", "href": "/visit", "label": "Посетить пивоварню", "sort_order": 20, "is_visible": True},
-    {"key": "history", "href": "/history", "label": "История", "sort_order": 30, "is_visible": True},
+    {"key": "history", "href": "/gallery", "label": "Галерея", "sort_order": 30, "is_visible": True},
     {"key": "business", "href": "/business", "label": "Бизнес", "sort_order": 40, "is_visible": True},
     {"key": "contacts", "href": "/contacts", "label": "Контакты", "sort_order": 50, "is_visible": True},
 ]
@@ -142,6 +148,8 @@ def ensure_public_content_defaults(conn: sqlite3.Connection) -> None:
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for key, value in BEER_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
+    for key, value in GALLERY_DEFAULTS.items():
+        conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for item in MENU_DEFAULTS:
         conn.execute(
             """
@@ -150,6 +158,15 @@ def ensure_public_content_defaults(conn: sqlite3.Connection) -> None:
             """,
             (item["key"], item["href"], item["label"], item["sort_order"], 1 if item["is_visible"] else 0),
         )
+    conn.execute(
+        """
+        UPDATE public_menu_items
+        SET href = '/gallery',
+            label = CASE WHEN label IN ('История', 'History') THEN 'Галерея' ELSE label END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE key = 'history' AND href = '/history'
+        """
+    )
     for item in ACTION_DEFAULTS:
         conn.execute(
             """
@@ -205,6 +222,23 @@ def get_public_site_content(conn: sqlite3.Connection, include_hidden: bool = Fal
             [item for item in items if isinstance(item, dict)],
             key=lambda item: (int(item.get("sort_order") or 100), str(item.get("name") or "")),
         )
+    gallery = {**GALLERY_DEFAULTS, **settings}
+    try:
+        gallery_items = json.loads(str(gallery.get("gallery_items_json") or "[]"))
+    except json.JSONDecodeError:
+        gallery_items = []
+    normalized_gallery_items = []
+    for index, item in enumerate(gallery_items if isinstance(gallery_items, list) else []):
+        if not isinstance(item, dict):
+            continue
+        normalized_gallery_items.append({
+            "caption": str(item.get("caption") or ""),
+            "image_url": str(item.get("image_url") or ""),
+            "size": str(item.get("size") or "medium"),
+            "sort_order": int(item.get("sort_order") or ((index + 1) * 10)),
+            "is_visible": bool(item.get("is_visible", True)),
+        })
+    gallery["items"] = sorted(normalized_gallery_items, key=lambda item: (item["sort_order"], item["caption"]))
     return {
         "home": {**HOME_DEFAULTS, **settings},
         "contacts": contacts,
@@ -213,6 +247,7 @@ def get_public_site_content(conn: sqlite3.Connection, include_hidden: bool = Fal
         "site": {**SITE_DEFAULTS, **settings},
         "layout": {**LAYOUT_DEFAULTS, **settings},
         "beer": beer,
+        "gallery": gallery,
         "menu": menu,
         "actions": actions,
     }
@@ -364,16 +399,49 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
                 """,
                 (key, value),
             )
+    if any(key.startswith("gallery_") for key in data):
+        gallery_values = {
+            "gallery_title": str(data.get("gallery_title") or GALLERY_DEFAULTS["gallery_title"]),
+            "gallery_description": str(data.get("gallery_description") or ""),
+        }
+        item_indices = sorted(
+            {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("gallery_item_caption_") and key.rsplit("_", 1)[1].isdigit()}
+            | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("gallery_item_image_url_") and key.rsplit("_", 1)[1].isdigit()}
+        )
+        items = []
+        for index in item_indices:
+            if str(data.get(f"gallery_item_delete_{index}") or "").strip() == "1":
+                continue
+            image = str(data.get(f"gallery_item_image_url_{index}") or "").strip()
+            caption = str(data.get(f"gallery_item_caption_{index}") or "").strip()
+            if image or caption:
+                items.append({
+                    "caption": caption,
+                    "image_url": image,
+                    "size": str(data.get(f"gallery_item_size_{index}") or "medium"),
+                    "sort_order": int(data.get(f"gallery_item_sort_order_{index}") or ((index + 1) * 10)),
+                    "is_visible": str(data.get(f"gallery_item_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
+                })
+        gallery_values["gallery_items_json"] = json.dumps(items, ensure_ascii=False)
+        for key, value in gallery_values.items():
+            conn.execute(
+                """
+                INSERT INTO site_content_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, value),
+            )
     for item in MENU_DEFAULTS:
         key = item["key"]
         conn.execute(
             """
             UPDATE public_menu_items
-            SET label = ?, sort_order = ?, is_visible = ?, updated_at = CURRENT_TIMESTAMP
+            SET label = ?, href = ?, sort_order = ?, is_visible = ?, updated_at = CURRENT_TIMESTAMP
             WHERE key = ?
             """,
             (
                 str(data.get(f"menu_{key}_label") or item["label"]),
+                item["href"],
                 int(data.get(f"menu_{key}_sort_order") or item["sort_order"]),
                 1 if data.get(f"menu_{key}_visible") else 0,
                 key,
