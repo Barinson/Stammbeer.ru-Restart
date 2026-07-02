@@ -860,6 +860,9 @@ class StammApp:
                     news_file = files.get("home_news_image_file")
                     if news_file:
                         form["home_news_image_url"] = self.save_uploaded_media(news_file, "home-news")
+                    maintenance_image_file = files.get("maintenance_image_file")
+                    if maintenance_image_file:
+                        form["maintenance_image_url"] = self.save_uploaded_media(maintenance_image_file, "maintenance")
                     beer_untappd_logo_file = files.get("beer_untappd_logo_file")
                     if beer_untappd_logo_file:
                         form["beer_untappd_logo_url"] = self.save_uploaded_media(beer_untappd_logo_file, "beer-untappd")
