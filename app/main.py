@@ -14,7 +14,8 @@ from app.config import Settings, load_settings
 from app.db.connection import connect
 from app.db.migrations import run_migrations
 from app.db.seed import seed_core
-from app.integrations.moysklad.catalog_sync import latest_sync_diagnostics, run_manual_catalog_sync
+from app.integrations.moysklad.auto_sync import compact_auto_sync_history, start_auto_sync_worker
+from app.integrations.moysklad.catalog_sync import run_manual_catalog_sync
 from app.integrations.moysklad.settings_service import (
     get_settings,
     refresh_integration_references,
@@ -28,17 +29,20 @@ from app.modules.catalog.service import admin_catalog_items, business_min_order_
 from app.modules.account.service import (
     DiscountRefreshError,
     authenticate_customer,
+    change_customer_password,
+    create_customer_account_by_admin,
     create_customer_session,
+    delete_customer_account,
     current_customer,
     customer_cookie_header,
     customer_session_from_cookie,
     destroy_customer_session,
     expired_customer_cookie_header,
     list_customer_accounts,
+    list_customer_orders,
     refresh_customer_discount,
     register_customer,
     set_customer_account_status,
-    soft_delete_customer_account,
     utc_now_iso,
 )
 from app.modules.content.service import ensure_public_content_defaults, get_public_site_content, save_public_content
@@ -64,9 +68,12 @@ from app.modules.public_views import (
     account_login_page,
     account_message_page,
     account_register_page,
+    business_guest_page,
     business_storefront_page,
+    beer_page,
     contacts_page,
     home_page,
+    maintenance_page,
     password_reset_confirm_page,
     password_reset_request_page,
     public_placeholder_page,
@@ -86,7 +93,6 @@ from app.modules.auth.service import (
 BUSINESS_STOREFRONT_ROUTES = {"/business", "/business/catalog"}
 BUSINESS_STOREFRONT_REDIRECTS = {"/business/": "/business", "/business/catalog/": "/business/catalog"}
 PUBLIC_PLACEHOLDER_ROUTES = {
-    "/beer": ("Пиво", "beer"),
     "/visit": ("Посетить пивоварню", "visit"),
     "/history": ("История", "history"),
 }
@@ -106,6 +112,9 @@ class StammApp:
         run_migrations(self.conn)
         seed_core(self.conn, settings.admin_email, settings.admin_password)
         ensure_public_content_defaults(self.conn)
+        self.auto_sync_thread = None
+        if settings.env != "test":
+            self.auto_sync_thread = start_auto_sync_worker(settings.sqlite_path, settings.admin_email, settings.admin_password)
 
     def handler_class(self):
         app = self
@@ -209,6 +218,16 @@ class StammApp:
                     self.redirect("/admin/login")
                 return user
 
+            def public_content(self) -> dict[str, Any]:
+                content = get_public_site_content(app.conn)
+                if current_customer(app.conn, self.headers.get("Cookie")) is not None:
+                    content["viewer"] = {"is_customer": True}
+                return content
+
+            def maintenance_is_enabled(self, content: dict[str, Any]) -> bool:
+                site = content.get("site") or {}
+                return str(site.get("maintenance_enabled") or "0").strip().lower() not in {"0", "false", "off", "no", ""}
+
             def do_GET(self) -> None:  # noqa: N802
                 path = urllib.parse.urlparse(self.path).path
                 if path == "/healthz":
@@ -221,48 +240,61 @@ class StammApp:
                     else:
                         self.send_html(page("404", "<main class='login'><div class='card'>Файл не найден.</div></main>"), HTTPStatus.NOT_FOUND)
                     return
+                public_content = self.public_content()
+                if not path.startswith("/admin") and self.maintenance_is_enabled(public_content):
+                    self.send_html(maintenance_page(public_content), HTTPStatus.SERVICE_UNAVAILABLE)
+                    return
                 if path == "/":
-                    self.send_html(home_page(get_public_site_content(app.conn)))
+                    self.send_html(home_page(public_content))
                     return
                 if path == "/contacts":
-                    self.send_html(contacts_page(get_public_site_content(app.conn)))
+                    self.send_html(contacts_page(public_content))
+                    return
+                if path == "/beer":
+                    self.send_html(beer_page(public_content))
                     return
                 if path in PUBLIC_PLACEHOLDER_ROUTES:
                     title, active = PUBLIC_PLACEHOLDER_ROUTES[path]
-                    self.send_html(public_placeholder_page(title, active, get_public_site_content(app.conn)))
+                    self.send_html(public_placeholder_page(title, active, public_content))
                     return
                 if path in BUSINESS_STOREFRONT_REDIRECTS:
                     self.redirect(BUSINESS_STOREFRONT_REDIRECTS[path])
                     return
                 if path in BUSINESS_STOREFRONT_ROUTES:
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
-                    if customer is not None:
-                        refresh_customer_discount(app.conn, customer)
-                    self.send_html(business_storefront_page(get_public_site_content(app.conn)))
+                    content = self.public_content()
+                    if customer is None:
+                        self.send_html(business_guest_page(content))
+                        return
+                    refresh_customer_discount(app.conn, customer)
+                    content["viewer"] = {"is_customer": True}
+                    self.send_html(business_storefront_page(content))
                     return
                 if path == PUBLIC_CATALOG_API_ROUTE:
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
-                    if customer is not None:
-                        customer = refresh_customer_discount(app.conn, customer)
+                    if customer is None:
+                        self.send_json({"ok": False, "error": "Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru"}, HTTPStatus.UNAUTHORIZED)
+                        return
+                    customer = refresh_customer_discount(app.conn, customer)
                     content = get_public_site_content(app.conn)
                     minimum_order_minor = business_min_order_amount_minor((content.get("business") or {}).get("business_min_order_amount_minor"))
                     catalog = public_catalog(
                         app.conn,
                         query.get("containerType", [None])[0],
-                        customer["discount_percent"] if customer is not None else 0,
-                        customer["price_type_href"] if customer is not None else None,
-                        customer["price_type_id"] if customer is not None else None,
-                        customer["price_type_name"] if customer is not None else None,
+                        customer["discount_percent"],
+                        customer["price_type_href"],
+                        customer["price_type_id"],
+                        customer["price_type_name"],
                         minimum_order_minor,
                     )
                     self.send_json(catalog)
                     return
                 if path == "/account/register":
-                    self.send_html(account_register_page(get_public_site_content(app.conn)))
+                    self.send_html(account_register_page(public_content))
                     return
                 if path == "/account/login":
-                    self.send_html(account_login_page(get_public_site_content(app.conn)))
+                    self.send_html(account_login_page(public_content))
                     return
                 if path == "/account/verify-email":
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -271,26 +303,35 @@ class StammApp:
                         account_message_page(
                             "E-mail подтверждён" if ok else "Ссылка недействительна",
                             "Спасибо, e-mail личного кабинета подтверждён." if ok else "Ссылка подтверждения недействительна или устарела.",
-                            get_public_site_content(app.conn),
+                            public_content,
                             is_error=not ok,
                         ),
                         HTTPStatus.OK if ok else HTTPStatus.BAD_REQUEST,
                     )
                     return
                 if path == "/account/password-reset":
-                    self.send_html(password_reset_request_page(get_public_site_content(app.conn)))
+                    self.send_html(password_reset_request_page(public_content))
                     return
                 if path == "/account/password-reset/confirm":
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-                    self.send_html(password_reset_confirm_page(query.get("token", [""])[0], get_public_site_content(app.conn)))
+                    self.send_html(password_reset_confirm_page(query.get("token", [""])[0], public_content))
                     return
                 if path == "/account":
+                    query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
                     if customer is None:
                         self.redirect("/account/login")
                         return
                     customer = refresh_customer_discount(app.conn, customer)
-                    self.send_html(account_dashboard_page(customer, get_public_site_content(app.conn)))
+                    self.send_html(
+                        account_dashboard_page(
+                            customer,
+                            {**public_content, "viewer": {"is_customer": True}},
+                            list_customer_orders(app.conn, customer["id"]),
+                            password_result=query.get("password_result", [None])[0],
+                            password_error=query.get("password_error", [None])[0],
+                        )
+                    )
                     return
                 if path == "/admin/login":
                     self.send_html(login_page())
@@ -317,7 +358,7 @@ class StammApp:
                             return
                         settings = serialize_settings(get_settings(app.conn))
                         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-                        self.send_html(moysklad_settings_page(user["email"], settings, result=query.get("result", [None])[0], error=query.get("error", [None])[0], diagnostics=latest_sync_diagnostics(app.conn)))
+                        self.send_html(moysklad_settings_page(user["email"], settings, result=query.get("result", [None])[0], error=query.get("error", [None])[0], auto_history=compact_auto_sync_history(app.conn)))
                         return
                     if path == "/admin/b2b-orders":
                         self.send_html(placeholder("B2B-заявки", "Здесь будет список заявок, статусы, детали и заметки менеджера.", user["email"]))
@@ -366,6 +407,9 @@ class StammApp:
 
             def do_POST(self) -> None:  # noqa: N802
                 path = urllib.parse.urlparse(self.path).path
+                if not path.startswith("/admin") and self.maintenance_is_enabled(self.public_content()):
+                    self.send_html(maintenance_page(get_public_site_content(app.conn)), HTTPStatus.SERVICE_UNAVAILABLE)
+                    return
                 if path == PUBLIC_ORDER_API_ROUTE:
                     payload = self.read_json()
                     requested_items = payload.get("items") if isinstance(payload.get("items"), list) else []
@@ -381,10 +425,10 @@ class StammApp:
                     catalog = public_catalog(
                         app.conn,
                         None,
-                        customer["discount_percent"] if customer is not None else 0,
-                        customer["price_type_href"] if customer is not None else None,
-                        customer["price_type_id"] if customer is not None else None,
-                        customer["price_type_name"] if customer is not None else None,
+                        customer["discount_percent"],
+                        customer["price_type_href"],
+                        customer["price_type_id"],
+                        customer["price_type_name"],
                         minimum_order_minor,
                     )
                     catalog_by_id = {str(item["productId"]): item for item in catalog["items"]}
@@ -629,6 +673,22 @@ class StammApp:
                         return
                     self.send_html(account_message_page("Пароль обновлён", message, get_public_site_content(app.conn)))
                     return
+                if path == "/account/password":
+                    customer = current_customer(app.conn, self.headers.get("Cookie"))
+                    if customer is None:
+                        self.redirect("/account/login")
+                        return
+                    form = self.read_form()
+                    ok, message = change_customer_password(
+                        app.conn,
+                        customer["id"],
+                        form.get("current_password", ""),
+                        form.get("new_password", ""),
+                        form.get("new_password_confirm", ""),
+                    )
+                    target = "password_result" if ok else "password_error"
+                    self.redirect(f"/account?{target}=" + urllib.parse.quote(message))
+                    return
                 if path == "/account/logout":
                     destroy_customer_session(app.conn, customer_session_from_cookie(self.headers.get("Cookie")))
                     self.redirect("/account/login", {"Set-Cookie": expired_customer_cookie_header()})
@@ -677,7 +737,7 @@ class StammApp:
                         return
                     if path == "/admin/moysklad/sync-products":
                         try:
-                            result = run_manual_catalog_sync(app.conn, user["id"], diagnostic_mode="diagnostic_mode" in form)
+                            result = run_manual_catalog_sync(app.conn, user["id"])
                             stats = result["stats"]
                             message = f"Sync завершён: найдено {stats['found']}, создано {stats['created']}, обновлено {stats['updated']}"
                             self.redirect("/admin/moysklad?result=" + urllib.parse.quote(message))
@@ -737,6 +797,15 @@ class StammApp:
                     except Exception as exc:
                         self.redirect("/admin/email?error=" + urllib.parse.quote(str(exc)))
                         return
+                if path == "/admin/users/create":
+                    user = self.require_admin()
+                    if user is None:
+                        return
+                    form = self.read_form()
+                    result = create_customer_account_by_admin(app.conn, form.get("inn", ""), form.get("email", ""), form.get("temporary_password", ""))
+                    target = "result" if result.ok else "error"
+                    self.redirect(f"/admin/users?{target}=" + urllib.parse.quote(result.message))
+                    return
                 if path in {"/admin/users/status", "/admin/users/delete", "/admin/users/reset-password"}:
                     user = self.require_admin()
                     if user is None:
@@ -755,7 +824,7 @@ class StammApp:
                         try:
                             status = form.get("status", "")
                             set_customer_account_status(app.conn, account_id, status)
-                            message = "Пользователь активирован." if status == "active" else "Пользователь деактивирован."
+                            message = "Пользователь активирован." if status == "active" else "Пользователь приостановлен."
                             self.redirect("/admin/users?result=" + urllib.parse.quote(message))
                         except Exception as exc:
                             self.redirect("/admin/users?error=" + urllib.parse.quote(str(exc)))
@@ -764,8 +833,8 @@ class StammApp:
                         if form.get("confirm") != "yes":
                             self.redirect("/admin/users?error=" + urllib.parse.quote("Удаление требует подтверждения."))
                             return
-                        soft_delete_customer_account(app.conn, account_id)
-                        self.redirect("/admin/users?result=" + urllib.parse.quote("Пользователь мягко удалён. История заказов сохранена."))
+                        delete_customer_account(app.conn, account_id)
+                        self.redirect("/admin/users?result=" + urllib.parse.quote("Пользователь полностью удалён. Его e-mail и ИНН снова доступны для создания аккаунта."))
                         return
                     if path == "/admin/users/reset-password":
                         if account["status"] != "active":
@@ -791,10 +860,22 @@ class StammApp:
                     news_file = files.get("home_news_image_file")
                     if news_file:
                         form["home_news_image_url"] = self.save_uploaded_media(news_file, "home-news")
+                    maintenance_image_file = files.get("maintenance_image_file")
+                    if maintenance_image_file:
+                        form["maintenance_image_url"] = self.save_uploaded_media(maintenance_image_file, "maintenance")
+                    beer_untappd_logo_file = files.get("beer_untappd_logo_file")
+                    if beer_untappd_logo_file:
+                        form["beer_untappd_logo_url"] = self.save_uploaded_media(beer_untappd_logo_file, "beer-untappd")
                     for field_name, upload in files.items():
                         if field_name.startswith("action_") and field_name.endswith("_icon_file"):
                             key = field_name.removeprefix("action_").removesuffix("_icon_file")
                             form[f"action_{key}_icon_url"] = self.save_uploaded_media(upload, f"nav-{key}")
+                        if field_name.startswith("beer_partner_logo_file_"):
+                            index = field_name.removeprefix("beer_partner_logo_file_")
+                            form[f"beer_partner_logo_url_{index}"] = self.save_uploaded_media(upload, f"beer-partner-{index}")
+                        if field_name.startswith("beer_product_image_file_"):
+                            index = field_name.removeprefix("beer_product_image_file_")
+                            form[f"beer_product_image_url_{index}"] = self.save_uploaded_media(upload, f"beer-product-{index}")
                     save_public_content(app.conn, form)
                     self.redirect("/admin/content?result=" + urllib.parse.quote("Контент сохранён"))
                     return
