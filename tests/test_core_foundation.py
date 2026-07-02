@@ -777,6 +777,9 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("gallery-card--large", gallery_html)
         self.assertIn("data-gallery-open", gallery_html)
         self.assertIn("galleryLightbox", gallery_html)
+        self.assertIn("filter:brightness(1.08) saturate(1.02)", gallery_html)
+        self.assertIn("rgba(0,0,0,.42)", gallery_html)
+        self.assertNotIn("rgba(11,63,64,.78)", gallery_html)
         self.assertNotIn("/media/gallery-hidden.jpg", gallery_html)
 
     def test_maintenance_page_uses_safe_fallbacks_with_incomplete_defaults(self) -> None:
@@ -2250,6 +2253,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("ООО Штамм Партнёр", page_html)
         self.assertIn("История заказов", page_html)
         self.assertIn("Заказ 1", page_html)
+        self.assertIn("max-height:420px; overflow-y:auto", page_html)
+        self.assertIn("overscroll-behavior:contain", page_html)
         self.assertNotIn("B2B-LK-1", page_html)
         self.assertIn("Stamm IPA банка", page_html)
         self.assertIn("Смена пароля", page_html)
