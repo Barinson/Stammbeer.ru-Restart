@@ -456,7 +456,7 @@ ACCOUNT_CSS = """
     .account-details { display:grid; gap:12px; margin:26px 0; }
     .account-detail { display:flex; justify-content:space-between; gap:18px; padding:14px 0; border-bottom:1px solid rgba(199,177,102,.16); color:rgba(246,241,227,.82); }
     .account-detail strong { color:var(--foam); text-align:right; }
-    .account-orders { display:grid; gap:12px; }
+    .account-orders { display:grid; gap:12px; max-height:420px; overflow-y:auto; padding-right:6px; overscroll-behavior:contain; scrollbar-color:rgba(199,177,102,.62) rgba(11,63,64,.34); }
     .account-order { border:1px solid rgba(199,177,102,.18); border-radius:18px; padding:14px; background:rgba(11,63,64,.35); }
     .account-order__head, .account-order__meta { display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; }
     .account-order__head strong { color:var(--foam); }
@@ -1088,10 +1088,10 @@ def gallery_page(content: dict[str, Any] | None = None) -> str:
     .gallery-card--medium {{ grid-column:span 3; min-height:300px; }}
     .gallery-card--large {{ grid-column:span 4; grid-row:span 2; min-height:430px; }}
     .gallery-card img {{ width:100%; height:100%; position:absolute; inset:0; object-fit:cover; display:block; transform:scale(1.01); transition:transform .45s ease, filter .45s ease; }}
-    .gallery-card::after {{ content:""; position:absolute; inset:0; background:linear-gradient(180deg, transparent 50%, rgba(11,63,64,.78)); opacity:.74; transition:opacity .35s ease; }}
+    .gallery-card::after {{ content:""; position:absolute; inset:0; background:linear-gradient(180deg, transparent 58%, rgba(0,0,0,.42)); opacity:.58; transition:opacity .35s ease; }}
     .gallery-card span {{ position:absolute; left:18px; right:18px; bottom:16px; z-index:1; color:var(--foam); font-weight:700; font-size:15px; line-height:1.25; text-align:left; }}
-    .gallery-card:hover img {{ transform:scale(1.07); filter:saturate(1.05); }}
-    .gallery-card:hover::after {{ opacity:.92; }}
+    .gallery-card:hover img {{ transform:scale(1.07); filter:brightness(1.08) saturate(1.02); }}
+    .gallery-card:hover::after {{ opacity:.48; }}
     .gallery-empty {{ margin:0 auto; max-width:620px; color:rgba(246,241,227,.72); text-align:center; }}
     .gallery-lightbox {{ position:fixed; inset:0; z-index:900; display:none; place-items:center; padding:28px; background:rgba(7,32,33,.88); backdrop-filter:blur(12px); }}
     .gallery-lightbox.is-open {{ display:grid; }}
