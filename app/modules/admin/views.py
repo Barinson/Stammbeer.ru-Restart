@@ -415,10 +415,20 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     site = content.get("site") or {}
     age_gate_title = str(site.get("age_gate_title") or "Вам есть 18+?")
     age_gate_text = str(site.get("age_gate_text") or "Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет")
+    age_gate_title_font_size = str(site.get("age_gate_title_font_size_px") or "48")
+    age_gate_title_font_weight = str(site.get("age_gate_title_font_weight") or "900")
+    age_gate_text_font_size = str(site.get("age_gate_text_font_size_px") or "18")
+    age_gate_text_font_weight = str(site.get("age_gate_text_font_weight") or "500")
     age_gate_confirm_label = str(site.get("age_gate_confirm_label") or "Да, мне есть 18")
     age_gate_deny_label = str(site.get("age_gate_deny_label") or "Нет, мне нет 18")
     maintenance_enabled = str(site.get("maintenance_enabled") or "0") == "1"
     maintenance_text = str(site.get("maintenance_text") or "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru")
+    maintenance_font_size = str(site.get("maintenance_font_size_px") or "24")
+    maintenance_font_weight = str(site.get("maintenance_font_weight") or "500")
+    maintenance_image_url = str(site.get("maintenance_image_url") or "")
+    business_guest_text = str(business.get("business_guest_text") or "Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru")
+    business_guest_font_size = str(business.get("business_guest_font_size_px") or "22")
+    business_guest_font_weight = str(business.get("business_guest_font_weight") or "600")
     contact_emails = list(contacts.get("emails") or [])
     contact_phones = list(contacts.get("phones") or [])
     while len(contact_emails) < 6:
@@ -765,7 +775,15 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <h3>Окно 18+</h3>
               <p class="muted">Текст этого окна хранится в CMS. Окно показывается обычным посетителям при каждом посещении, но скрывается для авторизованных B2B-пользователей.</p>
               <label>Заголовок окна 18+<input name="age_gate_title" value="{escape(age_gate_title)}"></label>
+              <div class="grid">
+                <label>Размер заголовка, px<input name="age_gate_title_font_size_px" type="number" min="18" max="96" value="{escape(age_gate_title_font_size)}"></label>
+                <label>Толщина заголовка<input name="age_gate_title_font_weight" type="number" min="100" max="1000" step="50" value="{escape(age_gate_title_font_weight)}"></label>
+              </div>
               <label>Текст окна 18+<textarea name="age_gate_text" rows="3">{escape(age_gate_text)}</textarea></label>
+              <div class="grid">
+                <label>Размер текста, px<input name="age_gate_text_font_size_px" type="number" min="12" max="64" value="{escape(age_gate_text_font_size)}"></label>
+                <label>Толщина текста<input name="age_gate_text_font_weight" type="number" min="100" max="1000" step="50" value="{escape(age_gate_text_font_weight)}"></label>
+              </div>
               <div class="grid">
                 <label>Кнопка подтверждения<input name="age_gate_confirm_label" value="{escape(age_gate_confirm_label)}"></label>
                 <label>Кнопка отказа<input name="age_gate_deny_label" value="{escape(age_gate_deny_label)}"></label>
@@ -777,6 +795,23 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <input type="hidden" name="maintenance_enabled" value="0">
               <label><input name="maintenance_enabled" type="checkbox" value="1" {'checked' if maintenance_enabled else ''}> Закрыть сайт</label>
               <label>Текст шторки<textarea name="maintenance_text" rows="3">{escape(maintenance_text)}</textarea></label>
+              <div class="grid">
+                <label>Размер текста, px<input name="maintenance_font_size_px" type="number" min="12" max="80" value="{escape(maintenance_font_size)}"></label>
+                <label>Толщина текста<input name="maintenance_font_weight" type="number" min="100" max="1000" step="50" value="{escape(maintenance_font_weight)}"></label>
+              </div>
+              <label>Картинка шторки</label>
+              {f"<p><img src='{escape(maintenance_image_url)}' alt='Картинка шторки' style='max-width:220px; max-height:140px; object-fit:contain; border-radius:12px;'></p>" if maintenance_image_url else "<p class='muted'>Картинка шторки не загружена.</p>"}
+              <input type="hidden" name="maintenance_image_url" value="{escape(maintenance_image_url)}">
+              <input name="maintenance_image_file" type="file" accept="image/*">
+            </div>
+            <div class="card">
+              <h3>Бизнес для незарегистрированных</h3>
+              <p class="muted">Текст показывается вместо B2B-каталога, пока пользователь не авторизован.</p>
+              <label>Приветственное сообщение<textarea name="business_guest_text" rows="3">{escape(business_guest_text)}</textarea></label>
+              <div class="grid">
+                <label>Размер текста, px<input name="business_guest_font_size_px" type="number" min="12" max="72" value="{escape(business_guest_font_size)}"></label>
+                <label>Толщина текста<input name="business_guest_font_weight" type="number" min="100" max="1000" step="50" value="{escape(business_guest_font_weight)}"></label>
+              </div>
             </div>
             <p><button type="submit">Сохранить настройки сайта</button></p>
           </section>

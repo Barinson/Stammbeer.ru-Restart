@@ -53,6 +53,56 @@ TYPOGRAPHY_DEFAULTS = {
 
 BUSINESS_DEFAULTS = {
     "business_min_order_amount_minor": "1500000",
+    "business_guest_text": "Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru",
+    "business_guest_font_size_px": "22",
+    "business_guest_font_weight": "600",
+}
+
+SITE_DEFAULTS = {
+    "age_gate_title": "Вам есть 18+?",
+    "age_gate_text": "Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет",
+    "age_gate_title_font_size_px": "48",
+    "age_gate_title_font_weight": "900",
+    "age_gate_text_font_size_px": "18",
+    "age_gate_text_font_weight": "500",
+    "age_gate_confirm_label": "Да, мне есть 18",
+    "age_gate_deny_label": "Нет, мне нет 18",
+    "maintenance_enabled": "0",
+    "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
+    "maintenance_font_size_px": "24",
+    "maintenance_font_weight": "500",
+    "maintenance_image_url": "",
+}
+
+LAYOUT_DEFAULTS = {
+    "menu_offset_home_px": "176",
+    "menu_offset_beer_px": "176",
+    "menu_offset_visit_px": "176",
+    "menu_offset_history_px": "176",
+    "menu_offset_business_px": "176",
+    "menu_offset_contacts_px": "176",
+}
+
+BEER_DEFAULTS = {
+    "beer_partners_title": "Где найти Stamm Brewing",
+    "beer_partners_description": "Партнёры, бары и магазины, где представлена наша продукция.",
+    "beer_partners_is_visible": "1",
+    "beer_partners_json": "[]",
+    "beer_section_gap_px": "72",
+    "beer_products_title": "Наша продукция",
+    "beer_new_title": "Новинки",
+    "beer_core_title": "Постоянная линейка",
+    "beer_seasonal_title": "Сезонные сорта",
+    "beer_products_is_visible": "1",
+    "beer_new_is_visible": "1",
+    "beer_core_is_visible": "1",
+    "beer_seasonal_is_visible": "1",
+    "beer_untappd_logo_url": "",
+    "beer_popup_backdrop_color": "#0b3f40",
+    "beer_popup_backdrop_opacity": "30",
+    "beer_popup_card_color": "#0d4b4c",
+    "beer_popup_card_opacity": "100",
+    "beer_products_json": "[]",
 }
 
 SITE_DEFAULTS = {

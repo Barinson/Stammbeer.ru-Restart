@@ -33,8 +33,8 @@ BASE_CSS = """
     .age-gate { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at 50% 25%, rgba(199,177,102,.16), transparent 30%), rgba(11,63,64,.96); backdrop-filter:blur(14px); }
     .age-gate.is-hidden { display:none; }
     .age-gate__card { width:min(520px,100%); border-radius:28px; padding:34px; background:var(--card-hop); box-shadow:0 30px 90px rgba(0,0,0,.32); text-align:center; color:var(--foam); }
-    .age-gate__card h2 { margin:0 0 12px; color:var(--golden-malt); font-size:clamp(34px,6vw,56px); line-height:.95; letter-spacing:.06em; text-transform:uppercase; }
-    .age-gate__card p { margin:0; color:rgba(246,241,227,.8); font-size:var(--stamm-lead-font-size,18px); line-height:1.45; }
+    .age-gate__card h2 { margin:0 0 12px; color:var(--golden-malt); font-size:var(--age-gate-title-size, clamp(34px,6vw,56px)); font-weight:var(--age-gate-title-weight,900); line-height:.95; letter-spacing:.06em; text-transform:uppercase; }
+    .age-gate__card p { margin:0; color:rgba(246,241,227,.8); font-size:var(--age-gate-text-size, var(--stamm-lead-font-size,18px)); font-weight:var(--age-gate-text-weight,500); line-height:1.45; white-space:pre-line; }
     .age-gate__actions { display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top:24px; }
     .age-gate__card button { border:0; border-radius:999px; padding:14px 22px; background:var(--golden-malt); color:var(--ink); font:inherit; font-weight:900; cursor:pointer; }
     .age-gate__card .age-gate__deny { background:transparent; color:var(--foam); border:1px solid rgba(199,177,102,.42); }
@@ -117,11 +117,15 @@ def age_gate_markup(content: dict[str, Any] | None = None) -> str:
     site = site_content.get("site") or {}
     title = escape(str(site.get("age_gate_title") or SITE_DEFAULTS["age_gate_title"]))
     text = cms_text(site.get("age_gate_text") or SITE_DEFAULTS["age_gate_text"])
+    title_size = css_font_px(site.get("age_gate_title_font_size_px"), int(SITE_DEFAULTS["age_gate_title_font_size_px"]), 18, 96)
+    title_weight = css_weight(site.get("age_gate_title_font_weight"), int(SITE_DEFAULTS["age_gate_title_font_weight"]))
+    text_size = css_font_px(site.get("age_gate_text_font_size_px"), int(SITE_DEFAULTS["age_gate_text_font_size_px"]), 12, 64)
+    text_weight = css_weight(site.get("age_gate_text_font_weight"), int(SITE_DEFAULTS["age_gate_text_font_weight"]))
     confirm_label = escape(str(site.get("age_gate_confirm_label") or SITE_DEFAULTS["age_gate_confirm_label"]))
     deny_label = escape(str(site.get("age_gate_deny_label") or SITE_DEFAULTS["age_gate_deny_label"]))
     return f"""
   <div class="age-gate" id="ageGate" role="dialog" aria-modal="true" aria-labelledby="ageGateTitle">
-    <div class="age-gate__card">
+    <div class="age-gate__card" style="--age-gate-title-size:{title_size}; --age-gate-title-weight:{title_weight}; --age-gate-text-size:{text_size}; --age-gate-text-weight:{text_weight};">
       <h2 id="ageGateTitle">{title}</h2>
       <p>{text}</p>
       <div class="age-gate__actions">
@@ -171,6 +175,10 @@ def maintenance_page(content: dict[str, Any] | None = None) -> str:
         "marketing@stammbeer.ru",
         '<a href="mailto:marketing@stammbeer.ru">marketing@stammbeer.ru</a>',
     )
+    message_size = css_font_px(site.get("maintenance_font_size_px"), int(SITE_DEFAULTS["maintenance_font_size_px"]), 12, 80)
+    message_weight = css_weight(site.get("maintenance_font_weight"), int(SITE_DEFAULTS["maintenance_font_weight"]))
+    image_url = str(site.get("maintenance_image_url") or "").strip()
+    image_html = f'<img class="maintenance-image" src="{escape(image_url)}" alt="">' if image_url else ""
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -180,13 +188,18 @@ def maintenance_page(content: dict[str, Any] | None = None) -> str:
 {BASE_CSS}
 {typography_style(site_content)}
     .maintenance-shell {{ min-height:100vh; display:grid; place-items:center; padding:120px min(6vw,72px) 72px; text-align:center; background:radial-gradient(circle at 50% 18%, rgba(199,177,102,.16), transparent 30%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
-    .maintenance-message {{ width:min(760px,100%); margin:0; color:var(--foam); font-size:clamp(18px,2.2vw,28px); line-height:1.45; white-space:pre-line; }}
+    .maintenance-content {{ width:min(800px,100%); display:grid; justify-items:center; gap:22px; }}
+    .maintenance-image {{ max-width:min(520px,86vw); max-height:42vh; width:auto; height:auto; object-fit:contain; border-radius:22px; box-shadow:0 20px 60px rgba(0,0,0,.24); }}
+    .maintenance-message {{ width:min(760px,100%); margin:0; color:var(--foam); font-size:var(--maintenance-font-size); font-weight:var(--maintenance-font-weight); line-height:1.45; white-space:pre-line; }}
     .maintenance-message a {{ color:var(--golden-malt); text-decoration:none; }}
   </style>
 </head>
 <body>
-  <main class="maintenance-shell" aria-label="Технические работы">
-    <p class="maintenance-message">{text_html}</p>
+  <main class="maintenance-shell" aria-label="Технические работы" style="--maintenance-font-size:{message_size}; --maintenance-font-weight:{message_weight};">
+    <div class="maintenance-content">
+      {image_html}
+      <p class="maintenance-message">{text_html}</p>
+    </div>
   </main>
 </body>
 </html>"""
@@ -205,6 +218,14 @@ def css_weight(value: object, fallback: int) -> str:
     except (TypeError, ValueError):
         number = fallback
     return str(number)
+
+
+def css_font_px(value: object, fallback: int, min_value: int = 10, max_value: int = 96) -> str:
+    try:
+        number = max(min_value, min(max_value, int(str(value or "").strip())))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
 
 
 def css_gap_px(value: object, fallback: int = 0) -> str:
@@ -995,7 +1016,10 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
 def business_guest_page(content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
     site_content = {**site_content, "actions": [{**item, "is_visible": False} if item.get("key") == "cart" else item for item in site_content.get("actions", [])]}
-    message = "Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru"
+    business = site_content.get("business") or {}
+    message = str(business.get("business_guest_text") or BUSINESS_DEFAULTS["business_guest_text"])
+    message_size = css_font_px(business.get("business_guest_font_size_px"), int(BUSINESS_DEFAULTS["business_guest_font_size_px"]), 12, 72)
+    message_weight = css_weight(business.get("business_guest_font_weight"), int(BUSINESS_DEFAULTS["business_guest_font_weight"]))
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -1004,14 +1028,15 @@ def business_guest_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .business-guest {{ min-height:calc(100vh - 88px); padding:var(--menu-offset,176px) min(6vw,72px) 72px; display:grid; place-items:center; background:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
-    .business-guest__message {{ max-width:620px; margin:0 auto; text-align:center; color:var(--foam); font-size:clamp(17px,2vw,24px); line-height:1.38; font-weight:600; letter-spacing:.01em; }}
+    html, body {{ min-height:100%; background:var(--deep-hop); }}
+    .business-guest {{ min-height:100vh; padding:var(--menu-offset,176px) min(6vw,72px) 72px; display:grid; place-items:center; background:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .business-guest__message {{ max-width:620px; margin:0 auto; text-align:center; color:var(--foam); font-size:var(--business-guest-font-size); line-height:1.38; font-weight:var(--business-guest-font-weight); letter-spacing:.01em; white-space:pre-line; }}
   </style>
 </head>
 <body>
 {public_nav("business", site_content)}
-  <main class="business-guest" style="--menu-offset:{menu_offset_px(site_content, 'business')};">
-    <p class="business-guest__message">{escape(message)}</p>
+  <main class="business-guest" style="--menu-offset:{menu_offset_px(site_content, 'business')}; --business-guest-font-size:{message_size}; --business-guest-font-weight:{message_weight};">
+    <p class="business-guest__message">{cms_text(message)}</p>
   </main>
 {age_gate_markup(site_content)}
 </body>

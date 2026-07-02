@@ -30,7 +30,7 @@ from app.main import StammApp, admin_stats
 from app.modules.catalog.service import admin_catalog_items, public_catalog, publish_product
 from app.modules.content.service import get_public_site_content, save_public_content
 from app.modules.admin.views import admin_catalog_page
-from app.modules.public_views import account_dashboard_page, beer_page, business_storefront_page, contacts_page, home_page, maintenance_page
+from app.modules.public_views import account_dashboard_page, beer_page, business_guest_page, business_storefront_page, contacts_page, home_page, maintenance_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
 
 
@@ -554,12 +554,22 @@ class CoreFoundationTest(unittest.TestCase):
                 "home_news_link_url": "/business/catalog",
                 "home_news_link_label": "Order now",
                 "business_min_order_amount_minor": "2500000",
+                "business_guest_text": "Партнёрам — напишите на marketing@stammbeer.ru",
+                "business_guest_font_size_px": "28",
+                "business_guest_font_weight": "700",
                 "age_gate_title": "Проверка возраста",
                 "age_gate_text": "Вам уже исполнилось 18 лет?",
+                "age_gate_title_font_size_px": "44",
+                "age_gate_title_font_weight": "800",
+                "age_gate_text_font_size_px": "20",
+                "age_gate_text_font_weight": "600",
                 "age_gate_confirm_label": "Да, можно",
                 "age_gate_deny_label": "Нет",
                 "maintenance_enabled": "1",
                 "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
+                "maintenance_font_size_px": "30",
+                "maintenance_font_weight": "700",
+                "maintenance_image_url": "/media/maintenance.png",
                 "contact_email_label_0": "Основной",
                 "contact_email_value_0": "hello@stamm.test",
                 "contact_email_sort_order_0": "20",
@@ -628,8 +638,13 @@ class CoreFoundationTest(unittest.TestCase):
         )
         content = get_public_site_content(app.conn)
         self.assertEqual(content["business"]["business_min_order_amount_minor"], "2500000")
+        self.assertEqual(content["business"]["business_guest_text"], "Партнёрам — напишите на marketing@stammbeer.ru")
+        self.assertEqual(content["business"]["business_guest_font_size_px"], "28")
+        self.assertEqual(content["business"]["business_guest_font_weight"], "700")
         self.assertEqual(content["site"]["age_gate_title"], "Проверка возраста")
+        self.assertEqual(content["site"]["age_gate_text_font_size_px"], "20")
         self.assertEqual(content["site"]["maintenance_enabled"], "1")
+        self.assertEqual(content["site"]["maintenance_image_url"], "/media/maintenance.png")
         self.assertEqual(content["contacts"]["emails"][0]["value"], "hidden@stamm.test")
         self.assertFalse(content["contacts"]["emails"][0]["is_visible"])
         self.assertEqual(content["contacts"]["emails"][1]["value"], "hello@stamm.test")
@@ -709,13 +724,25 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("window.history.back()", html)
         self.assertIn("about:blank", html)
         self.assertIn("stamm_age_confirmed_session", html)
+        self.assertIn("--age-gate-title-size:44px", html)
+        self.assertIn("--age-gate-title-weight:800", html)
+        self.assertIn("--age-gate-text-size:20px", html)
+        self.assertIn("--age-gate-text-weight:600", html)
         html_for_customer = home_page({**content, "viewer": {"is_customer": True}})
         self.assertIn('aria-label="Корзина"', html_for_customer)
         self.assertIn('/business#cart', html_for_customer)
         self.assertNotIn("ageGate", html_for_customer)
+        guest_html = business_guest_page(content)
+        self.assertIn("Партнёрам — напишите на marketing@stammbeer.ru", guest_html)
+        self.assertIn("min-height:100vh", guest_html)
+        self.assertIn("--business-guest-font-size:28px", guest_html)
+        self.assertIn("--business-guest-font-weight:700", guest_html)
         maintenance_html = maintenance_page(content)
         self.assertIn("Технические работы", maintenance_html)
         self.assertIn("mailto:marketing@stammbeer.ru", maintenance_html)
+        self.assertIn("/media/maintenance.png", maintenance_html)
+        self.assertIn("--maintenance-font-size:30px", maintenance_html)
+        self.assertIn("--maintenance-font-weight:700", maintenance_html)
 
     def test_beer_page_content_is_cms_managed(self) -> None:
         app = self.make_app()
@@ -937,6 +964,14 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("beer_popup_card_color", admin_content_html)
         self.assertIn("beer_popup_card_opacity", admin_content_html)
         self.assertIn("beer_section_gap_px", admin_content_html)
+        self.assertIn("age_gate_text_font_size_px", admin_content_html)
+        self.assertIn("age_gate_text_font_weight", admin_content_html)
+        self.assertIn("maintenance_font_size_px", admin_content_html)
+        self.assertIn("maintenance_font_weight", admin_content_html)
+        self.assertIn("maintenance_image_file", admin_content_html)
+        self.assertIn("business_guest_text", admin_content_html)
+        self.assertIn("business_guest_font_size_px", admin_content_html)
+        self.assertIn("business_guest_font_weight", admin_content_html)
         self.assertNotIn("beer_product_untappd_logo_file_0", admin_content_html)
         self.assertIn("stamm_admin_content_scroll", admin_content_html)
         self.assertIn("contacts_map_height_px", admin_content_html)
@@ -979,6 +1014,19 @@ class CoreFoundationTest(unittest.TestCase):
             field("home_news_link_url", "/news/admin"),
             field("home_news_link_label", "Читать"),
             field("business_min_order_amount_minor", "2500000"),
+            field("business_guest_text", "Админский текст для партнёров"),
+            field("business_guest_font_size_px", "26"),
+            field("business_guest_font_weight", "650"),
+            field("age_gate_title", "Админ 18+"),
+            field("age_gate_text", "Админский текст 18+"),
+            field("age_gate_title_font_size_px", "46"), field("age_gate_title_font_weight", "850"),
+            field("age_gate_text_font_size_px", "21"), field("age_gate_text_font_weight", "550"),
+            field("age_gate_confirm_label", "Да"), field("age_gate_deny_label", "Нет"),
+            field("maintenance_enabled", "1"),
+            field("maintenance_text", "Админская шторка marketing@stammbeer.ru"),
+            field("maintenance_font_size_px", "32"), field("maintenance_font_weight", "750"),
+            field("maintenance_image_url", ""),
+            file_field("maintenance_image_file", "maintenance.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='800' height='400'></svg>"),
             field("contact_email_label_0", "Основной"), field("contact_email_value_0", "admin@stamm.test"), field("contact_email_sort_order_0", "10"), field("contact_email_visible_0", "on"),
             field("contact_email_label_1", "Скрытая почта"), field("contact_email_value_1", "hidden-admin@stamm.test"), field("contact_email_sort_order_1", "20"),
             field("contact_phone_label_0", "Отдел продаж"), field("contact_phone_value_0", "+7 999 000-00-00"), field("contact_phone_sort_order_0", "10"), field("contact_phone_visible_0", "on"),
@@ -1028,6 +1076,11 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertTrue(content["home"]["home_logo_url"].startswith("/media/home-logo-"))
         self.assertTrue(content["home"]["home_news_image_url"].startswith("/media/home-news-"))
         self.assertTrue(content["home"]["home_content_bg_url"].startswith("/media/home-content-bg-"))
+        self.assertTrue(content["site"]["maintenance_image_url"].startswith("/media/maintenance-"))
+        self.assertEqual(content["site"]["maintenance_font_size_px"], "32")
+        self.assertEqual(content["site"]["age_gate_text_font_weight"], "550")
+        self.assertEqual(content["business"]["business_guest_text"], "Админский текст для партнёров")
+        self.assertEqual(content["business"]["business_guest_font_weight"], "650")
         self.assertEqual(content["home"]["home_news_title"], "Админская новость")
         self.assertEqual(content["home"]["home_news_link_url"], "/news/admin")
         self.assertEqual(content["home"]["home_hero_line_gap_px"], "24")
@@ -1143,6 +1196,10 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("/api/public/business/order", html)
         self.assertIn("Вам есть 18+?", html)
         self.assertIn("stamm_age_confirmed_session", html)
+        self.assertIn("--age-gate-title-size:48px", html)
+        self.assertIn("--age-gate-title-weight:900", html)
+        self.assertIn("--age-gate-text-size:18px", html)
+        self.assertIn("--age-gate-text-weight:500", html)
         self.assertIn("Stamm Brewing</a>", html)
         self.assertNotIn('href="/">Главная</a>', html)
         self.assertIn("Untappd", html)
