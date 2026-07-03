@@ -1383,13 +1383,6 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       return Math.floor(max / step) * step;
     }}
 
-    function stockMessage(item) {{
-      const max = availableQuantity(item);
-      const orderMax = maxOrderQuantity(item);
-      if (orderMax <= 0) return `Доступно ${{max}}, меньше минимального шага заказа`;
-      return `Доступно: ${{max}} шт. · максимум в заказ: ${{orderMax}}`;
-    }}
-
     function normalizeQuantity(item, quantity) {{
       const step = itemStep(item);
       const max = maxOrderQuantity(item);
@@ -1414,13 +1407,12 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         const quantity = cartQuantity(item.productId);
         const step = itemStep(item);
         const maxQuantity = maxOrderQuantity(item);
-        const stockHint = `<span class="badge">${{escapeHtml(stockMessage(item))}}</span>`;
         const stepHint = item.containerType === 'can' ? '<span class="badge">ящик ×12</span>' : '';
         return `
         <article class="product">
           <div class="product__image">${{imageMarkup}}</div>
           <div class="product__body">
-            <div class="badges"><span class="badge">${{safeContainer}}</span>${{stepHint}}${{stockHint}}${{abvBadge}}</div>
+            <div class="badges"><span class="badge">${{safeContainer}}</span>${{stepHint}}${{abvBadge}}</div>
             <h2>${{safeName}}</h2>
             <div class="meta"><span class="price">${{safePrice}}</span>${{basePrice}}</div>
           </div>
@@ -1465,7 +1457,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       }}
       updateQuantityControls(productId);
       renderCart();
-      if (wasClamped) showCartMessage(`Для «${{item.name}}» доступно только ${{maxOrderQuantity(item)}} шт.`, true);
+      if (wasClamped) showCartMessage(`Нельзя добавить больше доступного количества для «${{item.name}}».`, true);
     }}
 
     function changeCartQuantity(productId, delta) {{
