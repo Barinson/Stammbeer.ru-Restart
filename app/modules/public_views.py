@@ -311,6 +311,18 @@ def menu_offset_px(content: dict[str, Any] | None, section: str, fallback: int =
     return f"{number}px"
 
 
+def section_background_style(content: dict[str, Any] | None, section: str, fallback_url: object = "") -> str:
+    site_content = public_content_or_defaults(content)
+    layout = site_content.get("layout") or {}
+    enabled = str(layout.get(f"section_bg_{section}_enabled") or "1").strip().lower() not in {"0", "false", "off", "no"}
+    if not enabled:
+        return ""
+    image_url = str(layout.get(f"section_bg_{section}_url") or fallback_url or "").strip()
+    if not image_url:
+        return ""
+    return f"--section-bg:url('{escape(image_url)}');"
+
+
 def cms_text(value: object) -> str:
     """Safely render CMS-managed plain text while preserving admin-entered line breaks."""
     return escape(str(value or ""))
@@ -370,7 +382,8 @@ def home_page(content: dict[str, Any] | None = None) -> str:
     line_gap = css_gap_px(home.get("home_hero_line_gap_px"), 0)
     logo_url = str(home.get("home_logo_url") or "")
     content_bg_url = str(home.get("home_content_bg_url") or "")
-    content_bg_style = f' style="--home-content-bg:url(\'{escape(content_bg_url)}\');"' if content_bg_url else ""
+    content_bg_declarations = section_background_style(site_content, "home", content_bg_url)
+    content_bg_style = f' style="{content_bg_declarations}"' if content_bg_declarations else ""
     logo_markup = f'<img class="home-logo" src="{escape(logo_url)}" alt="Stamm Brewing logo">' if logo_url else '<div class="home-logo-mark" aria-hidden="true"></div>'
     news_title = escape(str(home.get("home_news_title") or ""))
     news_text = cms_text(home.get("home_news_text"))
@@ -393,7 +406,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
     .home-logo-mark {{ width:94px; height:94px; border:2px solid rgba(199,177,102,.5); border-radius:999px; margin-bottom:28px; background:radial-gradient(circle, rgba(199,177,102,.28), transparent 58%); }}
     .home-title {{ margin:0; font-size:clamp(58px,13vw,var(--home-title-size)); line-height:.78; letter-spacing:.08em; color:var(--foam); font-weight:var(--home-title-weight); }}
     .home-subtitle {{ margin:var(--home-line-gap) 0 0; font-size:clamp(42px,10vw,var(--home-subtitle-size)); line-height:.8; letter-spacing:.08em; color:var(--golden-malt); font-weight:var(--home-subtitle-weight); }}
-    .home-content {{ position:relative; min-height:100vh; background-image:linear-gradient(180deg, rgba(16,88,89,.84), rgba(11,63,64,.9)), var(--home-content-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
+    .home-content {{ position:relative; min-height:100vh; background-image:linear-gradient(180deg, rgba(16,88,89,.84), rgba(11,63,64,.9)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .home-content::before {{ content:""; position:absolute; inset:0; background:radial-gradient(circle at 20% 12%, rgba(199,177,102,.18), transparent 32%); pointer-events:none; }}
     .home-content > * {{ position:relative; z-index:1; }}
     .home-news {{ min-height:100vh; display:grid; place-items:center; padding:96px min(6vw,72px); background:transparent; }}
@@ -874,6 +887,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&mode=search&text={map_query}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
     description_markup = f'<p style="color:{escape(description_color)}">{cms_text(description)}</p>' if description_is_visible and description else ""
     address_markup = f'<ul class="contact-list"><li><span>Адрес</span><strong>{cms_text(address)}</strong></li></ul>' if address_is_visible and address else ""
+    contacts_bg_style = section_background_style(site_content, "contacts")
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -881,7 +895,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .contacts-page {{ min-height:calc(100vh - 88px); padding:104px min(6vw,72px) 64px; display:grid; place-items:start center; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .contacts-page {{ min-height:calc(100vh - 88px); padding:104px min(6vw,72px) 64px; display:grid; place-items:start center; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .contacts-hero {{ width:min(100%,1040px); margin:0 auto; display:grid; grid-template-columns:1fr; gap:28px; align-items:start; justify-items:center; text-align:center; }}
     .contacts-card {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:24px; padding:28px; box-shadow:0 18px 44px rgba(0,0,0,.18); }}
     .contacts-info-card {{ width:min(760px,100%); border:0; background:transparent; box-shadow:none; padding:10px 0; justify-self:center; }}
@@ -897,7 +911,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("contacts", site_content)}
-  <main class="contacts-page" style="--menu-offset:{menu_offset_px(site_content, 'contacts')};">
+  <main class="contacts-page" style="--menu-offset:{menu_offset_px(site_content, 'contacts')};{contacts_bg_style}">
     <section class="contacts-hero">
       <div class="contacts-card contacts-info-card">
         {description_markup}
@@ -958,8 +972,9 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     beer_bg_url = str(site_content.get("home", {}).get("home_content_bg_url") or "")
     beer_style_values = [f"--menu-offset:{menu_offset_px(site_content, 'beer')}"]
     beer_section_gap = css_section_gap_px(beer.get("beer_section_gap_px"), 72)
-    if beer_bg_url:
-        beer_style_values.append(f"--beer-bg:url('{escape(beer_bg_url)}')")
+    beer_bg_style = section_background_style(site_content, "beer", beer_bg_url)
+    if beer_bg_style:
+        beer_style_values.append(beer_bg_style)
     beer_page_style = f' style="{";".join(beer_style_values)}"'
     return f"""<!doctype html>
 <html lang="ru">
@@ -968,7 +983,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .beer-page {{ min-height:calc(100vh - 88px); padding:120px min(6vw,72px) 72px; background-image:linear-gradient(180deg, rgba(16,88,89,.78), rgba(11,63,64,.86)), var(--beer-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
+    .beer-page {{ min-height:calc(100vh - 88px); padding:120px min(6vw,72px) 72px; background-image:linear-gradient(180deg, rgba(16,88,89,.78), rgba(11,63,64,.86)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .beer-shell {{ width:100%; max-width:1440px; margin:0 auto; display:grid; gap:{beer_section_gap}; justify-items:center; text-align:center; }}
     .beer-section {{ width:100%; display:grid; justify-items:center; }}
     .beer-section h1, .beer-section h2 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
@@ -1045,30 +1060,52 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
 def gallery_page(content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
     gallery = site_content.get("gallery") or {}
-    visible_items = [
-        item for item in gallery.get("items", [])
-        if item.get("image_url") and is_enabled(item.get("is_visible"), True)
-    ]
-    gallery_cards = []
-    for index, item in enumerate(visible_items):
+
+    def gallery_card(item: dict[str, Any], index: int) -> str:
         image_url = escape(str(item.get("image_url") or ""))
         caption = str(item.get("caption") or "")
         caption_html = f"<span>{escape(caption)}</span>" if caption else ""
         size = str(item.get("size") or "medium")
         if size not in {"small", "medium", "large"}:
             size = "medium"
-        gallery_cards.append(
-            f"""
+        return f"""
             <button class="gallery-card gallery-card--{escape(size)}" type="button" data-gallery-open data-gallery-src="{image_url}" data-gallery-caption="{escape(caption)}" aria-label="Открыть фото {index + 1}">
               <img src="{image_url}" alt="{escape(caption or 'Фото Stamm Brewing')}" loading="lazy">
               {caption_html}
             </button>
             """
+
+    source_sections = list(gallery.get("sections") or [])
+    if not source_sections and gallery.get("items"):
+        source_sections = [{"title": str(gallery.get("gallery_title") or GALLERY_DEFAULTS["gallery_title"]), "is_visible": True, "items": gallery.get("items")}]
+    visible_sections = []
+    global_index = 0
+    for section in source_sections:
+        if not is_enabled(section.get("is_visible"), True):
+            continue
+        visible_items = [
+            item for item in section.get("items", [])
+            if item.get("image_url") and is_enabled(item.get("is_visible"), True)
+        ]
+        if not visible_items:
+            continue
+        cards = []
+        for item in visible_items:
+            cards.append(gallery_card(item, global_index))
+            global_index += 1
+        visible_sections.append(
+            f"""
+            <section class="gallery-section">
+              <h2>{escape(str(section.get('title') or 'Раздел галереи'))}</h2>
+              <div class="gallery-grid">{''.join(cards)}</div>
+            </section>
+            """
         )
-    cards_html = "".join(gallery_cards) or "<p class='gallery-empty'>Галерея скоро пополнится новыми фотографиями Stamm Brewing.</p>"
+    sections_html = "".join(visible_sections) or "<p class='gallery-empty'>Галерея скоро пополнится новыми фотографиями Stamm Brewing.</p>"
     title = str(gallery.get("gallery_title") or GALLERY_DEFAULTS["gallery_title"])
     description = str(gallery.get("gallery_description") or "")
     description_html = f"<p>{cms_text(description)}</p>" if description else ""
+    gallery_bg_style = section_background_style(site_content, "history")
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -1076,11 +1113,13 @@ def gallery_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .gallery-page {{ min-height:100vh; padding:calc(var(--menu-offset,176px) + 22px) min(5vw,64px) 84px; background:radial-gradient(circle at 18% 12%, rgba(199,177,102,.16), transparent 30%), linear-gradient(180deg, rgba(16,88,89,.96), rgba(11,63,64,.98)); }}
+    .gallery-page {{ min-height:100vh; padding:calc(var(--menu-offset,176px) + 22px) min(5vw,64px) 84px; background-image:radial-gradient(circle at 18% 12%, rgba(199,177,102,.16), transparent 30%), linear-gradient(180deg, rgba(16,88,89,.9), rgba(11,63,64,.96)), var(--section-bg, linear-gradient(180deg, rgba(16,88,89,.96), rgba(11,63,64,.98))); background-size:auto, cover, cover; background-position:center; background-repeat:no-repeat; background-attachment:scroll, fixed, fixed; }}
     .gallery-shell {{ width:min(1440px,100%); margin:0 auto; }}
     .gallery-hero {{ max-width:820px; margin:0 auto 42px; text-align:center; }}
     .gallery-hero h1 {{ margin:0; color:var(--golden-malt); font-size:var(--stamm-page-title-font-size,42px); line-height:.95; text-transform:uppercase; letter-spacing:.08em; }}
     .gallery-hero p {{ margin:16px auto 0; color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.55; white-space:pre-line; }}
+    .gallery-sections {{ display:grid; gap:54px; }}
+    .gallery-section h2 {{ margin:0 0 18px; color:var(--foam); font-size:clamp(24px,3vw,36px); line-height:1; text-transform:uppercase; letter-spacing:.07em; }}
     .gallery-grid {{ display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); grid-auto-flow:dense; gap:14px; }}
     .gallery-card {{ position:relative; min-height:230px; grid-column:span 2; border:0; padding:0; overflow:hidden; border-radius:28px; background:rgba(246,241,227,.08); cursor:pointer; box-shadow:0 22px 60px rgba(0,0,0,.2); }}
     .gallery-card--small {{ grid-column:span 2; min-height:220px; }}
@@ -1104,10 +1143,10 @@ def gallery_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("history", site_content)}
-  <main class="gallery-page" style="--menu-offset:{menu_offset_px(site_content, 'history')};">
+  <main class="gallery-page" style="--menu-offset:{menu_offset_px(site_content, 'history')};{gallery_bg_style}">
     <section class="gallery-shell">
       <div class="gallery-hero"><h1>{escape(title)}</h1>{description_html}</div>
-      <div class="gallery-grid">{cards_html}</div>
+      <div class="gallery-sections">{sections_html}</div>
     </section>
   </main>
   <div class="gallery-lightbox" id="galleryLightbox" aria-hidden="true">
@@ -1149,6 +1188,7 @@ def gallery_page(content: dict[str, Any] | None = None) -> str:
 
 def public_placeholder_page(title: str, active: str, content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
+    placeholder_bg_style = section_background_style(site_content, active)
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -1156,7 +1196,7 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .placeholder {{ min-height:54vh; display:grid; place-items:center; padding:96px min(6vw,72px) 72px; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .placeholder {{ min-height:54vh; display:grid; place-items:center; padding:96px min(6vw,72px) 72px; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .placeholder__card {{ max-width:760px; background:var(--card-hop); border:1px solid rgba(199,177,102,.2); border-radius:24px; padding:30px; }}
     .placeholder__card h1 {{ margin:0 0 10px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
     .placeholder__card p {{ margin:0; color:rgba(246,241,227,.76); }}
@@ -1164,7 +1204,7 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
 </head>
 <body>
 {public_nav(active, site_content)}
-  <main class="placeholder" style="--menu-offset:{menu_offset_px(site_content, active)};"><section class="placeholder__card"><h1>{title}</h1><p>Раздел будет собираться после ядра B2B-магазина и админки.</p></section></main>
+  <main class="placeholder" style="--menu-offset:{menu_offset_px(site_content, active)};{placeholder_bg_style}"><section class="placeholder__card"><h1>{title}</h1><p>Раздел будет собираться после ядра B2B-магазина и админки.</p></section></main>
 {age_gate_markup(site_content)}
 </body>
 </html>"""
@@ -1177,6 +1217,7 @@ def business_guest_page(content: dict[str, Any] | None = None) -> str:
     message = str(business.get("business_guest_text") or BUSINESS_DEFAULTS["business_guest_text"])
     message_size = css_font_px(business.get("business_guest_font_size_px"), int(BUSINESS_DEFAULTS["business_guest_font_size_px"]), 12, 72)
     message_weight = css_weight(business.get("business_guest_font_weight"), int(BUSINESS_DEFAULTS["business_guest_font_weight"]))
+    business_bg_style = section_background_style(site_content, "business")
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -1185,13 +1226,13 @@ def business_guest_page(content: dict[str, Any] | None = None) -> str:
 {BASE_CSS}
 {typography_style(site_content)}
     html, body {{ min-height:100%; background:var(--deep-hop); }}
-    .business-guest {{ min-height:100vh; padding:var(--menu-offset,176px) min(6vw,72px) 72px; display:grid; place-items:center; background:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .business-guest {{ min-height:100vh; padding:var(--menu-offset,176px) min(6vw,72px) 72px; display:grid; place-items:center; background-image:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:auto, cover, cover; background-position:center; background-repeat:no-repeat; background-attachment:scroll, fixed, fixed; }}
     .business-guest__message {{ max-width:620px; margin:0 auto; text-align:center; color:var(--foam); font-size:var(--business-guest-font-size); line-height:1.38; font-weight:var(--business-guest-font-weight); letter-spacing:.01em; white-space:pre-line; }}
   </style>
 </head>
 <body>
 {public_nav("business", site_content)}
-  <main class="business-guest" style="--menu-offset:{menu_offset_px(site_content, 'business')}; --business-guest-font-size:{message_size}; --business-guest-font-weight:{message_weight};">
+  <main class="business-guest" style="--menu-offset:{menu_offset_px(site_content, 'business')}; --business-guest-font-size:{message_size}; --business-guest-font-weight:{message_weight};{business_bg_style}">
     <p class="business-guest__message">{cms_text(message)}</p>
   </main>
 {age_gate_markup(site_content)}
@@ -1201,6 +1242,7 @@ def business_guest_page(content: dict[str, Any] | None = None) -> str:
 
 def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
+    business_bg_style = section_background_style(site_content, "business")
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -1208,7 +1250,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .wrap {{ padding:58px min(6vw,72px) 56px; }}
+    .wrap {{ min-height:100vh; padding:58px min(6vw,72px) 56px; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .toolbar {{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:16px; align-items:center; margin-bottom:18px; }}
     .filters {{ display:flex; gap:10px; flex-wrap:wrap; }}
     .filter {{ border:1px solid rgba(199,177,102,.34); background:rgba(11,63,64,.55); color:var(--foam); padding:9px 15px; border-radius:999px; font-weight:600; cursor:pointer; }}
@@ -1264,7 +1306,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("business", content)}
-  <main class="wrap" style="--menu-offset:{menu_offset_px(site_content, 'business')};">
+  <main class="wrap" style="--menu-offset:{menu_offset_px(site_content, 'business')};{business_bg_style}">
     <div class="toolbar">
       <div class="filters" aria-label="Фильтры каталога">
         <button class="filter is-active" data-filter="all">Все</button>

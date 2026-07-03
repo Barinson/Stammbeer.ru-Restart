@@ -557,6 +557,24 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         """
         for key, label in menu_offset_tokens
     )
+    section_bg_tokens = [
+        ("home", "Главная"),
+        ("beer", "Пиво"),
+        ("business", "Бизнес"),
+        ("history", "Галерея"),
+        ("contacts", "Контакты"),
+        ("visit", "Stammhaus / Посетить пивоварню"),
+    ]
+    section_bg_rows = "".join(
+        f"""
+        <div class='section-bg-row'>
+          <label>{escape(label)} — URL фона<input name='section_bg_{key}_url' value='{escape(str(layout.get(f"section_bg_{key}_url") or ""))}'></label>
+          <label>Загрузить фон<input name='section_bg_{key}_file' type='file' accept='image/*'></label>
+          <input type='hidden' name='section_bg_{key}_enabled' value='0'><label class='section-bg-check'><input name='section_bg_{key}_enabled' type='checkbox' value='1' {'checked' if str(layout.get(f"section_bg_{key}_enabled") or "1") != "0" else ''}> Показывать фон</label>
+        </div>
+        """
+        for key, label in section_bg_tokens
+    )
 
     beer = content.get("beer") or {}
     beer_untappd_logo_url = str(beer.get("beer_untappd_logo_url") or "")
@@ -615,25 +633,54 @@ def content_management_page(user_email: str, content: dict[str, object], result:
             beer_product_rows_by_category[category] = beer_product_row(len(beer_products) + {'new': 0, 'core': 1, 'seasonal': 2}[category], {"name": "", "style": "", "abv": "", "image_url": "", "untappd_url": "", "category": category, "sort_order": 10, "is_visible": True}, category)
 
     gallery = content.get("gallery") or {}
-    gallery_items = list(gallery.get("items") or [])
-    if not gallery_items:
-        gallery_items.append({"caption": "", "image_url": "", "size": "medium", "sort_order": 10, "is_visible": True})
-    gallery_rows = "".join(
-        f"""
-        <div class='gallery-admin-row' data-gallery-row>
-          <input type='hidden' name='gallery_item_delete_{index}' value='0' data-gallery-delete-flag>
-          <div class='gallery-admin-fields'>
-            <label>Подпись<input name='gallery_item_caption_{index}' value='{escape(str(item.get('caption') or ''))}'></label>
-            <label>Размер<select name='gallery_item_size_{index}'><option value='small' {'selected' if item.get('size') == 'small' else ''}>маленькая</option><option value='medium' {'selected' if item.get('size') in (None, '', 'medium') else ''}>средняя</option><option value='large' {'selected' if item.get('size') == 'large' else ''}>большая</option></select></label>
-            <label>Порядок<input name='gallery_item_sort_order_{index}' type='number' value='{escape(str(item.get('sort_order') or ((index + 1) * 10)))}'></label>
-            <label class='gallery-row-check'><input type='hidden' name='gallery_item_visible_{index}' value='0'><input name='gallery_item_visible_{index}' type='checkbox' value='1' {'checked' if item.get('is_visible', True) else ''}> Показывать</label>
-            <button class='button secondary gallery-delete-row' type='button' data-delete-gallery-item>Удалить</button>
+    gallery_sections = list(gallery.get("sections") or [])
+    if not gallery_sections:
+        gallery_sections = [{"title": "Пивоварня", "sort_order": 10, "is_visible": True, "items": list(gallery.get("items") or [])}]
+    if not gallery_sections[0].get("items"):
+        gallery_sections[0]["items"] = [{"caption": "", "image_url": "", "size": "medium", "sort_order": 10, "is_visible": True}]
+
+    def gallery_item_row(section_index: int, item_index: int, item: dict[str, object]) -> str:
+        image_url = str(item.get("image_url") or "")
+        caption = str(item.get("caption") or "")
+        size = str(item.get("size") or "medium")
+        sort_order = str(item.get("sort_order") or ((item_index + 1) * 10))
+        visible_checked = "checked" if item.get("is_visible", True) else ""
+        preview = f"<img class='gallery-admin-preview' src='{escape(image_url)}' alt=''>" if image_url else ""
+        return f"""
+            <div class='gallery-admin-row' data-gallery-row>
+              <input type='hidden' name='gallery_section_{section_index}_item_delete_{item_index}' value='0' data-gallery-delete-flag>
+              <div class='gallery-admin-fields'>
+                <label>Подпись<input name='gallery_section_{section_index}_item_caption_{item_index}' value='{escape(caption)}'></label>
+                <label>Размер<select name='gallery_section_{section_index}_item_size_{item_index}'><option value='small' {'selected' if size == 'small' else ''}>маленькая</option><option value='medium' {'selected' if size in ('', 'medium') else ''}>средняя</option><option value='large' {'selected' if size == 'large' else ''}>большая</option></select></label>
+                <label>Порядок<input name='gallery_section_{section_index}_item_sort_order_{item_index}' type='number' value='{escape(sort_order)}'></label>
+                <label class='gallery-row-check'><input type='hidden' name='gallery_section_{section_index}_item_visible_{item_index}' value='0'><input name='gallery_section_{section_index}_item_visible_{item_index}' type='checkbox' value='1' {visible_checked}> Показывать</label>
+                <button class='button secondary gallery-delete-row' type='button' data-delete-gallery-item>Удалить фото</button>
+              </div>
+              <label class='gallery-asset-field'>Фото{preview}<input type='hidden' name='gallery_section_{section_index}_item_image_url_{item_index}' value='{escape(image_url)}'><input name='gallery_section_{section_index}_item_image_file_{item_index}' type='file' accept='image/*'></label>
+            </div>
+            """
+
+    def gallery_section_row(section_index: int, section: dict[str, object]) -> str:
+        title = str(section.get("title") or "")
+        sort_order = str(section.get("sort_order") or ((section_index + 1) * 10))
+        visible_checked = "checked" if section.get("is_visible", True) else ""
+        section_items = list(section.get("items") or []) or [{"caption": "", "image_url": "", "size": "medium", "sort_order": 10, "is_visible": True}]
+        items_html = "".join(gallery_item_row(section_index, item_index, item) for item_index, item in enumerate(section_items))
+        return f"""
+        <div class='gallery-section-admin' data-gallery-section data-gallery-section-index='{section_index}'>
+          <input type='hidden' name='gallery_section_{section_index}_delete' value='0' data-gallery-section-delete-flag>
+          <div class='gallery-section-head'>
+            <label>Название блока<input name='gallery_section_{section_index}_title' value='{escape(title)}'></label>
+            <label>Порядок блока<input name='gallery_section_{section_index}_sort_order' type='number' value='{escape(sort_order)}'></label>
+            <label class='gallery-row-check'><input type='hidden' name='gallery_section_{section_index}_visible' value='0'><input name='gallery_section_{section_index}_visible' type='checkbox' value='1' {visible_checked}> Показывать блок</label>
+            <button class='button secondary gallery-delete-row' type='button' data-delete-gallery-section>Удалить блок</button>
           </div>
-          <label class='gallery-asset-field'>Фото{f"<img class='gallery-admin-preview' src='{escape(str(item.get('image_url') or ''))}' alt=''>" if item.get('image_url') else ""}<input type='hidden' name='gallery_item_image_url_{index}' value='{escape(str(item.get('image_url') or ''))}'><input name='gallery_item_image_file_{index}' type='file' accept='image/*'></label>
+          <div class='gallery-section-items' data-gallery-items>{items_html}</div>
+          <button class='button secondary admin-add-row' type='button' data-add-gallery-item>+ фото в блок</button>
         </div>
         """
-        for index, item in enumerate(gallery_items)
-    )
+
+    gallery_rows = "".join(gallery_section_row(index, section) for index, section in enumerate(gallery_sections))
 
     return page(
         "Контент",
@@ -682,16 +729,21 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           .beer-delete-row {{ padding:9px 10px; background:#8a1f1f; }}
           .beer-admin-preview {{ max-width:52px; max-height:52px; object-fit:contain; display:block; margin:0 0 4px; }}
           .admin-add-row {{ margin-top:10px; padding:9px 12px; }}
+          .gallery-section-admin {{ margin:14px 0; padding:12px; border:1px solid rgba(16,88,89,.14); border-radius:16px; background:#fbfcf8; }}
+          .gallery-section-head {{ display:grid; grid-template-columns:minmax(180px,1.5fr) 120px 150px auto; gap:8px; align-items:end; margin-bottom:8px; }}
+          .gallery-section-items {{ display:grid; gap:8px; }}
           .gallery-admin-row {{ display:grid; grid-template-columns:minmax(0,1fr) minmax(190px,260px); gap:10px; align-items:end; padding:10px 0; border-top:1px solid rgba(16,88,89,.12); }}
           .gallery-admin-fields {{ display:grid; grid-template-columns:1.4fr .9fr .6fr auto auto; gap:8px; align-items:end; }}
-          .gallery-admin-row label {{ margin:0; font-size:11px; font-weight:600; color:#52615f; }}
-          .gallery-admin-row input:not([type=checkbox]), .gallery-admin-row select {{ padding:6px 8px; border-radius:8px; font-size:11px; font-weight:400; line-height:1.25; }}
+          .gallery-admin-row label, .gallery-section-head label {{ margin:0; font-size:11px; font-weight:600; color:#52615f; }}
+          .gallery-admin-row input:not([type=checkbox]), .gallery-admin-row select, .gallery-section-head input:not([type=checkbox]) {{ padding:6px 8px; border-radius:8px; font-size:11px; font-weight:400; line-height:1.25; }}
           .gallery-admin-row input[type=file] {{ max-width:138px; color:transparent; font-size:0; padding:0; border:0; background:transparent; }}
           .gallery-admin-row input[type=file]::file-selector-button {{ margin:0; border:1px solid rgba(16,88,89,.24); border-radius:8px; background:#f6f1e3; color:#172625; padding:6px 9px; font-size:11px; font-weight:700; cursor:pointer; }}
           .gallery-admin-preview {{ width:70px; height:52px; object-fit:cover; display:block; margin:0 0 5px; border-radius:10px; }}
           .gallery-delete-row {{ padding:9px 10px; background:#8a1f1f; }}
+          .section-bg-row {{ display:grid; grid-template-columns:minmax(220px,1.4fr) minmax(170px,.8fr) 150px; gap:10px; align-items:end; padding:10px 0; border-top:1px solid rgba(16,88,89,.12); }}
+          .section-bg-check {{ display:flex; gap:7px; align-items:center; padding-bottom:9px; }}
           @media (max-width:1100px) {{ .beer-product-fields {{ grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); }} }}
-          @media (max-width:1100px) {{ .gallery-admin-row, .gallery-admin-fields {{ grid-template-columns:1fr; }} }}
+          @media (max-width:1100px) {{ .gallery-section-head, .gallery-admin-row, .gallery-admin-fields, .section-bg-row {{ grid-template-columns:1fr; }} }}
           @media (max-width:760px) {{ .cms-news-preview {{ grid-template-columns:1fr; }} }}
         </style>
         {notice}
@@ -984,12 +1036,12 @@ def content_management_page(user_email: str, content: dict[str, object], result:
           <section class="cms-tab-panel cms-panel-gallery">
             <div class="card">
               <h3>Галерея</h3>
-              <p class="muted">Современная публичная фотогалерея. Можно добавлять фото, менять порядок, скрывать отдельные карточки и выбирать размер плитки.</p>
+              <p class="muted">Современная публичная фотогалерея с редактируемыми блоками: задавайте название, порядок и видимость блока, а внутри управляйте фото, размером и очередностью.</p>
               <label>Заголовок страницы<input name="gallery_title" value="{escape(str(gallery.get('gallery_title') or 'Галерея'))}"></label>
               <label>Описание<textarea name="gallery_description" rows="3">{escape(str(gallery.get('gallery_description') or ''))}</textarea></label>
-              <h4>Фотографии</h4>
-              <div data-dynamic-list="gallery-items">{gallery_rows}</div>
-              <button class="button secondary admin-add-row" type="button" data-add-gallery-item>+ фото</button>
+              <h4>Блоки галереи</h4>
+              <div data-dynamic-list="gallery-sections">{gallery_rows}</div>
+              <button class="button secondary admin-add-row" type="button" data-add-gallery-section>+ блок галереи</button>
             </div>
             <p><button type="submit">Сохранить галерею</button></p>
           </section>
@@ -1016,6 +1068,9 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <h3>Отступы от верхнего меню</h3>
               <p class="muted">Каждый публичный раздел получает собственный отступ между фиксированным меню и началом контента. Изменение одного значения не влияет на остальные страницы.</p>
               <div class="grid">{menu_offset_rows}</div>
+              <h3>Фоны контентных разделов</h3>
+              <p class="muted">Каждый публичный раздел может иметь собственный фон основной контентной части. Очистите URL и сохраните, чтобы убрать фон; если файл не загружен, останется текущий фирменный fallback.</p>
+              <div>{section_bg_rows}</div>
               <p><button type="submit">Сохранить типографику</button></p>
             </div>
           </section>
@@ -1080,7 +1135,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               clone.querySelectorAll('input, select, textarea').forEach((field) => {{
                 if (field.name) field.name = field.name.replace(new RegExp(`_${{oldIndex}}$`), `_${{index}}`);
                 if (field.type === 'checkbox') field.checked = true;
-                else if (field.type === 'hidden' && field.name.includes('_visible_')) field.value = '0';
+                else if (field.type === 'hidden' && (field.name.includes('_visible_') || field.name.endsWith('_visible'))) field.value = '0';
                 else if (field.type === 'hidden' && field.dataset.deleteFlag !== undefined) field.value = '0';
                 else if (field.type !== 'file') field.value = field.tagName === 'SELECT' ? field.value : '';
               }});
@@ -1099,19 +1154,60 @@ def content_management_page(user_email: str, content: dict[str, object], result:
                 cloneRow(`beer-products-${{category}}`, 'beer_product_name_', category);
               }});
             }});
-            document.querySelector('[data-add-gallery-item]')?.addEventListener('click', () => {{
-              const list = document.querySelector('[data-dynamic-list="gallery-items"]');
+            function renumberGallerySection(section, newSectionIndex) {{
+              const oldSectionIndex = section.dataset.gallerySectionIndex || '0';
+              section.dataset.gallerySectionIndex = String(newSectionIndex);
+              section.querySelectorAll('input, select').forEach((field) => {{
+                if (field.name) field.name = field.name.replace(new RegExp(`gallery_section_${{oldSectionIndex}}_`, 'g'), `gallery_section_${{newSectionIndex}}_`);
+              }});
+            }}
+            function clearGallerySection(section, newSectionIndex) {{
+              renumberGallerySection(section, newSectionIndex);
+              section.hidden = false;
+              section.querySelectorAll('input, select').forEach((field) => {{
+                if (field.type === 'checkbox') field.checked = true;
+                else if (field.type === 'hidden' && field.name.endsWith('_delete')) field.value = '0';
+                else if (field.type === 'hidden' && field.dataset.galleryDeleteFlag !== undefined) field.value = '0';
+                else if (field.type === 'hidden' && (field.name.includes('_visible_') || field.name.endsWith('_visible'))) field.value = '0';
+                else if (field.type !== 'file') field.value = field.tagName === 'SELECT' ? 'medium' : '';
+              }});
+              const title = section.querySelector(`[name="gallery_section_${{newSectionIndex}}_title"]`);
+              const sort = section.querySelector(`[name="gallery_section_${{newSectionIndex}}_sort_order"]`);
+              if (title) title.value = 'Новый блок';
+              if (sort) sort.value = String((newSectionIndex + 1) * 10);
+              const itemRows = Array.from(section.querySelectorAll('.gallery-admin-row'));
+              itemRows.forEach((row, rowIndex) => {{ if (rowIndex > 0) row.remove(); }});
+              section.querySelectorAll('img').forEach((img) => img.remove());
+            }}
+            document.querySelector('[data-add-gallery-section]')?.addEventListener('click', () => {{
+              const list = document.querySelector('[data-dynamic-list="gallery-sections"]');
               if (!list) return;
-              const row = list.querySelector('.gallery-admin-row');
-              if (!row) return;
-              const oldIndex = (row.querySelector('[name^="gallery_item_caption_"]')?.name || '').match(/_(\\d+)$/)?.[1] || '0';
-              const index = nextIndex(document, 'gallery_item_caption_');
+              const section = list.querySelector('.gallery-section-admin');
+              if (!section) return;
+              const maxIndex = Array.from(list.querySelectorAll('[data-gallery-section]')).reduce((max, node) => Math.max(max, Number(node.dataset.gallerySectionIndex || 0)), -1);
+              const clone = section.cloneNode(true);
+              clearGallerySection(clone, maxIndex + 1);
+              list.appendChild(clone);
+            }});
+            document.addEventListener('click', (event) => {{
+              const addButton = event.target.closest('[data-add-gallery-item]');
+              if (!addButton) return;
+              const section = addButton.closest('[data-gallery-section]');
+              const list = section?.querySelector('[data-gallery-items]');
+              const row = list?.querySelector('.gallery-admin-row');
+              if (!section || !list || !row) return;
+              const sectionIndex = section.dataset.gallerySectionIndex || '0';
+              const oldIndex = (row.querySelector(`[name^="gallery_section_${{sectionIndex}}_item_caption_"]`)?.name || '').match(/_(\\d+)$/)?.[1] || '0';
+              const nextItemIndex = Array.from(list.querySelectorAll('[name*="_item_caption_"]')).reduce((max, node) => {{
+                const match = node.name.match(/_(\\d+)$/);
+                return match ? Math.max(max, Number(match[1])) : max;
+              }}, -1) + 1;
               const clone = row.cloneNode(true);
               clone.hidden = false;
               clone.querySelectorAll('input, select').forEach((field) => {{
-                if (field.name) field.name = field.name.replace(new RegExp(`_${{oldIndex}}$`), `_${{index}}`);
+                if (field.name) field.name = field.name.replace(new RegExp(`_${{oldIndex}}$`), `_${{nextItemIndex}}`);
                 if (field.type === 'checkbox') field.checked = true;
-                else if (field.type === 'hidden' && field.name.includes('_visible_')) field.value = '0';
+                else if (field.type === 'hidden' && (field.name.includes('_visible_') || field.name.endsWith('_visible'))) field.value = '0';
                 else if (field.type === 'hidden' && field.dataset.galleryDeleteFlag !== undefined) field.value = '0';
                 else if (field.type !== 'file') field.value = field.tagName === 'SELECT' ? 'medium' : '';
               }});
@@ -1137,6 +1233,16 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               const flag = row.querySelector('[data-gallery-delete-flag]');
               if (flag) flag.value = '1';
               row.hidden = true;
+            }});
+            document.addEventListener('click', (event) => {{
+              const button = event.target.closest('[data-delete-gallery-section]');
+              if (!button) return;
+              if (!window.confirm('Удалить блок галереи?')) return;
+              const section = button.closest('[data-gallery-section]');
+              if (!section) return;
+              const flag = section.querySelector('[data-gallery-section-delete-flag]');
+              if (flag) flag.value = '1';
+              section.hidden = true;
             }});
           }})();
         </script>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 import sqlite3
 import urllib.parse
 import uuid
@@ -920,6 +921,9 @@ class StammApp:
                     if beer_untappd_logo_file:
                         form["beer_untappd_logo_url"] = self.save_uploaded_media(beer_untappd_logo_file, "beer-untappd")
                     for field_name, upload in files.items():
+                        if field_name.startswith("section_bg_") and field_name.endswith("_file"):
+                            section = field_name.removeprefix("section_bg_").removesuffix("_file")
+                            form[f"section_bg_{section}_url"] = self.save_uploaded_media(upload, f"section-bg-{section}")
                         if field_name.startswith("action_") and field_name.endswith("_icon_file"):
                             key = field_name.removeprefix("action_").removesuffix("_icon_file")
                             form[f"action_{key}_icon_url"] = self.save_uploaded_media(upload, f"nav-{key}")
@@ -929,6 +933,10 @@ class StammApp:
                         if field_name.startswith("beer_product_image_file_"):
                             index = field_name.removeprefix("beer_product_image_file_")
                             form[f"beer_product_image_url_{index}"] = self.save_uploaded_media(upload, f"beer-product-{index}")
+                        gallery_section_match = re.match(r"gallery_section_(\d+)_item_image_file_(\d+)$", field_name)
+                        if gallery_section_match:
+                            section_index, item_index = gallery_section_match.groups()
+                            form[f"gallery_section_{section_index}_item_image_url_{item_index}"] = self.save_uploaded_media(upload, f"gallery-{section_index}-{item_index}")
                         if field_name.startswith("gallery_item_image_file_"):
                             index = field_name.removeprefix("gallery_item_image_file_")
                             form[f"gallery_item_image_url_{index}"] = self.save_uploaded_media(upload, f"gallery-{index}")

@@ -578,6 +578,22 @@ class CoreFoundationTest(unittest.TestCase):
                 "maintenance_image_url": "/media/maintenance.png",
                 "gallery_title": "Галерея Stamm",
                 "gallery_description": "Производство\nи события",
+                "gallery_section_0_title": "Пивоварня",
+                "gallery_section_0_sort_order": "10",
+                "gallery_section_0_visible": "1",
+                "gallery_section_0_item_caption_0": "Варочный порядок",
+                "gallery_section_0_item_image_url_0": "/media/gallery-brew.jpg",
+                "gallery_section_0_item_size_0": "large",
+                "gallery_section_0_item_sort_order_0": "20",
+                "gallery_section_0_item_visible_0": "1",
+                "gallery_section_1_title": "Скрытый блок",
+                "gallery_section_1_sort_order": "20",
+                "gallery_section_1_visible": "0",
+                "gallery_section_1_item_caption_0": "Скрытое фото",
+                "gallery_section_1_item_image_url_0": "/media/gallery-hidden.jpg",
+                "gallery_section_1_item_size_0": "small",
+                "gallery_section_1_item_sort_order_0": "10",
+                "gallery_section_1_item_visible_0": "1",
                 "gallery_item_caption_0": "Варочный порядок",
                 "gallery_item_image_url_0": "/media/gallery-brew.jpg",
                 "gallery_item_size_0": "large",
@@ -588,6 +604,12 @@ class CoreFoundationTest(unittest.TestCase):
                 "gallery_item_size_1": "small",
                 "gallery_item_sort_order_1": "10",
                 "gallery_item_visible_1": "0",
+                "section_bg_home_url": "/media/bg-home.jpg",
+                "section_bg_beer_url": "/media/bg-beer.jpg",
+                "section_bg_business_url": "/media/bg-business.jpg",
+                "section_bg_history_url": "/media/bg-gallery.jpg",
+                "section_bg_contacts_url": "/media/bg-contacts.jpg",
+                "section_bg_visit_url": "/media/bg-visit.jpg",
                 "contact_email_label_0": "Основной",
                 "contact_email_value_0": "hello@stamm.test",
                 "contact_email_sort_order_0": "20",
@@ -716,8 +738,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Order now", html)
         self.assertNotIn('aria-label="Корзина"', html)
         self.assertNotIn('/business#cart', html)
-        self.assertIn("/media/taproom-bg.jpg", html)
-        self.assertIn("--home-content-bg:url", html)
+        self.assertIn("/media/bg-home.jpg", html)
+        self.assertIn("--section-bg:url('/media/bg-home.jpg')", html)
         self.assertIn("background-attachment:fixed", html)
         self.assertIn("linear-gradient(180deg, rgba(16,88,89,.84)", html)
         self.assertIn("min-height:100vh", html)
@@ -763,6 +785,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("min-height:100vh", guest_html)
         self.assertIn("--business-guest-font-size:28px", guest_html)
         self.assertIn("--business-guest-font-weight:700", guest_html)
+        self.assertIn("--section-bg:url('/media/bg-business.jpg')", guest_html)
         maintenance_html = maintenance_page(content)
         self.assertIn("Технические работы", maintenance_html)
         self.assertIn("mailto:marketing@stammbeer.ru", maintenance_html)
@@ -773,12 +796,16 @@ class CoreFoundationTest(unittest.TestCase):
         gallery_html = gallery_page(content)
         self.assertIn("Галерея Stamm", gallery_html)
         self.assertIn("Производство\nи события", gallery_html)
+        self.assertIn("Пивоварня", gallery_html)
+        self.assertNotIn("Скрытый блок", gallery_html)
         self.assertIn("/media/gallery-brew.jpg", gallery_html)
+        self.assertIn("gallery-section", gallery_html)
         self.assertIn("gallery-card--large", gallery_html)
         self.assertIn("data-gallery-open", gallery_html)
         self.assertIn("galleryLightbox", gallery_html)
         self.assertIn("filter:brightness(1.08) saturate(1.02)", gallery_html)
         self.assertIn("rgba(0,0,0,.42)", gallery_html)
+        self.assertIn("--section-bg:url('/media/bg-gallery.jpg')", gallery_html)
         self.assertNotIn("rgba(11,63,64,.78)", gallery_html)
         self.assertNotIn("/media/gallery-hidden.jpg", gallery_html)
 
@@ -873,7 +900,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("--logo-size:154px", html)
         self.assertIn("width:max-content", html)
         self.assertIn("display:flex; flex-wrap:wrap", html)
-        self.assertIn("--beer-bg:url", html)
+        self.assertIn("--section-bg:url", html)
         self.assertIn("linear-gradient(180deg, rgba(16,88,89,.78)", html)
         self.assertIn("max-width:1440px", html)
         self.assertIn("gap:104px", html)
@@ -1032,8 +1059,11 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("beer_section_gap_px", admin_content_html)
         self.assertIn('for="cms-tab-gallery"', admin_content_html)
         self.assertIn("gallery_title", admin_content_html)
-        self.assertIn("gallery_item_image_file_0", admin_content_html)
+        self.assertIn("gallery_section_0_title", admin_content_html)
+        self.assertIn("gallery_section_0_item_image_file_0", admin_content_html)
+        self.assertIn("data-add-gallery-section", admin_content_html)
         self.assertIn("data-add-gallery-item", admin_content_html)
+        self.assertIn("data-delete-gallery-section", admin_content_html)
         self.assertIn("data-delete-gallery-item", admin_content_html)
         self.assertIn("site_public_base_url", admin_content_html)
         self.assertIn("site_title", admin_content_html)
@@ -1070,6 +1100,12 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("typography_product_title_font_size_px", admin_content_html)
         self.assertIn("menu_offset_home_px", admin_content_html)
         self.assertIn("Отступ контента от меню — Пиво", admin_content_html)
+        self.assertIn("section_bg_home_file", admin_content_html)
+        self.assertIn("section_bg_beer_file", admin_content_html)
+        self.assertIn("section_bg_business_file", admin_content_html)
+        self.assertIn("section_bg_history_file", admin_content_html)
+        self.assertIn("section_bg_contacts_file", admin_content_html)
+        self.assertIn("section_bg_visit_file", admin_content_html)
 
         parts = [
             field("home_hero_title", "STAMM"),
@@ -1112,18 +1148,24 @@ class CoreFoundationTest(unittest.TestCase):
             file_field("maintenance_image_file", "maintenance.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='800' height='400'></svg>"),
             field("gallery_title", "Админская галерея"),
             field("gallery_description", "Фото из админки"),
-            field("gallery_item_caption_0", "Зал варки"),
-            field("gallery_item_image_url_0", ""),
-            file_field("gallery_item_image_file_0", "gallery.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='900'></svg>"),
-            field("gallery_item_size_0", "large"),
-            field("gallery_item_sort_order_0", "10"),
-            field("gallery_item_visible_0", "1"),
-            field("gallery_item_caption_1", "Удалить фото"),
-            field("gallery_item_image_url_1", "/media/delete-me.jpg"),
-            field("gallery_item_size_1", "small"),
-            field("gallery_item_sort_order_1", "20"),
-            field("gallery_item_visible_1", "1"),
-            field("gallery_item_delete_1", "1"),
+            field("gallery_section_0_title", "Пивоварня"),
+            field("gallery_section_0_sort_order", "20"),
+            field("gallery_section_0_visible", "1"),
+            field("gallery_section_0_item_caption_0", "Зал варки"),
+            field("gallery_section_0_item_image_url_0", ""),
+            file_field("gallery_section_0_item_image_file_0", "gallery.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='900'></svg>"),
+            field("gallery_section_0_item_size_0", "large"),
+            field("gallery_section_0_item_sort_order_0", "10"),
+            field("gallery_section_0_item_visible_0", "1"),
+            field("gallery_section_1_title", "Ретроспектива"),
+            field("gallery_section_1_sort_order", "10"),
+            field("gallery_section_1_visible", "1"),
+            field("gallery_section_1_item_caption_0", "Удалить фото"),
+            field("gallery_section_1_item_image_url_0", "/media/delete-me.jpg"),
+            field("gallery_section_1_item_size_0", "small"),
+            field("gallery_section_1_item_sort_order_0", "20"),
+            field("gallery_section_1_item_visible_0", "1"),
+            field("gallery_section_1_delete", "1"),
             field("contact_email_label_0", "Основной"), field("contact_email_value_0", "admin@stamm.test"), field("contact_email_sort_order_0", "10"), field("contact_email_visible_0", "on"),
             field("contact_email_label_1", "Скрытая почта"), field("contact_email_value_1", "hidden-admin@stamm.test"), field("contact_email_sort_order_1", "20"),
             field("contact_phone_label_0", "Отдел продаж"), field("contact_phone_value_0", "+7 999 000-00-00"), field("contact_phone_sort_order_0", "10"), field("contact_phone_visible_0", "on"),
@@ -1140,6 +1182,12 @@ class CoreFoundationTest(unittest.TestCase):
             field("menu_offset_home_px", "210"), field("menu_offset_beer_px", "230"),
             field("menu_offset_visit_px", "190"), field("menu_offset_history_px", "200"),
             field("menu_offset_business_px", "240"), field("menu_offset_contacts_px", "220"),
+            field("section_bg_home_url", ""), file_field("section_bg_home_file", "bg-home.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_home_enabled", "1"),
+            field("section_bg_beer_url", ""), file_field("section_bg_beer_file", "bg-beer.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_beer_enabled", "1"),
+            field("section_bg_business_url", ""), file_field("section_bg_business_file", "bg-business.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_business_enabled", "1"),
+            field("section_bg_history_url", ""), file_field("section_bg_history_file", "bg-gallery.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_history_enabled", "1"),
+            field("section_bg_contacts_url", ""), file_field("section_bg_contacts_file", "bg-contacts.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_contacts_enabled", "1"),
+            field("section_bg_visit_url", ""), file_field("section_bg_visit_file", "bg-visit.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_visit_enabled", "1"),
             field("beer_untappd_logo_url", ""),
             file_field("beer_untappd_logo_file", "untappd.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'></svg>"),
             field("beer_popup_backdrop_color", "#224466"), field("beer_popup_backdrop_opacity", "35"),
@@ -1210,17 +1258,29 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(content["beer"]["beer_popup_card_opacity"], "80")
         self.assertEqual(content["beer"]["beer_section_gap_px"], "96")
         self.assertEqual(content["gallery"]["gallery_title"], "Админская галерея")
-        self.assertTrue(content["gallery"]["items"][0]["image_url"].startswith("/media/gallery-0-"))
-        self.assertEqual(content["gallery"]["items"][0]["size"], "large")
+        self.assertEqual(content["gallery"]["sections"][0]["title"], "Пивоварня")
+        self.assertTrue(content["gallery"]["sections"][0]["items"][0]["image_url"].startswith("/media/gallery-0-0-"))
+        self.assertEqual(content["gallery"]["sections"][0]["items"][0]["size"], "large")
+        self.assertIn("Пивоварня", gallery_page(content))
+        self.assertNotIn("Ретроспектива", gallery_page(content))
         self.assertNotIn("/media/delete-me.jpg", gallery_page(content))
         self.assertIn("--menu-offset:210px", home_page(content))
         self.assertIn("--menu-offset:220px", contacts_page(content))
         self.assertIn("--menu-offset:240px", business_storefront_page(content))
+        self.assertTrue(content["layout"]["section_bg_beer_url"].startswith("/media/section-bg-beer-"))
+        self.assertTrue(content["layout"]["section_bg_history_url"].startswith("/media/section-bg-history-"))
+        self.assertTrue(content["layout"]["section_bg_contacts_url"].startswith("/media/section-bg-contacts-"))
+        self.assertIn(content["layout"]["section_bg_home_url"], home_page(content))
+        self.assertIn(content["layout"]["section_bg_beer_url"], beer_page(content))
+        self.assertIn(content["layout"]["section_bg_business_url"], business_storefront_page(content))
+        self.assertIn(content["layout"]["section_bg_history_url"], gallery_page(content))
+        self.assertIn(content["layout"]["section_bg_contacts_url"], contacts_page(content))
+        self.assertIn(content["layout"]["section_bg_visit_url"], public_views_module.public_placeholder_page("Посетить пивоварню", "visit", content))
         tg = next(item for item in content["actions"] if item["key"] == "tg")
         self.assertTrue(tg["icon_url"].startswith("/media/nav-tg-"))
         self.assertIn(content["home"]["home_logo_url"], home_page(content))
         self.assertIn(content["home"]["home_news_image_url"], home_page(content))
-        self.assertIn(content["home"]["home_content_bg_url"], home_page(content))
+        self.assertTrue(content["home"]["home_content_bg_url"].startswith("/media/home-content-bg-"))
         self.assertIn("Админская новость", home_page(content))
         self.assertIn("Читать", home_page(content))
         self.assertIn("--home-line-gap:24px", home_page(content))

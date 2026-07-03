@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from typing import Any
 
@@ -86,6 +87,18 @@ LAYOUT_DEFAULTS = {
     "menu_offset_history_px": "176",
     "menu_offset_business_px": "176",
     "menu_offset_contacts_px": "176",
+    "section_bg_home_url": "",
+    "section_bg_home_enabled": "1",
+    "section_bg_beer_url": "",
+    "section_bg_beer_enabled": "1",
+    "section_bg_business_url": "",
+    "section_bg_business_enabled": "1",
+    "section_bg_history_url": "",
+    "section_bg_history_enabled": "1",
+    "section_bg_contacts_url": "",
+    "section_bg_contacts_enabled": "1",
+    "section_bg_visit_url": "",
+    "section_bg_visit_enabled": "1",
 }
 
 BEER_DEFAULTS = {
@@ -114,6 +127,7 @@ GALLERY_DEFAULTS = {
     "gallery_title": "Галерея",
     "gallery_description": "Фотографии Stamm Brewing: производство, команда, события и настроение пивоварни.",
     "gallery_items_json": "[]",
+    "gallery_sections_json": "[]",
 }
 
 MENU_DEFAULTS = [
@@ -223,22 +237,58 @@ def get_public_site_content(conn: sqlite3.Connection, include_hidden: bool = Fal
             key=lambda item: (int(item.get("sort_order") or 100), str(item.get("name") or "")),
         )
     gallery = {**GALLERY_DEFAULTS, **settings}
-    try:
-        gallery_items = json.loads(str(gallery.get("gallery_items_json") or "[]"))
-    except json.JSONDecodeError:
-        gallery_items = []
-    normalized_gallery_items = []
-    for index, item in enumerate(gallery_items if isinstance(gallery_items, list) else []):
+
+    def normalize_gallery_item(item: Any, index: int) -> dict[str, Any] | None:
         if not isinstance(item, dict):
-            continue
-        normalized_gallery_items.append({
+            return None
+        return {
             "caption": str(item.get("caption") or ""),
             "image_url": str(item.get("image_url") or ""),
             "size": str(item.get("size") or "medium"),
             "sort_order": int(item.get("sort_order") or ((index + 1) * 10)),
             "is_visible": bool(item.get("is_visible", True)),
-        })
+        }
+
+    try:
+        gallery_items = json.loads(str(gallery.get("gallery_items_json") or "[]"))
+    except json.JSONDecodeError:
+        gallery_items = []
+    normalized_gallery_items = [
+        normalized
+        for index, item in enumerate(gallery_items if isinstance(gallery_items, list) else [])
+        if (normalized := normalize_gallery_item(item, index)) is not None
+    ]
     gallery["items"] = sorted(normalized_gallery_items, key=lambda item: (item["sort_order"], item["caption"]))
+
+    try:
+        gallery_sections = json.loads(str(gallery.get("gallery_sections_json") or "[]"))
+    except json.JSONDecodeError:
+        gallery_sections = []
+    normalized_gallery_sections = []
+    for section_index, section in enumerate(gallery_sections if isinstance(gallery_sections, list) else []):
+        if not isinstance(section, dict):
+            continue
+        section_items = [
+            normalized
+            for item_index, item in enumerate(section.get("items") if isinstance(section.get("items"), list) else [])
+            if (normalized := normalize_gallery_item(item, item_index)) is not None
+        ]
+        title = str(section.get("title") or "").strip()
+        if title or section_items:
+            normalized_gallery_sections.append({
+                "title": title or "Раздел галереи",
+                "sort_order": int(section.get("sort_order") or ((section_index + 1) * 10)),
+                "is_visible": bool(section.get("is_visible", True)),
+                "items": sorted(section_items, key=lambda item: (item["sort_order"], item["caption"])),
+            })
+    if not normalized_gallery_sections and gallery["items"]:
+        normalized_gallery_sections.append({
+            "title": str(gallery.get("gallery_title") or GALLERY_DEFAULTS["gallery_title"]),
+            "sort_order": 10,
+            "is_visible": True,
+            "items": gallery["items"],
+        })
+    gallery["sections"] = sorted(normalized_gallery_sections, key=lambda section: (section["sort_order"], section["title"]))
     return {
         "home": {**HOME_DEFAULTS, **settings},
         "contacts": contacts,
@@ -404,25 +454,69 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
             "gallery_title": str(data.get("gallery_title") or GALLERY_DEFAULTS["gallery_title"]),
             "gallery_description": str(data.get("gallery_description") or ""),
         }
+
+        def gallery_item_from_data(prefix: str, index: int) -> dict[str, Any] | None:
+            if str(data.get(f"{prefix}_delete_{index}") or "").strip() == "1":
+                return None
+            image = str(data.get(f"{prefix}_image_url_{index}") or "").strip()
+            caption = str(data.get(f"{prefix}_caption_{index}") or "").strip()
+            if not image and not caption:
+                return None
+            return {
+                "caption": caption,
+                "image_url": image,
+                "size": str(data.get(f"{prefix}_size_{index}") or "medium"),
+                "sort_order": int(data.get(f"{prefix}_sort_order_{index}") or ((index + 1) * 10)),
+                "is_visible": str(data.get(f"{prefix}_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
+            }
+
         item_indices = sorted(
             {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("gallery_item_caption_") and key.rsplit("_", 1)[1].isdigit()}
             | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("gallery_item_image_url_") and key.rsplit("_", 1)[1].isdigit()}
         )
-        items = []
-        for index in item_indices:
-            if str(data.get(f"gallery_item_delete_{index}") or "").strip() == "1":
+        items = [
+            item
+            for index in item_indices
+            if (item := gallery_item_from_data("gallery_item", index)) is not None
+        ]
+
+        section_indices = sorted(
+            int(match.group(1))
+            for key in data
+            if (match := re.match(r"gallery_section_(\d+)_title$", key))
+        )
+        sections = []
+        for section_index in section_indices:
+            if str(data.get(f"gallery_section_{section_index}_delete") or "").strip() == "1":
                 continue
-            image = str(data.get(f"gallery_item_image_url_{index}") or "").strip()
-            caption = str(data.get(f"gallery_item_caption_{index}") or "").strip()
-            if image or caption:
-                items.append({
-                    "caption": caption,
-                    "image_url": image,
-                    "size": str(data.get(f"gallery_item_size_{index}") or "medium"),
-                    "sort_order": int(data.get(f"gallery_item_sort_order_{index}") or ((index + 1) * 10)),
-                    "is_visible": str(data.get(f"gallery_item_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
+            title = str(data.get(f"gallery_section_{section_index}_title") or "").strip()
+            item_prefix = f"gallery_section_{section_index}_item"
+            section_item_indices = sorted(
+                int(match.group(1))
+                for key in data
+                if (match := re.match(rf"{re.escape(item_prefix)}_(?:caption|image_url)_(\d+)$", key))
+            )
+            section_items = [
+                item
+                for item_index in section_item_indices
+                if (item := gallery_item_from_data(item_prefix, item_index)) is not None
+            ]
+            if title or section_items:
+                sections.append({
+                    "title": title or "Раздел галереи",
+                    "sort_order": int(data.get(f"gallery_section_{section_index}_sort_order") or ((section_index + 1) * 10)),
+                    "is_visible": str(data.get(f"gallery_section_{section_index}_visible", "1")).lower() not in {"0", "false", "off", "no"},
+                    "items": section_items,
                 })
+        if not sections and items:
+            sections.append({
+                "title": gallery_values["gallery_title"],
+                "sort_order": 10,
+                "is_visible": True,
+                "items": items,
+            })
         gallery_values["gallery_items_json"] = json.dumps(items, ensure_ascii=False)
+        gallery_values["gallery_sections_json"] = json.dumps(sections, ensure_ascii=False)
         for key, value in gallery_values.items():
             conn.execute(
                 """
