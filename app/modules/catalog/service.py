@@ -119,6 +119,96 @@ def _price_payload(
     }
 
 
+
+
+def sync_business_catalog_read_model(conn: sqlite3.Connection) -> None:
+    """Keep the public B2B read-model exactly aligned with admin publication flags."""
+    conn.execute(
+        """
+        DELETE FROM business_catalog_items
+        WHERE product_id NOT IN (
+            SELECT products.id
+            FROM products
+            JOIN product_overrides ON product_overrides.product_id = products.id
+            WHERE coalesce(product_overrides.is_published, 0) = 1
+              AND products.sync_state = 'active'
+              AND coalesce(products.stock_quantity, 0) > 0
+              AND products.availability_status != 'unavailable'
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO business_catalog_items (
+            product_id, slug, public_name, image_url, price_minor, price_type_prices_json, currency, container_type,
+            volume_liters, alcohol_percent, availability_status, sort_order, search_text, last_catalog_sync_at
+        )
+        SELECT
+            products.id,
+            coalesce(product_overrides.slug, (SELECT slug FROM business_catalog_items WHERE product_id = products.id ORDER BY id LIMIT 1), 'product-' || products.id),
+            coalesce(nullif(product_overrides.public_name, ''), products.accounting_name),
+            products.image_url,
+            coalesce((SELECT keep.price_minor FROM business_catalog_items AS keep WHERE keep.product_id = products.id ORDER BY keep.id LIMIT 1), products.price_minor),
+            coalesce((SELECT keep.price_type_prices_json FROM business_catalog_items AS keep WHERE keep.product_id = products.id ORDER BY keep.id LIMIT 1), products.price_type_prices_json),
+            products.currency,
+            products.container_type,
+            products.volume_liters,
+            products.alcohol_percent,
+            products.availability_status,
+            product_overrides.sort_order,
+            products.accounting_name,
+            products.last_synced_at
+        FROM products
+        JOIN product_overrides ON product_overrides.product_id = products.id
+        WHERE coalesce(product_overrides.is_published, 0) = 1
+          AND products.sync_state = 'active'
+          AND coalesce(products.stock_quantity, 0) > 0
+          AND products.availability_status != 'unavailable'
+        ON CONFLICT(slug) DO UPDATE SET
+            product_id = excluded.product_id,
+            public_name = excluded.public_name,
+            image_url = excluded.image_url,
+            price_minor = excluded.price_minor,
+            price_type_prices_json = excluded.price_type_prices_json,
+            currency = excluded.currency,
+            container_type = excluded.container_type,
+            volume_liters = excluded.volume_liters,
+            alcohol_percent = excluded.alcohol_percent,
+            availability_status = excluded.availability_status,
+            sort_order = excluded.sort_order,
+            search_text = excluded.search_text,
+            last_catalog_sync_at = excluded.last_catalog_sync_at
+        """
+    )
+
+    conn.execute(
+        """
+        DELETE FROM business_catalog_items
+        WHERE product_id IN (
+            SELECT products.id
+            FROM products
+            JOIN product_overrides ON product_overrides.product_id = products.id
+            WHERE coalesce(product_overrides.is_published, 0) = 1
+              AND products.sync_state = 'active'
+              AND coalesce(products.stock_quantity, 0) > 0
+              AND products.availability_status != 'unavailable'
+        )
+          AND slug NOT IN (
+            SELECT coalesce(
+                product_overrides.slug,
+                (SELECT keep.slug FROM business_catalog_items AS keep WHERE keep.product_id = products.id ORDER BY keep.id LIMIT 1),
+                'product-' || products.id
+            )
+            FROM products
+            JOIN product_overrides ON product_overrides.product_id = products.id
+            WHERE coalesce(product_overrides.is_published, 0) = 1
+              AND products.sync_state = 'active'
+              AND coalesce(products.stock_quantity, 0) > 0
+              AND products.availability_status != 'unavailable'
+        )
+        """
+    )
+
 def public_catalog(
     conn: sqlite3.Connection,
     container_type: str | None = None,
@@ -128,9 +218,11 @@ def public_catalog(
     customer_price_type_name: str | None = None,
     minimum_order_amount_minor: int | None = None,
 ) -> dict[str, Any]:
+    sync_business_catalog_read_model(conn)
     selected_filter = normalize_container_filter(container_type)
     params: list[object] = []
     conditions = [
+        "coalesce(overrides.is_published, 0) = 1",
         "products.sync_state = 'active'",
         "coalesce(products.stock_quantity, 0) > 0",
         "items.availability_status != 'unavailable'",
@@ -142,7 +234,9 @@ def public_catalog(
         SELECT COUNT(*)
         FROM business_catalog_items AS items
         JOIN products ON products.id = items.product_id
-        WHERE products.sync_state = 'active'
+        LEFT JOIN product_overrides AS overrides ON overrides.product_id = items.product_id
+        WHERE coalesce(overrides.is_published, 0) = 1
+          AND products.sync_state = 'active'
           AND coalesce(products.stock_quantity, 0) > 0
           AND items.availability_status != 'unavailable'
         """
@@ -152,7 +246,9 @@ def public_catalog(
         SELECT MAX(items.last_catalog_sync_at)
         FROM business_catalog_items AS items
         JOIN products ON products.id = items.product_id
-        WHERE products.sync_state = 'active'
+        LEFT JOIN product_overrides AS overrides ON overrides.product_id = items.product_id
+        WHERE coalesce(overrides.is_published, 0) = 1
+          AND products.sync_state = 'active'
           AND coalesce(products.stock_quantity, 0) > 0
           AND items.availability_status != 'unavailable'
         """
@@ -182,6 +278,7 @@ def public_catalog(
             overrides.allow_preorder,
             overrides.min_order_quantity,
             overrides.order_step,
+            products.stock_quantity,
             products.article,
             products.code
         FROM business_catalog_items AS items
@@ -198,7 +295,9 @@ def public_catalog(
             SELECT items.container_type, items.public_name, products.article, products.code
             FROM business_catalog_items AS items
             JOIN products ON products.id = items.product_id
-            WHERE products.sync_state = 'active'
+            LEFT JOIN product_overrides AS overrides ON overrides.product_id = items.product_id
+            WHERE coalesce(overrides.is_published, 0) = 1
+              AND products.sync_state = 'active'
               AND coalesce(products.stock_quantity, 0) > 0
               AND items.availability_status != 'unavailable'
             """
@@ -215,6 +314,7 @@ def public_catalog(
         if selected_filter != "all" and container != selected_filter:
             continue
         order_rules = order_rules_for_container(container, row["min_order_quantity"], row["order_step"])
+        available_quantity = max(0, int(row["stock_quantity"] or 0))
         price_type_prices = _price_type_prices(row["price_type_prices_json"]) or _price_type_prices(row["product_price_type_prices_json"])
         base_price_minor = row["price_minor"] if row["price_minor"] is not None else row["product_price_minor"]
         matched_price_type_price = _matched_price_type_price(
@@ -277,6 +377,7 @@ def public_catalog(
                 "availability": {
                     "status": availability,
                     "label": AVAILABILITY_LABELS.get(availability, availability),
+                    "quantity": available_quantity,
                 },
                 "imageUrl": row["image_url"],
                 "ctaLabel": "В заявку" if availability != "unavailable" or row["allow_preorder"] else "Недоступно",
@@ -284,6 +385,7 @@ def public_catalog(
                     "allowPreorder": bool(row["allow_preorder"]),
                     "minQuantity": order_rules["minQuantity"],
                     "step": order_rules["step"],
+                    "maxQuantity": available_quantity,
                 },
             }
         )
@@ -386,46 +488,5 @@ def publish_product(conn: sqlite3.Connection, product_id: int, publish: bool) ->
         """,
         (product_id, product["accounting_name"], slug, 1 if publish else 0),
     )
-    if publish:
-        conn.execute(
-            """
-            INSERT INTO business_catalog_items (
-                product_id, slug, public_name, image_url, price_minor, price_type_prices_json, currency, container_type,
-                volume_liters, alcohol_percent, availability_status, sort_order, search_text, last_catalog_sync_at
-            )
-            SELECT
-                products.id,
-                coalesce(product_overrides.slug, ?),
-                coalesce(product_overrides.public_name, products.accounting_name),
-                products.image_url,
-                products.price_minor,
-                products.price_type_prices_json,
-                products.currency,
-                products.container_type,
-                products.volume_liters,
-                products.alcohol_percent,
-                products.availability_status,
-                product_overrides.sort_order,
-                products.accounting_name,
-                products.last_synced_at
-            FROM products
-            JOIN product_overrides ON product_overrides.product_id = products.id
-            WHERE products.id = ?
-            ON CONFLICT(slug) DO UPDATE SET
-                public_name = excluded.public_name,
-                image_url = excluded.image_url,
-                price_minor = excluded.price_minor,
-                price_type_prices_json = excluded.price_type_prices_json,
-                currency = excluded.currency,
-                container_type = excluded.container_type,
-                volume_liters = excluded.volume_liters,
-                alcohol_percent = excluded.alcohol_percent,
-                availability_status = excluded.availability_status,
-                search_text = excluded.search_text,
-                last_catalog_sync_at = excluded.last_catalog_sync_at
-            """,
-            (slug, product_id),
-        )
-    else:
-        conn.execute("DELETE FROM business_catalog_items WHERE product_id = ?", (product_id,))
+    sync_business_catalog_read_model(conn)
     conn.commit()
