@@ -1332,7 +1332,10 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(cans["items"][0]["containerType"], "can")
         self.assertEqual(cans["items"][0]["orderRules"]["step"], 12)
         self.assertEqual(cans["items"][0]["orderRules"]["minQuantity"], 12)
+        self.assertEqual(cans["items"][0]["orderRules"]["maxQuantity"], 10)
+        self.assertEqual(cans["items"][0]["availability"]["quantity"], 10)
         self.assertEqual(kegs["items"][0]["orderRules"]["step"], 1)
+        self.assertEqual(kegs["items"][0]["orderRules"]["maxQuantity"], 10)
         self.assertEqual(public_catalog(app.conn, minimum_order_amount_minor=2500000)["meta"]["minimumOrder"]["amountMinor"], 2500000)
 
     def test_extract_alcohol_percent_handles_moysklad_description_formats(self) -> None:
@@ -1365,6 +1368,9 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertNotIn("До оформления осталось", html)
         self.assertNotIn("Цена продажи", html)
         self.assertIn("normalizeQuantity", html)
+        self.assertIn("maxOrderQuantity", html)
+        self.assertIn("data-quantity-input", html)
+        self.assertIn("Доступно:", html)
         self.assertIn("submitOrder", html)
         self.assertIn("/api/public/business/order", html)
         self.assertIn("Вам есть 18+?", html)
@@ -1539,7 +1545,7 @@ class CoreFoundationTest(unittest.TestCase):
         can_id = self.add_catalog_item(app, "Stamm Pale Ale 0,45 Can", "keg", "stamm-pale-ale-can")
         can_href = "https://api.moysklad.ru/api/remap/1.2/entity/product/can-1"
         app.conn.execute("UPDATE business_catalog_items SET price_minor = 500000 WHERE product_id IN (?, ?)", (keg_id, can_id))
-        app.conn.execute("UPDATE products SET external_href = ? WHERE id = ?", (can_href, can_id))
+        app.conn.execute("UPDATE products SET external_href = ?, stock_quantity = 24 WHERE id = ?", (can_href, can_id))
         from app.modules.auth.security import hash_password
         customer_id = app.conn.execute(
             """
@@ -1677,6 +1683,18 @@ class CoreFoundationTest(unittest.TestCase):
         invalid_can_response = open_without_redirects(invalid_can)
         self.assertEqual(invalid_can_response.status, 400)
         self.assertIn("коробками по 12", invalid_can_response.read().decode("utf-8"))
+
+        too_many = urllib.request.Request(
+            base + "/api/public/business/order",
+            data=json.dumps({"items": [{"productId": can_id, "quantity": 36}]}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Cookie": f"stamm_customer_session={session_id}"},
+            method="POST",
+        )
+        too_many_response = open_without_redirects(too_many)
+        self.assertEqual(too_many_response.status, 400)
+        too_many_payload = too_many_response.read().decode("utf-8")
+        self.assertIn("доступно только 24", too_many_payload)
+        self.assertIn("availableQuantity", too_many_payload)
 
         valid = urllib.request.Request(
             base + "/api/public/business/order",
