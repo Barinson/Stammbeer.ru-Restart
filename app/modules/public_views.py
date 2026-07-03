@@ -1273,7 +1273,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     .quantity {{ display:grid; grid-template-columns:30px 38px 30px; align-items:center; border:1px solid rgba(199,177,102,.28); border-radius:999px; overflow:hidden; background:rgba(11,63,64,.42); }}
     .quantity__button {{ border:0; width:30px; height:30px; background:var(--golden-malt); color:var(--ink); font-weight:700; cursor:pointer; }}
     .quantity__button:hover {{ filter:brightness(1.06); }}
-    .quantity__value {{ text-align:center; font-weight:700; color:var(--foam); font-size:13px; }}
+    .quantity__value {{ width:38px; min-width:0; border:0; background:transparent; text-align:center; font-weight:700; color:var(--foam); font:inherit; font-size:13px; appearance:textfield; }}
+    .quantity__value::-webkit-outer-spin-button, .quantity__value::-webkit-inner-spin-button {{ -webkit-appearance:none; margin:0; }}
     .cart {{ font-size:var(--stamm-cart-font-size,14px); position:sticky; top:86px; background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:20px; box-shadow:0 14px 34px rgba(0,0,0,.16); overflow:hidden; }}
     .cart__header {{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid rgba(199,177,102,.14); }}
     .cart__title {{ margin:0; color:var(--golden-malt); font-size:var(--stamm-section-title-font-size,18px); text-transform:uppercase; letter-spacing:.08em; }}
@@ -1371,12 +1372,32 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       return Number(item?.orderRules?.step || (item?.containerType === 'can' ? 12 : 1));
     }}
 
+    function availableQuantity(item) {{
+      const max = Number(item?.orderRules?.maxQuantity ?? item?.availability?.quantity ?? 0);
+      return Number.isFinite(max) ? Math.max(0, max) : 0;
+    }}
+
+    function maxOrderQuantity(item) {{
+      const step = itemStep(item);
+      const max = availableQuantity(item);
+      if (step <= 1) return max;
+      return Math.floor(max / step) * step;
+    }}
+
+    function stockMessage(item) {{
+      const max = availableQuantity(item);
+      const orderMax = maxOrderQuantity(item);
+      if (orderMax <= 0) return `Доступно ${{max}}, меньше минимального шага заказа`;
+      return `Доступно: ${{max}} шт. · максимум в заказ: ${{orderMax}}`;
+    }}
+
     function normalizeQuantity(item, quantity) {{
       const step = itemStep(item);
+      const max = maxOrderQuantity(item);
       const raw = Math.max(0, Number(quantity) || 0);
-      if (raw === 0) return 0;
-      if (item?.containerType === 'can') return Math.ceil(raw / 12) * 12;
-      return Math.ceil(raw / step) * step;
+      if (raw === 0 || max <= 0) return 0;
+      const stepped = Math.ceil(raw / step) * step;
+      return Math.min(stepped, max);
     }}
 
     function renderCards(items) {{
@@ -1392,20 +1413,23 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
           ? `<img src="${{escapeHtml(item.imageUrl)}}" alt="${{safeName}}" loading="lazy" onerror="this.hidden=true; this.nextElementSibling.hidden=false"><div class="product__image-fallback" aria-label="Фото скоро появится" hidden></div>`
           : fallback;
         const quantity = cartQuantity(item.productId);
+        const step = itemStep(item);
+        const maxQuantity = maxOrderQuantity(item);
+        const stockHint = `<span class="badge">${{escapeHtml(stockMessage(item))}}</span>`;
         const stepHint = item.containerType === 'can' ? '<span class="badge">ящик ×12</span>' : '';
         return `
         <article class="product">
           <div class="product__image">${{imageMarkup}}</div>
           <div class="product__body">
-            <div class="badges"><span class="badge">${{safeContainer}}</span>${{stepHint}}${{abvBadge}}</div>
+            <div class="badges"><span class="badge">${{safeContainer}}</span>${{stepHint}}${{stockHint}}${{abvBadge}}</div>
             <h2>${{safeName}}</h2>
             <div class="meta"><span class="price">${{safePrice}}</span>${{basePrice}}</div>
           </div>
           <div class="product__order" aria-label="Количество для ${{safeName}}">
             <div class="quantity" data-product-id="${{escapeHtml(item.productId)}}">
               <button class="quantity__button" type="button" data-action="decrease" aria-label="Уменьшить">−</button>
-              <span class="quantity__value" data-quantity-for="${{escapeHtml(item.productId)}}">${{escapeHtml(quantity)}}</span>
-              <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить">+</button>
+              <input class="quantity__value" data-quantity-for="${{escapeHtml(item.productId)}}" data-quantity-input data-product-id="${{escapeHtml(item.productId)}}" type="number" min="0" max="${{escapeHtml(maxQuantity)}}" step="${{escapeHtml(step)}}" value="${{escapeHtml(quantity)}}" aria-label="Количество">
+              <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить" ${{quantity >= maxQuantity ? 'disabled' : ''}}>+</button>
             </div>
           </div>
         </article>
@@ -1415,14 +1439,26 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     }}
 
     function updateQuantityControls(productId) {{
+      const entry = cart.get(String(productId));
+      const item = entry?.item || currentItems.find((candidate) => String(candidate.productId) === String(productId));
+      const quantity = cartQuantity(productId);
+      const maxQuantity = item ? maxOrderQuantity(item) : 0;
       document.querySelectorAll('[data-quantity-for]').forEach((node) => {{
-        if (node.dataset.quantityFor === String(productId)) node.textContent = cartQuantity(productId);
+        if (node.dataset.quantityFor === String(productId)) node.value = quantity;
+      }});
+      document.querySelectorAll('[data-product-id]').forEach((node) => {{
+        if (node.dataset.productId !== String(productId)) return;
+        node.querySelectorAll('[data-action="increase"]').forEach((button) => {{
+          button.disabled = maxQuantity <= 0 || quantity >= maxQuantity;
+        }});
       }});
     }}
 
     function setCartQuantity(item, nextQuantity) {{
       const productId = String(item.productId);
-      const quantity = normalizeQuantity(item, nextQuantity);
+      const requestedQuantity = Math.max(0, Number(nextQuantity) || 0);
+      const quantity = normalizeQuantity(item, requestedQuantity);
+      const wasClamped = requestedQuantity > quantity;
       if (quantity === 0) {{
         cart.delete(productId);
       }} else {{
@@ -1430,6 +1466,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       }}
       updateQuantityControls(productId);
       renderCart();
+      if (wasClamped) showCartMessage(`Для «${{item.name}}» доступно только ${{maxOrderQuantity(item)}} шт.`, true);
     }}
 
     function changeCartQuantity(productId, delta) {{
@@ -1450,6 +1487,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       }}
       const rows = entries.map(({{ item, quantity }}) => {{
         const lineTotal = (item.price.amountMinor || 0) * quantity;
+        const step = itemStep(item);
+        const maxQuantity = maxOrderQuantity(item);
         return `
           <div class="cart-item">
             <div>
@@ -1460,8 +1499,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
             <div class="cart-item__controls">
               <div class="quantity" data-product-id="${{escapeHtml(item.productId)}}">
                 <button class="quantity__button" type="button" data-action="decrease" aria-label="Уменьшить">−</button>
-                <span class="quantity__value">${{escapeHtml(quantity)}}</span>
-                <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить">+</button>
+                <input class="quantity__value" data-quantity-input data-product-id="${{escapeHtml(item.productId)}}" type="number" min="0" max="${{escapeHtml(maxQuantity)}}" step="${{escapeHtml(step)}}" value="${{escapeHtml(quantity)}}" aria-label="Количество">
+                <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить" ${{quantity >= maxQuantity ? 'disabled' : ''}}>+</button>
               </div>
               <button class="cart-remove" type="button" data-action="remove" data-product-id="${{escapeHtml(item.productId)}}">Удалить</button>
             </div>
@@ -1472,6 +1511,11 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         <div class="cart__total"><span>Итого</span><strong>${{escapeHtml(formatMoney(totalMinor))}}</strong></div>
         <div class="cart__minimum${{isBelowMinimum ? ' is-below' : ''}}">Минимальная сумма заказа: ${{escapeHtml(minimumOrderLabel)}}.</div>
         <button class="cart__submit" type="button" data-action="submit-order" ${{isBelowMinimum ? 'disabled' : ''}}>Оформить заявку</button>`;
+    }}
+
+    function showCartMessage(message, isError = false) {{
+      cartBodyEl.querySelectorAll('.cart__message').forEach((node) => node.remove());
+      cartBodyEl.insertAdjacentHTML('beforeend', `<div class="cart__message${{isError ? ' is-error' : ''}}">${{escapeHtml(message)}}</div>`);
     }}
 
     async function submitOrder() {{
@@ -1503,7 +1547,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         cartBodyEl.innerHTML = `<div class="cart__message">Заявка ${{escapeHtml(data.orderNumber)}} принята. Менеджер Stamm Brewing свяжется с вами.</div>`;
       }} catch (error) {{
         const message = error?.message || 'Не удалось оформить заявку';
-        cartBodyEl.insertAdjacentHTML('beforeend', `<div class="cart__message is-error">${{escapeHtml(message)}}</div>`);
+        showCartMessage(message, true);
       }}
     }}
 
@@ -1555,6 +1599,15 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         const entry = cart.get(String(productId));
         if (entry) setCartQuantity(entry.item, 0);
       }}
+    }});
+
+    document.addEventListener('change', (event) => {{
+      const input = event.target.closest('[data-quantity-input]');
+      if (!input) return;
+      const productId = input.dataset.productId;
+      const item = currentItems.find((entry) => String(entry.productId) === String(productId)) || cart.get(String(productId))?.item;
+      if (!item) return;
+      setCartQuantity(item, input.value);
     }});
 
     filterButtons.forEach((button) => {{

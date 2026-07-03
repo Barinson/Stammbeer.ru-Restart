@@ -278,6 +278,7 @@ def public_catalog(
             overrides.allow_preorder,
             overrides.min_order_quantity,
             overrides.order_step,
+            products.stock_quantity,
             products.article,
             products.code
         FROM business_catalog_items AS items
@@ -313,6 +314,7 @@ def public_catalog(
         if selected_filter != "all" and container != selected_filter:
             continue
         order_rules = order_rules_for_container(container, row["min_order_quantity"], row["order_step"])
+        available_quantity = max(0, int(row["stock_quantity"] or 0))
         price_type_prices = _price_type_prices(row["price_type_prices_json"]) or _price_type_prices(row["product_price_type_prices_json"])
         base_price_minor = row["price_minor"] if row["price_minor"] is not None else row["product_price_minor"]
         matched_price_type_price = _matched_price_type_price(
@@ -375,6 +377,7 @@ def public_catalog(
                 "availability": {
                     "status": availability,
                     "label": AVAILABILITY_LABELS.get(availability, availability),
+                    "quantity": available_quantity,
                 },
                 "imageUrl": row["image_url"],
                 "ctaLabel": "В заявку" if availability != "unavailable" or row["allow_preorder"] else "Недоступно",
@@ -382,6 +385,7 @@ def public_catalog(
                     "allowPreorder": bool(row["allow_preorder"]),
                     "minQuantity": order_rules["minQuantity"],
                     "step": order_rules["step"],
+                    "maxQuantity": available_quantity,
                 },
             }
         )
