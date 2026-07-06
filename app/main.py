@@ -510,7 +510,7 @@ class StammApp:
                             self.send_json(
                                 {
                                     "ok": False,
-                                    "error": f"Для «{item['name']}» доступно только {max_quantity} шт.",
+                                    "error": f"Нельзя заказать больше доступного количества для «{item['name']}».",
                                     "availableQuantity": max_quantity,
                                 },
                                 HTTPStatus.BAD_REQUEST,

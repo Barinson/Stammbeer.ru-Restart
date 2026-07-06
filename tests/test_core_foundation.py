@@ -1370,7 +1370,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("normalizeQuantity", html)
         self.assertIn("maxOrderQuantity", html)
         self.assertIn("data-quantity-input", html)
-        self.assertIn("Доступно:", html)
+        self.assertNotIn("Доступно:", html)
+        self.assertNotIn("максимум в заказ", html)
         self.assertIn("submitOrder", html)
         self.assertIn("/api/public/business/order", html)
         self.assertIn("Вам есть 18+?", html)
@@ -1693,7 +1694,8 @@ class CoreFoundationTest(unittest.TestCase):
         too_many_response = open_without_redirects(too_many)
         self.assertEqual(too_many_response.status, 400)
         too_many_payload = too_many_response.read().decode("utf-8")
-        self.assertIn("доступно только 24", too_many_payload)
+        self.assertIn("Нельзя заказать больше доступного количества", too_many_payload)
+        self.assertNotIn("доступно только 24", too_many_payload)
         self.assertIn("availableQuantity", too_many_payload)
 
         valid = urllib.request.Request(
