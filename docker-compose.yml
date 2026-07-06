@@ -15,15 +15,15 @@ services:
       # Единый том на var/ покрывает и файл БД (stamm.sqlite3), и загруженные медиа (media/).
       - app-data:/app/var
     expose:
-      - "8000"
+      - "8080"
     # Для локальной отладки без Caddy раскомментируйте:
     # ports:
-    #   - "8000:8000"
+    #   - "8080:8080"
     restart: unless-stopped
     healthcheck:
       # Шелл-форма (одна строка) вместо exec-списка — иначе IDEA ложно ругается
       # «Single value is expected». Выполняется как /bin/sh -c "<строка>".
-      test: python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status==200 else 1)"
+      test: python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).status==200 else 1)"
       interval: 30s
       timeout: 5s
       start_period: 10s

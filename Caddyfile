@@ -2,6 +2,6 @@
 # Caddy сам получает сертификат при первом запуске и продлевает его в фоне.
 {$DOMAIN} {
 	encode gzip
-	reverse_proxy app:8000
+	reverse_proxy app:8080
 	tls {$ACME_EMAIL}
 }

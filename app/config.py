@@ -16,7 +16,7 @@ class Settings:
     admin_email: str
     admin_password: str
     moysklad_api_base_url: str
-    public_base_url: str = "http://127.0.0.1:8000"
+    public_base_url: str = "http://127.0.0.1:8080"
     email_provider: str = "yandex"
     email_enabled: bool = False
     email_smtp_host: str = "smtp.yandex.com"
@@ -40,7 +40,7 @@ def load_settings() -> Settings:
         app_name="Stamm Brewing Core",
         env=env,
         host=os.getenv("HOST", "127.0.0.1"),
-        port=int(os.getenv("PORT", "8000")),
+        port=int(os.getenv("PORT", "8080")),
         database_url=os.getenv("DATABASE_URL", default_db),
         session_secret=os.getenv("SESSION_SECRET", "dev-session-secret-change-me"),
         admin_email=os.getenv("ADMIN_EMAIL", "admin"),
@@ -49,7 +49,7 @@ def load_settings() -> Settings:
             "MOYSKLAD_API_BASE_URL",
             "https://api.moysklad.ru/api/remap/1.2",
         ),
-        public_base_url=os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/"),
+        public_base_url=os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8080").rstrip("/"),
         email_provider=os.getenv("EMAIL_PROVIDER", "yandex"),
         email_enabled=os.getenv("EMAIL_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"},
         email_smtp_host=os.getenv("EMAIL_SMTP_HOST", "smtp.yandex.com"),
