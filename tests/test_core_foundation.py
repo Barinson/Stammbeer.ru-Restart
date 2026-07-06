@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import sqlite3
 import tempfile
 import threading
 import unittest
@@ -11,6 +12,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from app.config import Settings, load_settings
+from app.db.migrations import ensure_compatibility_columns
 from app.integrations.moysklad.auto_sync import auto_sync_status, compact_auto_sync_history, run_auto_catalog_sync_if_due
 from app.integrations.moysklad.catalog_sync import extract_alcohol_percent, infer_container_type, latest_sync_diagnostics, run_manual_catalog_sync
 from app.integrations.moysklad.client import MoyskladClient, normalize_counterparty
@@ -126,6 +128,34 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("email_settings", tables)
         self.assertIn("email_templates", tables)
         self.assertEqual(admin_stats(app.conn)["Статус sync"], "foundation ready")
+
+    def test_migrations_backfill_catalog_columns_for_legacy_databases(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(
+            """
+            CREATE TABLE products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                accounting_name TEXT NOT NULL
+            );
+            CREATE TABLE business_catalog_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                public_name TEXT NOT NULL
+            );
+            """
+        )
+
+        added = ensure_compatibility_columns(conn)
+        product_columns = {row[1] for row in conn.execute("PRAGMA table_info(products)")}
+        item_columns = {row[1] for row in conn.execute("PRAGMA table_info(business_catalog_items)")}
+
+        self.assertIn("products.stock_quantity", added)
+        self.assertIn("products.alcohol_percent", added)
+        self.assertIn("business_catalog_items.price_type_prices_json", added)
+        self.assertIn("business_catalog_items.alcohol_percent", added)
+        self.assertIn("stock_quantity", product_columns)
+        self.assertIn("price_type_prices_json", item_columns)
 
     def test_admin_auth_session(self) -> None:
         app = self.make_app()

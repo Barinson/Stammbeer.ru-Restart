@@ -1389,18 +1389,6 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       return Math.floor(max / step) * step;
     }}
 
-    function availableQuantity(item) {{
-      const max = Number(item?.orderRules?.maxQuantity ?? item?.availability?.quantity ?? 0);
-      return Number.isFinite(max) ? Math.max(0, max) : 0;
-    }}
-
-    function maxOrderQuantity(item) {{
-      const step = itemStep(item);
-      const max = availableQuantity(item);
-      if (step <= 1) return max;
-      return Math.floor(max / step) * step;
-    }}
-
     function normalizeQuantity(item, quantity) {{
       const step = itemStep(item);
       const max = maxOrderQuantity(item);
