@@ -1,0 +1,7 @@
+# Reverse proxy с автоматическим HTTPS от Let's Encrypt.
+# Caddy сам получает сертификат при первом запуске и продлевает его в фоне.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy app:8000
+	tls {$ACME_EMAIL}
+}
