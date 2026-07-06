@@ -9,3 +9,4 @@ __pycache__/
 var/
 *.sqlite3
 .DS_Store
+.idea/

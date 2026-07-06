@@ -1,0 +1,53 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        # Версия приложения. Попадает в OCI-label образа (org.opencontainers.image.version).
+        # Держите в синхроне с тегом `image` ниже — YAML не умеет подставлять одно значение
+        # и в тег, и в build-arg одновременно.
+        APP_VERSION: "0.1.0"
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    image: stammbeer-app:0.1.0
+    env_file: .env
+    volumes:
+      # Единый том на var/ покрывает и файл БД (stamm.sqlite3), и загруженные медиа (media/).
+      - app-data:/app/var
+    expose:
+      - "8000"
+    # Для локальной отладки без Caddy раскомментируйте:
+    # ports:
+    #   - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      # Шелл-форма (одна строка) вместо exec-списка — иначе IDEA ложно ругается
+      # «Single value is expected». Выполняется как /bin/sh -c "<строка>".
+      test: python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status==200 else 1)"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - app
+    environment:
+      # Подставляются в Caddyfile для домена и e-mail ACME (Let's Encrypt).
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # caddy-data хранит выданные сертификаты — критично для автопродления между рестартами.
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  caddy-data:
+  caddy-config:
