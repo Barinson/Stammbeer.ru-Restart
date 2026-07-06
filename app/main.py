@@ -505,7 +505,10 @@ class StammApp:
                         if step > 1 and quantity % step != 0:
                             self.send_json({"ok": False, "error": f"Количество для «{item['name']}» должно быть кратно {step}."}, HTTPStatus.BAD_REQUEST)
                             return
-                        max_quantity = int((item.get("orderRules") or {}).get("maxQuantity") or (item.get("availability") or {}).get("quantity") or 0)
+                        try:
+                            max_quantity = max(0, int(float((item.get("orderRules") or {}).get("maxQuantity") or (item.get("availability") or {}).get("quantity") or 0)))
+                        except (TypeError, ValueError):
+                            max_quantity = 0
                         if max_quantity <= 0 or quantity > max_quantity:
                             self.send_json(
                                 {
