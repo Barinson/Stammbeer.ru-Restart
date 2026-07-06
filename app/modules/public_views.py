@@ -1364,6 +1364,61 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       return `${{Number(amountMinor / 100).toLocaleString('ru-RU')}} ₽`;
     }}
 
+    function numberOrDefault(value, fallback = 0) {{
+      const number = Number(value);
+      return Number.isFinite(number) ? number : fallback;
+    }}
+
+    function normalizeCatalogItem(raw) {{
+      const item = raw && typeof raw === 'object' ? raw : {{}};
+      const price = item.price && typeof item.price === 'object' ? item.price : {{}};
+      const availability = item.availability && typeof item.availability === 'object' ? item.availability : {{}};
+      const rules = item.orderRules && typeof item.orderRules === 'object' ? item.orderRules : {{}};
+      const fallbackId = item.slug || item.externalId || item.sku || item.name || '';
+      const productId = item.productId !== undefined && item.productId !== null ? item.productId : fallbackId;
+      const containerType = item.containerType || 'keg';
+      const maxQuantity = rules.maxQuantity !== undefined && rules.maxQuantity !== null ? rules.maxQuantity : availability.quantity;
+      return {{
+        productId,
+        variantId: item.variantId || null,
+        slug: item.slug || String(productId || ''),
+        name: item.name || item.publicName || item.accountingName || 'Позиция каталога',
+        subtitle: item.subtitle || '',
+        sku: item.sku || '',
+        externalId: item.externalId || null,
+        externalHref: item.externalHref || null,
+        containerType,
+        containerLabel: item.containerLabel || (containerType === 'can' ? 'Банки' : 'Кеги'),
+        volumeLiters: item.volumeLiters || null,
+        alcoholPercent: item.alcoholPercent || null,
+        alcoholLabel: item.alcoholLabel || '',
+        price: {{
+          visibility: price.visibility || 'hidden',
+          amountMinor: numberOrDefault(price.amountMinor, 0),
+          baseAmountMinor: numberOrDefault(price.baseAmountMinor, price.amountMinor || 0),
+          currency: price.currency || 'RUB',
+          label: price.label || 'Цена по запросу',
+          baseLabel: price.baseLabel || '',
+          showBasePrice: Boolean(price.showBasePrice),
+          pricingSource: price.pricingSource || 'base',
+          priceTypeName: price.priceTypeName || null,
+        }},
+        availability: {{
+          status: availability.status || 'unavailable',
+          label: availability.label || '',
+          quantity: numberOrDefault(availability.quantity, 0),
+        }},
+        imageUrl: item.imageUrl || '',
+        ctaLabel: item.ctaLabel || 'В заявку',
+        orderRules: {{
+          allowPreorder: Boolean(rules.allowPreorder),
+          minQuantity: numberOrDefault(rules.minQuantity, containerType === 'can' ? 12 : 1),
+          step: numberOrDefault(rules.step, containerType === 'can' ? 12 : 1),
+          maxQuantity: numberOrDefault(maxQuantity, 0),
+        }},
+      }};
+    }}
+
     function cartQuantity(productId) {{
       const entry = cart.get(String(productId));
       return entry ? entry.quantity : 0;
@@ -1558,7 +1613,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         const response = await fetch(`/api/public/business/catalog${{suffix}}`, {{ headers: {{ 'Accept': 'application/json' }}, signal: controller.signal }});
         if (!response.ok) throw new Error(`Local API error: ${{response.status}}`);
         const data = await response.json();
-        const items = Array.isArray(data.items) ? data.items : [];
+        const rawItems = Array.isArray(data.items) ? data.items : [];
+        const items = rawItems.map(normalizeCatalogItem).filter((item) => item.productId && item.name);
         const meta = data.meta || {{}};
         const minimumOrder = meta.minimumOrder || {{}};
         minimumOrderAmountMinor = Number(minimumOrder.amountMinor || minimumOrderAmountMinor);
