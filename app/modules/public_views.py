@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 from html import escape
+from urllib.parse import quote
 from typing import Any
 
-from app.modules.content.service import ACTION_DEFAULTS, BUSINESS_DEFAULTS, CONTACT_DEFAULTS, HOME_DEFAULTS, MENU_DEFAULTS, TYPOGRAPHY_DEFAULTS
+from app.modules.content.service import ACTION_DEFAULTS, BUSINESS_DEFAULTS, CONTACT_DEFAULTS, GALLERY_DEFAULTS, HOME_DEFAULTS, LAYOUT_DEFAULTS, MENU_DEFAULTS, SITE_DEFAULTS, TYPOGRAPHY_DEFAULTS
 
 
 PUBLIC_HEAD = """<meta charset=\"utf-8\">
@@ -12,6 +13,62 @@ PUBLIC_HEAD = """<meta charset=\"utf-8\">
   <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">
   <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>
   <link href=\"https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700;800;900&display=swap\" rel=\"stylesheet\">"""
+
+SEO_DEFAULTS = {
+    "home": ("Stamm Brewing — крафтовая пивоварня", "Stamm Brewing: крафтовая пивоварня, новости, партнёры и контакты."),
+    "beer": ("Пиво Stamm Brewing", "Раздел пива Stamm Brewing: новинки, постоянная линейка, сезонные сорта и точки продаж."),
+    "business": ("Бизнес · Stamm Brewing", "B2B-раздел Stamm Brewing для партнёров, заказов и сотрудничества."),
+    "contacts": ("Контакты Stamm Brewing", "Контакты Stamm Brewing: e-mail, телефоны, адрес производства и карта."),
+    "visit": ("Stammhaus · Посетить пивоварню", "Информация о посещении пивоварни Stamm Brewing и будущих гостевых разделах."),
+    "gallery": ("Галерея Stamm Brewing", "Фотогалерея Stamm Brewing: производство, команда, события и атмосфера пивоварни."),
+    "maintenance": ("Технические работы · Stamm Brewing", "Сайт Stamm Brewing временно находится на технических работах."),
+}
+
+
+def _absolute_url(base_url: str, path_or_url: object) -> str:
+    value = str(path_or_url or "").strip()
+    if not value:
+        return ""
+    if value.startswith(("http://", "https://")):
+        return value
+    if not value.startswith("/"):
+        value = "/" + value
+    return base_url.rstrip("/") + value
+
+
+def _site_default(key: str, fallback: str) -> str:
+    value = SITE_DEFAULTS.get(key, fallback)
+    return str(value if value is not None else fallback)
+
+
+def _site_default_int(key: str, fallback: int) -> int:
+    try:
+        return int(str(SITE_DEFAULTS.get(key, fallback) or fallback))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def seo_head(content: dict[str, Any] | None, page_key: str, path: str, title: str | None = None, description: str | None = None, robots: str = "index,follow") -> str:
+    site_content = public_content_or_defaults(content)
+    site = site_content.get("site") or {}
+    default_title, default_description = SEO_DEFAULTS.get(page_key, (str(site.get("site_title") or "Stamm Brewing"), str(site.get("site_description") or "")))
+    title_value = str(title or default_title or site.get("site_title") or "Stamm Brewing")
+    description_value = str(description or default_description or site.get("site_description") or "Stamm Brewing")
+    base_url = str(site.get("site_public_base_url") or _site_default("site_public_base_url", "https://stammbeer.ru")).rstrip("/")
+    canonical = _absolute_url(base_url, path)
+    og_image = _absolute_url(base_url, site.get("site_og_image_url") or site.get("site_favicon_url") or "")
+    favicon = str(site.get("site_favicon_url") or SITE_DEFAULTS.get("site_favicon_url") or "").strip()
+    favicon_link = f'\n  <link rel="icon" href="{escape(favicon)}">' if favicon else ""
+    image_meta = f'\n  <meta property="og:image" content="{escape(og_image)}">' if og_image else ""
+    return f"""{PUBLIC_HEAD}
+  <title>{escape(title_value)}</title>
+  <meta name="description" content="{escape(description_value)}">
+  <meta name="robots" content="{escape(robots)}">
+  <link rel="canonical" href="{escape(canonical)}">{favicon_link}
+  <meta property="og:title" content="{escape(title_value)}">
+  <meta property="og:description" content="{escape(description_value)}">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{escape(canonical)}">{image_meta}"""
 
 
 BASE_CSS = """
@@ -27,13 +84,13 @@ BASE_CSS = """
     .nav-actions { display:flex; align-items:center; gap:9px; }
     .nav-icon { width:32px; height:32px; border:0; border-radius:999px; display:grid; place-items:center; background:var(--golden-malt); color:var(--ink); text-decoration:none; font-size:11px; font-weight:900; line-height:1; overflow:hidden; padding:0; }
     .nav-icon img { width:100%; height:100%; padding:0; object-fit:contain; display:block; border-radius:inherit; }
-    .top-nav + main { padding-top:64px; }
+    .top-nav + main { padding-top:var(--menu-offset,176px); }
     body.age-gate-pending { overflow:hidden; }
     .age-gate { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at 50% 25%, rgba(199,177,102,.16), transparent 30%), rgba(11,63,64,.96); backdrop-filter:blur(14px); }
     .age-gate.is-hidden { display:none; }
     .age-gate__card { width:min(520px,100%); border-radius:28px; padding:34px; background:var(--card-hop); box-shadow:0 30px 90px rgba(0,0,0,.32); text-align:center; color:var(--foam); }
-    .age-gate__card h2 { margin:0 0 12px; color:var(--golden-malt); font-size:clamp(34px,6vw,56px); line-height:.95; letter-spacing:.06em; text-transform:uppercase; }
-    .age-gate__card p { margin:0; color:rgba(246,241,227,.8); font-size:var(--stamm-lead-font-size,18px); line-height:1.45; }
+    .age-gate__card h2 { margin:0 0 12px; color:var(--golden-malt); font-size:var(--age-gate-title-size, clamp(34px,6vw,56px)); font-weight:var(--age-gate-title-weight,900); line-height:.95; letter-spacing:.06em; text-transform:uppercase; }
+    .age-gate__card p { margin:0; color:rgba(246,241,227,.8); font-size:var(--age-gate-text-size, var(--stamm-lead-font-size,18px)); font-weight:var(--age-gate-text-weight,500); line-height:1.45; white-space:pre-line; }
     .age-gate__actions { display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top:24px; }
     .age-gate__card button { border:0; border-radius:999px; padding:14px 22px; background:var(--golden-malt); color:var(--ink); font:inherit; font-weight:900; cursor:pointer; }
     .age-gate__card .age-gate__deny { background:transparent; color:var(--foam); border:1px solid rgba(199,177,102,.42); }
@@ -47,6 +104,10 @@ def public_content_or_defaults(content: dict[str, Any] | None = None) -> dict[st
         "business": {**BUSINESS_DEFAULTS, **((content or {}).get("business") or {})},
         "contacts": {**CONTACT_DEFAULTS, **((content or {}).get("contacts") or {})},
         "typography": {**TYPOGRAPHY_DEFAULTS, **((content or {}).get("typography") or {})},
+        "layout": {**LAYOUT_DEFAULTS, **((content or {}).get("layout") or {})},
+        "site": {**SITE_DEFAULTS, **((content or {}).get("site") or {})},
+        "gallery": {**GALLERY_DEFAULTS, **((content or {}).get("gallery") or {})},
+        "viewer": (content or {}).get("viewer") or {},
         "menu": (content or {}).get("menu") or MENU_DEFAULTS,
         "actions": (content or {}).get("actions") or ACTION_DEFAULTS,
     }
@@ -84,9 +145,12 @@ def public_nav(active: str, content: dict[str, Any] | None = None) -> str:
         for item in site_content["menu"]
         if item.get("is_visible", True)
     )
+    viewer_is_customer = bool((site_content.get("viewer") or {}).get("is_customer"))
     action_links = []
     for item in site_content["actions"]:
         if not item.get("is_visible", True):
+            continue
+        if item.get("key") == "cart" and not viewer_is_customer:
             continue
         label = escape(str(item.get("label") or ""))
         icon_url = str(item.get("icon_url") or "")
@@ -99,54 +163,102 @@ def public_nav(active: str, content: dict[str, Any] | None = None) -> str:
   <nav class="top-nav" aria-label="Главная навигация">
     <a class="brand" href="/">Stamm Brewing</a>
     <div class="nav-links">{links}</div>
-    <div class="nav-actions" aria-label="Соцсети и корзина">{actions}</div>
+    <div class="nav-actions" aria-label="Быстрые ссылки">{actions}</div>
   </nav>"""
 
 
-def age_gate_markup() -> str:
-    return """
+def age_gate_markup(content: dict[str, Any] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
+    if (site_content.get("viewer") or {}).get("is_customer"):
+        return ""
+    site = site_content.get("site") or {}
+    title = escape(str(site.get("age_gate_title") or _site_default("age_gate_title", "Вам есть 18+?")))
+    text = cms_text(site.get("age_gate_text") or _site_default("age_gate_text", "Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет"))
+    title_size = css_font_px(site.get("age_gate_title_font_size_px"), _site_default_int("age_gate_title_font_size_px", 48), 18, 96)
+    title_weight = css_weight(site.get("age_gate_title_font_weight"), _site_default_int("age_gate_title_font_weight", 900))
+    text_size = css_font_px(site.get("age_gate_text_font_size_px"), _site_default_int("age_gate_text_font_size_px", 18), 12, 64)
+    text_weight = css_weight(site.get("age_gate_text_font_weight"), _site_default_int("age_gate_text_font_weight", 500))
+    confirm_label = escape(str(site.get("age_gate_confirm_label") or _site_default("age_gate_confirm_label", "Да, мне есть 18")))
+    deny_label = escape(str(site.get("age_gate_deny_label") or _site_default("age_gate_deny_label", "Нет, мне нет 18")))
+    return f"""
   <div class="age-gate" id="ageGate" role="dialog" aria-modal="true" aria-labelledby="ageGateTitle">
-    <div class="age-gate__card">
-      <h2 id="ageGateTitle">Вам есть 18+?</h2>
-      <p>Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет</p>
+    <div class="age-gate__card" style="--age-gate-title-size:{title_size}; --age-gate-title-weight:{title_weight}; --age-gate-text-size:{text_size}; --age-gate-text-weight:{text_weight};">
+      <h2 id="ageGateTitle">{title}</h2>
+      <p>{text}</p>
       <div class="age-gate__actions">
-        <button type="button" id="ageGateConfirm">Да, мне есть 18</button>
-        <button type="button" class="age-gate__deny" id="ageGateReject">Нет, мне нет 18</button>
+        <button type="button" id="ageGateConfirm">{confirm_label}</button>
+        <button type="button" class="age-gate__deny" id="ageGateReject">{deny_label}</button>
       </div>
     </div>
   </div>
   <script>
-    (function () {
-      const storageKey = "stamm_age_confirmed";
+    (function () {{
+      const storageKey = "stamm_age_confirmed_session";
       const gate = document.getElementById("ageGate");
       const button = document.getElementById("ageGateConfirm");
       const rejectButton = document.getElementById("ageGateReject");
       if (!gate || !button || !rejectButton) return;
-      function unlock() {
+      function unlock() {{
         gate.classList.add("is-hidden");
         document.body.classList.remove("age-gate-pending");
-      }
-      try {
-        if (window.localStorage.getItem(storageKey) === "yes") {
+      }}
+      try {{
+        if (window.sessionStorage.getItem(storageKey) === "yes") {{
           unlock();
           return;
-        }
-      } catch (error) {}
+        }}
+      }} catch (error) {{}}
       document.body.classList.add("age-gate-pending");
-      button.addEventListener("click", function () {
-        try { window.localStorage.setItem(storageKey, "yes"); } catch (error) {}
+      button.addEventListener("click", function () {{
+        try {{ window.sessionStorage.setItem(storageKey, "yes"); }} catch (error) {{}}
         unlock();
-      });
-      rejectButton.addEventListener("click", function () {
-        if (window.history.length > 1) {
+      }});
+      rejectButton.addEventListener("click", function () {{
+        if (window.history.length > 1) {{
           window.history.back();
           return;
-        }
+        }}
         window.location.href = "about:blank";
-      });
-    })();
+      }});
+    }})();
   </script>"""
 
+
+def maintenance_page(content: dict[str, Any] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
+    site = site_content.get("site") or {}
+    raw_text = str(site.get("maintenance_text") or _site_default("maintenance_text", "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru"))
+    text_html = cms_text(raw_text).replace(
+        "marketing@stammbeer.ru",
+        '<a href="mailto:marketing@stammbeer.ru">marketing@stammbeer.ru</a>',
+    )
+    message_size = css_font_px(site.get("maintenance_font_size_px"), _site_default_int("maintenance_font_size_px", 24), 12, 80)
+    message_weight = css_weight(site.get("maintenance_font_weight"), _site_default_int("maintenance_font_weight", 500))
+    image_url = str(site.get("maintenance_image_url") or _site_default("maintenance_image_url", "")).strip()
+    image_html = f'<img class="maintenance-image" src="{escape(image_url)}" alt="">' if image_url else ""
+    return f"""<!doctype html>
+<html lang="ru">
+<head>
+  {seo_head(site_content, "maintenance", "/", robots="noindex,follow")}
+  <style>
+{BASE_CSS}
+{typography_style(site_content)}
+    .maintenance-shell {{ min-height:100vh; display:grid; place-items:start center; padding:clamp(56px,9vh,96px) min(6vw,72px) 72px; text-align:center; background:radial-gradient(circle at 50% 18%, rgba(199,177,102,.16), transparent 30%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .maintenance-content {{ width:min(800px,100%); display:grid; justify-items:center; gap:28px; }}
+    .maintenance-image {{ max-width:min(520px,86vw); max-height:38vh; width:auto; height:auto; object-fit:contain; display:block; background:transparent; border-radius:0; box-shadow:none; }}
+    .maintenance-message {{ width:min(760px,100%); margin:0; color:var(--foam); font-size:var(--maintenance-font-size); font-weight:var(--maintenance-font-weight); line-height:1.45; white-space:pre-line; }}
+    .maintenance-message a {{ color:var(--golden-malt); text-decoration:none; }}
+  </style>
+</head>
+<body>
+  <main class="maintenance-shell" aria-label="Технические работы" style="--maintenance-font-size:{message_size}; --maintenance-font-weight:{message_weight};">
+    <div class="maintenance-content">
+      {image_html}
+      <p class="maintenance-message">{text_html}</p>
+    </div>
+  </main>
+</body>
+</html>"""
 
 def css_px(value: object, fallback: int) -> str:
     try:
@@ -164,12 +276,101 @@ def css_weight(value: object, fallback: int) -> str:
     return str(number)
 
 
+def css_font_px(value: object, fallback: int, min_value: int = 10, max_value: int = 96) -> str:
+    try:
+        number = max(min_value, min(max_value, int(str(value or "").strip())))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
+
+
 def css_gap_px(value: object, fallback: int = 0) -> str:
     try:
         number = max(0, min(140, int(str(value))))
     except (TypeError, ValueError):
         number = fallback
     return f"{number}px"
+
+
+def css_section_gap_px(value: object, fallback: int = 72) -> str:
+    try:
+        number = max(0, min(220, int(str(value))))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
+
+
+def menu_offset_px(content: dict[str, Any] | None, section: str, fallback: int = 176) -> str:
+    site_content = public_content_or_defaults(content)
+    layout = site_content.get("layout") or {}
+    raw_value = layout.get(f"menu_offset_{section}_px")
+    try:
+        number = max(0, min(420, int(str(raw_value or "").strip())))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
+
+
+def section_background_style(content: dict[str, Any] | None, section: str, fallback_url: object = "") -> str:
+    site_content = public_content_or_defaults(content)
+    layout = site_content.get("layout") or {}
+    enabled = str(layout.get(f"section_bg_{section}_enabled") or "1").strip().lower() not in {"0", "false", "off", "no"}
+    if not enabled:
+        return ""
+    image_url = str(layout.get(f"section_bg_{section}_url") or fallback_url or "").strip()
+    if not image_url:
+        return ""
+    return f"--section-bg:url('{escape(image_url)}');"
+
+
+def cms_text(value: object) -> str:
+    """Safely render CMS-managed plain text while preserving admin-entered line breaks."""
+    return escape(str(value or ""))
+
+
+def css_map_height(value: object, fallback: int = 240) -> str:
+    try:
+        number = max(180, min(420, int(str(value or "").strip())))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
+
+
+def css_map_width(value: object, fallback: int = 420) -> str:
+    try:
+        number = max(280, min(640, int(str(value or "").strip())))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
+
+
+def css_text_color(value: object, fallback: str) -> str:
+    raw = str(value or "").strip()
+    if len(raw) == 7 and raw.startswith("#") and all(char in "0123456789abcdefABCDEF" for char in raw[1:]):
+        return raw
+    return fallback
+
+
+def css_hex_to_rgb(value: object, fallback: str = "#0b3f40") -> tuple[int, int, int]:
+    color = css_text_color(value, fallback)
+    return (int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16))
+
+
+def css_alpha(value: object, fallback_percent: int = 30) -> str:
+    try:
+        number = float(str(value or "").strip().replace(",", "."))
+    except (TypeError, ValueError):
+        number = float(fallback_percent)
+    if number > 1:
+        number = number / 100
+    number = max(0, min(1, number))
+    return f"{number:.2f}".rstrip("0").rstrip(".")
+
+
+def is_enabled(value: object, default: bool = True) -> bool:
+    if value is None or value == "":
+        return default
+    return str(value).strip().lower() not in {"0", "false", "off", "no"}
 
 def home_page(content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
@@ -181,10 +382,11 @@ def home_page(content: dict[str, Any] | None = None) -> str:
     line_gap = css_gap_px(home.get("home_hero_line_gap_px"), 0)
     logo_url = str(home.get("home_logo_url") or "")
     content_bg_url = str(home.get("home_content_bg_url") or "")
-    content_bg_style = f' style="--home-content-bg:url(\'{escape(content_bg_url)}\');"' if content_bg_url else ""
+    content_bg_declarations = section_background_style(site_content, "home", content_bg_url)
+    content_bg_style = f' style="{content_bg_declarations}"' if content_bg_declarations else ""
     logo_markup = f'<img class="home-logo" src="{escape(logo_url)}" alt="Stamm Brewing logo">' if logo_url else '<div class="home-logo-mark" aria-hidden="true"></div>'
     news_title = escape(str(home.get("home_news_title") or ""))
-    news_text = escape(str(home.get("home_news_text") or ""))
+    news_text = cms_text(home.get("home_news_text"))
     news_image_url = str(home.get("home_news_image_url") or "")
     news_link_url = str(home.get("home_news_link_url") or "")
     news_link_label = escape(str(home.get("home_news_link_label") or ""))
@@ -193,19 +395,18 @@ def home_page(content: dict[str, Any] | None = None) -> str:
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
-  <title>Stamm Brewing · Главная</title>
+  {seo_head(site_content, "home", "/")}
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    body.home-body .top-nav + main {{ padding-top:0; }}
+    body.home-body .top-nav + main {{ padding-top:var(--menu-offset,176px); }}
     .home-hero {{ min-height:100vh; display:grid; place-items:center; text-align:center; padding:104px min(6vw,72px) 72px; background:radial-gradient(circle at 50% 16%, rgba(199,177,102,.18), transparent 28%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
     .home-hero__inner {{ display:grid; justify-items:center; gap:0; }}
     .home-logo {{ max-width:154px; max-height:154px; object-fit:contain; margin-bottom:28px; }}
     .home-logo-mark {{ width:94px; height:94px; border:2px solid rgba(199,177,102,.5); border-radius:999px; margin-bottom:28px; background:radial-gradient(circle, rgba(199,177,102,.28), transparent 58%); }}
     .home-title {{ margin:0; font-size:clamp(58px,13vw,var(--home-title-size)); line-height:.78; letter-spacing:.08em; color:var(--foam); font-weight:var(--home-title-weight); }}
     .home-subtitle {{ margin:var(--home-line-gap) 0 0; font-size:clamp(42px,10vw,var(--home-subtitle-size)); line-height:.8; letter-spacing:.08em; color:var(--golden-malt); font-weight:var(--home-subtitle-weight); }}
-    .home-content {{ position:relative; min-height:100vh; background-image:linear-gradient(180deg, rgba(16,88,89,.84), rgba(11,63,64,.9)), var(--home-content-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
+    .home-content {{ position:relative; min-height:100vh; background-image:linear-gradient(180deg, rgba(16,88,89,.84), rgba(11,63,64,.9)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .home-content::before {{ content:""; position:absolute; inset:0; background:radial-gradient(circle at 20% 12%, rgba(199,177,102,.18), transparent 32%); pointer-events:none; }}
     .home-content > * {{ position:relative; z-index:1; }}
     .home-news {{ min-height:100vh; display:grid; place-items:center; padding:96px min(6vw,72px); background:transparent; }}
@@ -215,13 +416,13 @@ def home_page(content: dict[str, Any] | None = None) -> str:
     .news-card__image {{ width:100%; aspect-ratio:16/10; max-height:420px; object-fit:cover; border-radius:24px; background:rgba(246,241,227,.08); display:block; }}
     .news-card__image--fallback {{ background:radial-gradient(circle at 50% 40%, rgba(199,177,102,.35), transparent 35%), linear-gradient(135deg, rgba(246,241,227,.08), rgba(16,88,89,.4)); }}
     .news-card h2 {{ margin:0 0 14px; color:var(--white); font-size:var(--stamm-section-title-font-size,26px); line-height:1.08; }}
-    .news-card p {{ margin:0; color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-body-font-size,16px); }}
+    .news-card p {{ margin:0; color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-body-font-size,16px); white-space:pre-line; }}
     @media (max-width:760px) {{ .home-content {{ background-attachment:scroll; }} .news-card {{ grid-template-columns:1fr; padding:20px; }} .home-logo {{ max-width:130px; max-height:130px; }} }}
   </style>
 </head>
 <body class="home-body">
 {public_nav("home", site_content)}
-  <main>
+  <main style="--menu-offset:{menu_offset_px(site_content, 'home')};">
     <section class="home-hero" style="--home-title-size:{title_size}; --home-title-weight:{title_weight}; --home-subtitle-size:{subtitle_size}; --home-subtitle-weight:{subtitle_weight}; --home-line-gap:{line_gap};">
       <div class="home-hero__inner">
         {logo_markup}
@@ -241,27 +442,40 @@ def home_page(content: dict[str, Any] | None = None) -> str:
       </section>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
 ACCOUNT_CSS = """
-    .account-shell { min-height:calc(100vh - 64px); padding:96px min(6vw,72px) 72px; background:radial-gradient(circle at 20% 20%, rgba(199,177,102,.14), transparent 30%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }
+    .account-shell { min-height:calc(100vh - 88px); padding:112px min(6vw,72px) 72px; background:radial-gradient(circle at 20% 20%, rgba(199,177,102,.14), transparent 30%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }
     .account-card { width:min(760px,100%); margin:0 auto; padding:34px; border-radius:28px; background:rgba(13,75,76,.94); box-shadow:0 30px 90px rgba(0,0,0,.24); }
     .account-card h1 { margin:0 0 10px; color:var(--golden-malt); font-size:var(--stamm-page-title-font-size,42px); line-height:.95; letter-spacing:.08em; text-transform:uppercase; }
     .account-card p { color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.5; }
-    .account-form { display:grid; gap:14px; margin-top:24px; }
-    .account-form label { display:grid; gap:6px; color:rgba(246,241,227,.8); font-weight:700; font-size:var(--stamm-label-font-size,13px); }
-    .account-form input { width:100%; border:1px solid rgba(199,177,102,.32); border-radius:16px; padding:13px 14px; background:rgba(11,63,64,.82); color:var(--foam); font:inherit; }
+    .account-form { display:grid; gap:11px; margin-top:20px; }
+    .account-form label { display:grid; gap:5px; color:rgba(246,241,227,.8); font-weight:600; font-size:12px; }
+    .account-form input { width:100%; border:1px solid rgba(199,177,102,.32); border-radius:14px; padding:10px 12px; background:rgba(11,63,64,.82); color:var(--foam); font:inherit; font-size:14px; font-weight:400; }
     .account-form input:focus { outline:2px solid rgba(199,177,102,.44); outline-offset:2px; }
-    .account-actions { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:8px; }
-    .account-button { border:0; border-radius:999px; padding:13px 20px; background:var(--golden-malt); color:var(--ink); font:inherit; font-weight:900; cursor:pointer; text-decoration:none; }
+    .account-actions { display:flex; gap:9px; align-items:center; flex-wrap:wrap; margin-top:6px; }
+    .account-actions--single-row { flex-wrap:nowrap; }
+    @media (max-width:620px) { .account-actions--single-row { flex-wrap:wrap; } }
+    .account-button { border:0; border-radius:999px; padding:9px 14px; background:var(--golden-malt); color:var(--ink); font:inherit; font-size:14px; line-height:1.15; font-weight:700; cursor:pointer; text-decoration:none; box-shadow:0 2px 7px rgba(199,177,102,.14); }
+    .account-button--compact { padding:7px 11px; font-size:12.5px; font-weight:700; box-shadow:0 1px 4px rgba(199,177,102,.1); }
+    .account-inline-form { margin:0; }
     .account-link { color:var(--golden-malt); font-weight:800; text-decoration:none; }
     .account-message { margin-top:18px; border-radius:16px; padding:12px 14px; background:rgba(199,177,102,.14); color:var(--foam); }
     .account-message.is-error { background:rgba(115,33,33,.42); color:#ffe6df; }
+    .account-section { margin-top:28px; padding-top:22px; border-top:1px solid rgba(199,177,102,.16); }
+    .account-section h2 { margin:0 0 14px; color:var(--golden-malt); font-size:24px; line-height:1.05; letter-spacing:.04em; text-transform:uppercase; }
     .account-details { display:grid; gap:12px; margin:26px 0; }
     .account-detail { display:flex; justify-content:space-between; gap:18px; padding:14px 0; border-bottom:1px solid rgba(199,177,102,.16); color:rgba(246,241,227,.82); }
     .account-detail strong { color:var(--foam); text-align:right; }
+    .account-orders { display:grid; gap:12px; max-height:420px; overflow-y:auto; padding-right:6px; overscroll-behavior:contain; scrollbar-color:rgba(199,177,102,.62) rgba(11,63,64,.34); }
+    .account-order { border:1px solid rgba(199,177,102,.18); border-radius:18px; padding:14px; background:rgba(11,63,64,.35); }
+    .account-order__head, .account-order__meta { display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+    .account-order__head strong { color:var(--foam); }
+    .account-order__head span, .account-order__meta { color:rgba(246,241,227,.72); font-size:13px; }
+    .account-order ul { margin:10px 0 0; padding-left:18px; color:rgba(246,241,227,.78); }
+    .account-empty { margin:0; color:rgba(246,241,227,.76); }
     .account-debug { margin:18px 0 24px; border-radius:18px; background:rgba(11,63,64,.42); padding:14px; }
     .account-debug summary { cursor:pointer; color:var(--golden-malt); font-weight:900; }
     .account-debug__rows { display:grid; gap:8px; margin:12px 0; }
@@ -272,6 +486,7 @@ ACCOUNT_CSS = """
 
 
 def account_register_page(content: dict[str, Any] | None = None, error: str | None = None, values: dict[str, str] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
     values = values or {}
     message = f'<div class="account-message is-error">{escape(error)}</div>' if error else ""
     return f"""<!doctype html>
@@ -281,12 +496,12 @@ def account_register_page(content: dict[str, Any] | None = None, error: str | No
   <title>Регистрация · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>Регистрация</h1>
@@ -312,12 +527,13 @@ def account_register_page(content: dict[str, Any] | None = None, error: str | No
       </form>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
 
 def account_login_page(content: dict[str, Any] | None = None, error: str | None = None, values: dict[str, str] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
     values = values or {}
     message = f'<div class="account-message is-error">{escape(error)}</div>' if error else ""
     return f"""<!doctype html>
@@ -327,12 +543,12 @@ def account_login_page(content: dict[str, Any] | None = None, error: str | None 
   <title>Вход · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>Вход</h1>
@@ -353,12 +569,13 @@ def account_login_page(content: dict[str, Any] | None = None, error: str | None 
       </form>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
 
 def account_message_page(title: str, message: str, content: dict[str, Any] | None = None, is_error: bool = False) -> str:
+    site_content = public_content_or_defaults(content)
     message_class = "account-message is-error" if is_error else "account-message"
     return f"""<!doctype html>
 <html lang="ru">
@@ -367,12 +584,12 @@ def account_message_page(title: str, message: str, content: dict[str, Any] | Non
   <title>{escape(title)} · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>{escape(title)}</h1>
@@ -383,12 +600,13 @@ def account_message_page(title: str, message: str, content: dict[str, Any] | Non
       </div>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
 
 def password_reset_request_page(content: dict[str, Any] | None = None, message: str | None = None, error: str | None = None, values: dict[str, str] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
     values = values or {}
     notice = ""
     if error:
@@ -402,12 +620,12 @@ def password_reset_request_page(content: dict[str, Any] | None = None, message: 
   <title>Восстановление пароля · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>Восстановление пароля</h1>
@@ -424,12 +642,13 @@ def password_reset_request_page(content: dict[str, Any] | None = None, message: 
       </form>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
 
 def password_reset_confirm_page(token: str, content: dict[str, Any] | None = None, error: str | None = None) -> str:
+    site_content = public_content_or_defaults(content)
     notice = f'<div class="account-message is-error">{escape(error)}</div>' if error else ""
     return f"""<!doctype html>
 <html lang="ru">
@@ -438,12 +657,12 @@ def password_reset_confirm_page(token: str, content: dict[str, Any] | None = Non
   <title>Новый пароль · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>Новый пароль</h1>
@@ -464,7 +683,7 @@ def password_reset_confirm_page(token: str, content: dict[str, Any] | None = Non
       </form>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
@@ -509,7 +728,58 @@ def _discount_debug_html(customer: Any) -> str:
     return f'<details class="account-debug"><summary>Диагностика скидки МойСклад</summary><div class="account-debug__rows">{rows}</div><pre>{raw}</pre></details>'
 
 
-def account_dashboard_page(customer: Any, content: dict[str, Any] | None = None) -> str:
+def account_money(value: object, currency: object = "RUB") -> str:
+    try:
+        amount = int(value or 0) / 100
+    except (TypeError, ValueError):
+        amount = 0
+    suffix = "₽" if str(currency or "RUB").upper() == "RUB" else str(currency or "")
+    return f"{amount:,.0f} {suffix}".replace(",", " ")
+
+
+def account_date(value: object) -> str:
+    raw = str(value or "")
+    try:
+        return raw[:10].split("T", 1)[0]
+    except Exception:
+        return raw or "—"
+
+
+def account_dashboard_page(
+    customer: Any,
+    content: dict[str, Any] | None = None,
+    orders: list[dict[str, Any]] | None = None,
+    password_result: str | None = None,
+    password_error: str | None = None,
+) -> str:
+    site_content = public_content_or_defaults(content)
+    site_content["viewer"] = {"is_customer": True}
+    orders = orders or []
+    notice = ""
+    if password_error:
+        notice = f'<div class="account-message is-error">{escape(password_error)}</div>'
+    elif password_result:
+        notice = f'<div class="account-message">{escape(password_result)}</div>'
+    if orders:
+        order_cards = "".join(
+            f"""
+            <article class="account-order">
+              <div class="account-order__head">
+                <strong>Заказ {index}</strong>
+                <span>{escape(account_date(order.get('created_at')))}</span>
+              </div>
+              <div class="account-order__meta">
+                <span>Сумма: {escape(account_money(order.get('total_minor'), order.get('currency')))}</span>
+              </div>
+              <ul>{''.join(f"<li>{escape(str(item.get('name') or 'Позиция'))} · {escape(str(item.get('quantity') or 0))} шт.</li>" for item in (order.get('items') or [])[:4])}</ul>
+            </article>
+            """
+            for index, order in enumerate(orders, start=1)
+        )
+    else:
+        order_cards = '<p class="account-empty">Заказов пока нет. Оформите первый заказ в разделе «Бизнес».</p>'
+    discount = float(customer["discount_percent"] or 0)
+    discount_markup = f'<div class="account-detail"><span>Персональная скидка</span><strong>{discount:g}%</strong></div>' if discount > 0 else ""
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -517,32 +787,55 @@ def account_dashboard_page(customer: Any, content: dict[str, Any] | None = None)
   <title>Личный кабинет · Stamm Brewing</title>
   <style>
 {BASE_CSS}
-{typography_style(content)}
+{typography_style(site_content)}
 {ACCOUNT_CSS}
   </style>
 </head>
 <body>
-{public_nav('account', content)}
+{public_nav('account', site_content)}
   <main class="account-shell">
     <section class="account-card">
       <h1>Кабинет</h1>
-      <p>Аккаунт связан с контрагентом МойСклад. На следующих этапах здесь появятся B2B-заказы и документы.</p>
+      {notice}
+      <section class="account-section">
+        <h2>Профиль</h2>
       <div class="account-details">
         <div class="account-detail"><span>E-mail</span><strong>{escape(str(customer['email']))}</strong></div>
         <div class="account-detail"><span>ИНН</span><strong>{escape(str(customer['inn']))}</strong></div>
         <div class="account-detail"><span>Организация</span><strong>{escape(str(customer['counterparty_name']))}</strong></div>
-        <div class="account-detail"><span>Персональная скидка</span><strong>{float(customer['discount_percent'] or 0):g}%</strong></div>
-        <div class="account-detail"><span>Персональный тип цен</span><strong>{escape(str(customer['price_type_name'] or 'не задан'))}</strong></div>
-        <div class="account-detail"><span>Обновлена</span><strong>{escape(str(customer['discount_synced_at'] or 'ещё не обновлялась'))}</strong></div>
-        <div class="account-detail"><span>Статус связи</span><strong>Контрагент МойСклад найден и сохранён</strong></div>
+        {discount_markup}
       </div>
-      {_discount_debug_html(customer)}
-      <form method="post" action="/account/logout">
-        <button class="account-button" type="submit">Выйти</button>
-      </form>
+      </section>
+      <section class="account-section">
+        <h2>История заказов</h2>
+        <div class="account-orders">{order_cards}</div>
+      </section>
+      <section class="account-section">
+        <h2>Смена пароля</h2>
+        <form class="account-form" method="post" action="/account/password">
+          <label>Текущий пароль
+            <input name="current_password" type="password" autocomplete="current-password" required>
+          </label>
+          <label>Новый пароль
+            <input name="new_password" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+          <label>Подтверждение нового пароля
+            <input name="new_password_confirm" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+          <div class="account-actions account-actions--single-row">
+            <button class="account-button account-button--compact" type="submit">Сменить пароль</button>
+            <button class="account-button account-button--compact" type="submit" form="forgotPasswordForm">Забыл пароль</button>
+            <button class="account-button account-button--compact" type="submit" form="logoutForm">Выйти</button>
+          </div>
+        </form>
+        <form id="forgotPasswordForm" class="account-inline-form" method="post" action="/account/password-reset">
+          <input type="hidden" name="email" value="{escape(str(customer['email']))}">
+        </form>
+        <form id="logoutForm" class="account-inline-form" method="post" action="/account/logout"></form>
+      </section>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
@@ -564,11 +857,16 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
         except json.JSONDecodeError:
             phones = []
     address = str(contacts.get("contacts_address") or "")
+    address_is_visible = is_enabled(contacts.get("contacts_address_is_visible"), True)
     description = str(contacts.get("contacts_description") or "")
+    description_is_visible = is_enabled(contacts.get("contacts_description_is_visible"), True)
+    description_color = css_text_color(contacts.get("contacts_description_color"), "rgba(246,241,227,.78)")
     lat = str(contacts.get("contacts_map_lat") or "55.7558")
     lng = str(contacts.get("contacts_map_lng") or "37.6173")
     zoom = str(contacts.get("contacts_map_zoom") or "13")
     title = str(contacts.get("contacts_map_title") or "Stamm Brewing")
+    map_height = css_map_height(contacts.get("contacts_map_height_px"), 240)
+    map_width = css_map_width(contacts.get("contacts_map_width_px"), 420)
     visible_emails = sorted(
         (item for item in emails if item.get("value") and item.get("is_visible", True)),
         key=lambda item: (int(item.get("sort_order") or 100), str(item.get("label") or "")),
@@ -585,84 +883,374 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
         f"<li><span>{escape(str(item.get('label') or 'Телефон'))}</span><a href='tel:{escape(str(item.get('value') or ''))}'>{escape(str(item.get('value') or ''))}</a></li>"
         for item in visible_phones
     ) or "<li><span>Телефон</span><strong>Скоро появится</strong></li>"
-    map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
+    map_query = quote(title or "Stamm Brewing")
+    map_src = f"https://yandex.ru/map-widget/v1/?ll={escape(lng)}%2C{escape(lat)}&z={escape(zoom)}&mode=search&text={map_query}&pt={escape(lng)}%2C{escape(lat)}%2Cpm2goldm"
+    description_markup = f'<p style="color:{escape(description_color)}">{cms_text(description)}</p>' if description_is_visible and description else ""
+    address_markup = f'<ul class="contact-list"><li><span>Адрес</span><strong>{cms_text(address)}</strong></li></ul>' if address_is_visible and address else ""
+    contacts_bg_style = section_background_style(site_content, "contacts")
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
-  <title>Контакты · Stamm Brewing</title>
+  {seo_head(site_content, "contacts", "/contacts")}
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .contacts-page {{ min-height:calc(100vh - 74px); padding:42px min(6vw,72px) 64px; background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
-    .contacts-hero {{ max-width:1180px; margin:0 auto; display:grid; grid-template-columns:minmax(0,420px) minmax(0,1fr); gap:24px; align-items:stretch; }}
+    .contacts-page {{ min-height:calc(100vh - 88px); padding:104px min(6vw,72px) 64px; display:grid; place-items:start center; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
+    .contacts-hero {{ width:min(100%,1040px); margin:0 auto; display:grid; grid-template-columns:1fr; gap:28px; align-items:start; justify-items:center; text-align:center; }}
     .contacts-card {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:24px; padding:28px; box-shadow:0 18px 44px rgba(0,0,0,.18); }}
-    .contacts-card h1 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
-    .contacts-card p {{ color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-lead-font-size,18px); }}
+    .contacts-info-card {{ width:min(760px,100%); border:0; background:transparent; box-shadow:none; padding:10px 0; justify-self:center; }}
+    .contacts-card p {{ color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-lead-font-size,18px); white-space:pre-line; }}
     .contact-list {{ list-style:none; margin:22px 0 0; padding:0; display:grid; gap:12px; }}
-    .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; gap:4px; }}
+    .contact-list li {{ padding:12px 0; border-top:1px solid rgba(199,177,102,.16); display:grid; justify-items:center; gap:4px; }}
     .contact-list span {{ color:rgba(246,241,227,.58); font-size:var(--stamm-label-font-size,13px); text-transform:uppercase; letter-spacing:.08em; }}
-    .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); }}
-    .map-card {{ overflow:hidden; min-height:420px; padding:0; display:block; }}
-    .map-card iframe {{ width:100%; height:100%; min-height:420px; border:0; filter:saturate(.92); display:block; }}
-    @media (max-width:880px) {{ .contacts-hero {{ grid-template-columns:1fr; }} }}
+    .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); font-weight:500; white-space:pre-line; }}
+    .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:block; line-height:0; align-self:start; justify-self:center; }}
+    .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; vertical-align:top; }}
+    @media (max-width:880px) {{ .contacts-info-card {{ justify-self:stretch; }} .map-card {{ width:100%; justify-self:stretch; }} }}
   </style>
 </head>
 <body>
 {public_nav("contacts", site_content)}
-  <main class="contacts-page">
+  <main class="contacts-page" style="--menu-offset:{menu_offset_px(site_content, 'contacts')};{contacts_bg_style}">
     <section class="contacts-hero">
-      <div class="contacts-card">
-        <h1>Контакты</h1>
-        <p>{escape(description)}</p>
+      <div class="contacts-card contacts-info-card">
+        {description_markup}
+        {address_markup}
         <ul class="contact-list">{email_cards}</ul>
         <ul class="contact-list">{phone_cards}</ul>
-        <ul class="contact-list"><li><span>Адрес</span><strong>{escape(address)}</strong></li></ul>
       </div>
-      <div class="contacts-card map-card">
+      <div class="contacts-card map-card" style="--contacts-map-height:{map_height}; --contacts-map-width:{map_width}">
         <iframe title="Яндекс.Карта: {escape(title)}" src="{map_src}" loading="lazy" allowfullscreen></iframe>
       </div>
     </section>
   </main>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
+</body>
+</html>"""
+
+def beer_page(content: dict[str, Any] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
+    beer = ((content or {}).get("beer") or {})
+    untappd_logo_url = str(beer.get("beer_untappd_logo_url") or "")
+    backdrop_rgb = css_hex_to_rgb(beer.get("beer_popup_backdrop_color"), "#0b3f40")
+    backdrop_alpha = css_alpha(beer.get("beer_popup_backdrop_opacity"), 30)
+    backdrop_rgba = f"rgba({backdrop_rgb[0]},{backdrop_rgb[1]},{backdrop_rgb[2]},{backdrop_alpha})"
+    card_rgb = css_hex_to_rgb(beer.get("beer_popup_card_color"), "#0d4b4c")
+    card_alpha = css_alpha(beer.get("beer_popup_card_opacity"), 100)
+    card_rgba = f"rgba({card_rgb[0]},{card_rgb[1]},{card_rgb[2]},{card_alpha})"
+    partners = sorted([item for item in (beer.get("partners") or []) if item.get("is_visible", True)], key=lambda item: (int(item.get("sort_order") or 100), str(item.get("name") or "")))
+    products = sorted([item for item in (beer.get("products") or []) if item.get("is_visible", True)], key=lambda item: int(item.get("sort_order") or 100))
+    size_map = {"small": "86px", "medium": "118px", "large": "154px"}
+    partner_cards = []
+    for item in partners:
+        name = escape(str(item.get("name") or "Партнёр"))
+        logo = str(item.get("logo_url") or "")
+        logo_html = f'<img src="{escape(logo)}" alt="{name}">' if logo else f'<span class="partner-card__fallback">{name}</span>'
+        partner_cards.append(f'<a class="partner-card" href="{escape(str(item.get("url") or "#"))}" target="_blank" rel="noopener" style="--logo-size:{size_map.get(str(item.get("size") or "medium"), "118px")}">{logo_html}</a>')
+
+    def product_card(item: dict[str, Any], featured: bool) -> str:
+        payload = escape(json.dumps({"name": str(item.get("name") or ""), "style": str(item.get("style") or ""), "abv": str(item.get("abv") or ""), "imageUrl": str(item.get("image_url") or ""), "untappdUrl": str(item.get("untappd_url") or "")}, ensure_ascii=False))
+        name = escape(str(item.get("name") or "Stamm Brewing"))
+        image = str(item.get("image_url") or "")
+        image_html = f'<img src="{escape(image)}" alt="{name}">' if image else '<div class="beer-can__fallback" aria-hidden="true"></div>'
+        return f'<button class="beer-can {"beer-can--featured" if featured else "beer-can--seasonal"}" type="button" data-product="{payload}" aria-label="{name}">{image_html}</button>'
+
+    new_cards = "".join(product_card(item, True) for item in [p for p in products if p.get("category") == "new"][:3])
+    core_cards = "".join(product_card(item, False) for item in [p for p in products if p.get("category") == "core"])
+    seasonal_cards = "".join(product_card(item, False) for item in [p for p in products if p.get("category") not in {"new", "core"}])
+    partners_section = ""
+    if is_enabled(beer.get("beer_partners_is_visible"), True):
+        partners_section = f'<section class="beer-section"><h1>{escape(str(beer.get("beer_partners_title") or "Где найти Stamm Brewing"))}</h1><p>{cms_text(beer.get("beer_partners_description") or "")}</p><div class="partners-grid">{"".join(partner_cards)}</div></section>'
+    products_inner = ""
+    if is_enabled(beer.get("beer_new_is_visible"), True):
+        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_new_title") or "Новинки"))}</h3><div class="new-grid">{new_cards}</div></div>'
+    if is_enabled(beer.get("beer_core_is_visible"), True):
+        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_core_title") or "Постоянная линейка"))}</h3><div class="seasonal-grid">{core_cards}</div></div>'
+    if is_enabled(beer.get("beer_seasonal_is_visible"), True):
+        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_seasonal_title") or "Сезонные сорта"))}</h3><div class="seasonal-grid">{seasonal_cards}</div></div>'
+    products_section = f'<section class="beer-section"><h2>{escape(str(beer.get("beer_products_title") or "Наша продукция"))}</h2>{products_inner}</section>' if is_enabled(beer.get("beer_products_is_visible"), True) else ""
+    beer_bg_url = str(site_content.get("home", {}).get("home_content_bg_url") or "")
+    beer_style_values = [f"--menu-offset:{menu_offset_px(site_content, 'beer')}"]
+    beer_section_gap = css_section_gap_px(beer.get("beer_section_gap_px"), 72)
+    beer_bg_style = section_background_style(site_content, "beer", beer_bg_url)
+    if beer_bg_style:
+        beer_style_values.append(beer_bg_style)
+    beer_page_style = f' style="{";".join(beer_style_values)}"'
+    return f"""<!doctype html>
+<html lang="ru">
+<head>
+  {seo_head(site_content, "beer", "/beer")}
+  <style>
+{BASE_CSS}
+{typography_style(site_content)}
+    .beer-page {{ min-height:calc(100vh - 88px); padding:120px min(6vw,72px) 72px; background-image:linear-gradient(180deg, rgba(16,88,89,.78), rgba(11,63,64,.86)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
+    .beer-shell {{ width:100%; max-width:1440px; margin:0 auto; display:grid; gap:{beer_section_gap}; justify-items:center; text-align:center; }}
+    .beer-section {{ width:100%; display:grid; justify-items:center; }}
+    .beer-section h1, .beer-section h2 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
+    .beer-section p {{ margin:0 auto 24px; max-width:720px; color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.55; white-space:pre-line; }}
+    .partners-grid {{ width:min(920px,100%); display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:18px 28px; margin:0 auto; }}
+    .partner-card {{ display:inline-grid; place-items:center; justify-self:center; width:max-content; max-width:100%; text-decoration:none; line-height:0; }}
+    .partner-card img {{ max-width:var(--logo-size); max-height:86px; object-fit:contain; display:block; transition:transform .18s ease, filter .18s ease; }}
+    .partner-card:hover img {{ transform:scale(1.045); filter:brightness(1.12) drop-shadow(0 8px 18px rgba(199,177,102,.18)); }}
+    .partner-card__fallback {{ color:var(--foam); font-weight:800; text-align:center; padding:4px 0; line-height:1.2; transition:transform .18s ease, color .18s ease; }}
+    .partner-card:hover .partner-card__fallback {{ transform:scale(1.045); color:var(--golden-malt); }}
+    .product-subsection {{ margin-top:28px; }}
+    .product-subsection h3 {{ margin:0 0 18px; color:var(--foam); font-size:var(--stamm-section-title-font-size,28px); }}
+    .new-grid {{ width:min(860px,100%); display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:28px; align-items:end; justify-items:center; margin:0 auto; }}
+    .seasonal-grid {{ width:min(1320px,100%); display:flex; flex-wrap:wrap; justify-content:center; align-items:end; gap:16px; margin:0 auto; }}
+    .beer-can {{ border:0; background:transparent; color:var(--foam); cursor:pointer; display:grid; justify-items:center; gap:10px; font:inherit; font-weight:800; transition:transform .18s ease; }}
+    .seasonal-grid .beer-can {{ flex:0 1 calc((100% - 128px) / 9); max-width:132px; min-width:72px; }}
+    .beer-can:hover {{ transform:scale(1.045); }}
+    .beer-can img {{ width:100%; object-fit:contain; filter:drop-shadow(0 22px 28px rgba(0,0,0,.28)); }}
+    .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:360px; }}
+    .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:138px; }}
+    .beer-can__fallback {{ width:82px; aspect-ratio:1/2.2; border-radius:18px; background:linear-gradient(180deg, var(--foam), var(--golden-malt)); }}
+    .beer-modal {{ position:fixed; inset:0; z-index:1001; display:none; place-items:center; padding:24px; background:{backdrop_rgba}; backdrop-filter:blur(8px); }}
+    .beer-modal.is-open {{ display:grid; }}
+    .beer-modal__card {{ position:relative; width:min(520px,100%); border:1px solid rgba(199,177,102,.28); border-radius:26px; padding:30px; background:{card_rgba}; color:var(--foam); box-shadow:0 30px 90px rgba(0,0,0,.34); display:grid; justify-items:center; text-align:center; }}
+    .beer-modal__close {{ position:absolute; top:18px; right:18px; border:0; border-radius:999px; width:34px; height:34px; background:var(--golden-malt); color:var(--ink); cursor:pointer; font-weight:900; }}
+    .beer-modal h3 {{ margin:0 42px 10px; color:var(--golden-malt); font-size:30px; }}
+    .beer-modal p {{ margin:4px 0; }}
+    .beer-modal__mockup {{ max-width:min(260px,78vw); max-height:420px; object-fit:contain; margin:18px auto 12px; filter:drop-shadow(0 24px 30px rgba(0,0,0,.32)); }}
+    .untappd-link {{ display:inline-grid; place-items:center; margin-top:12px; text-decoration:none; }}
+    .untappd-link img {{ width:42px; height:42px; object-fit:contain; transition:transform .18s ease, filter .18s ease; }}
+    .untappd-link:hover img {{ transform:scale(1.06); filter:brightness(1.12); }}
+    @media (max-width:1100px) {{ .seasonal-grid .beer-can {{ flex-basis:110px; }} }}
+    @media (max-width:760px) {{ .new-grid {{ grid-template-columns:1fr; }} .beer-page {{ padding:76px 20px 54px; background-attachment:scroll; }} }}
+  </style>
+</head>
+<body>
+{public_nav("beer", site_content)}
+  <main class="beer-page"{beer_page_style}><div class="beer-shell">{partners_section}{products_section}</div></main>
+  <div class="beer-modal" id="beerModal"><div class="beer-modal__card"><button class="beer-modal__close" type="button" aria-label="Закрыть">×</button><h3 id="beerModalTitle"></h3><p id="beerModalStyle"></p><p id="beerModalAbv"></p><img class="beer-modal__mockup" id="beerModalImage" src="" alt=""><a class="untappd-link" id="beerModalUntappd" href="#" target="_blank" rel="noopener" aria-label="Untappd"></a></div></div>
+  <script>
+    (function () {{
+      const modal = document.getElementById('beerModal');
+      const title = document.getElementById('beerModalTitle');
+      const style = document.getElementById('beerModalStyle');
+      const abv = document.getElementById('beerModalAbv');
+      const link = document.getElementById('beerModalUntappd');
+      const image = document.getElementById('beerModalImage');
+      const untappdLogoUrl = "{escape(untappd_logo_url)}";
+      function close() {{ modal.classList.remove('is-open'); }}
+      document.addEventListener('click', function (event) {{
+        const button = event.target.closest('[data-product]');
+        if (button) {{
+          const data = JSON.parse(button.dataset.product || '{{}}');
+          title.textContent = data.name || 'Stamm Brewing';
+          style.textContent = data.style || '';
+          abv.textContent = data.abv ? 'ABV: ' + data.abv : '';
+          link.href = data.untappdUrl || '#';
+          image.src = data.imageUrl || '';
+          image.alt = data.name || '';
+          image.hidden = !data.imageUrl;
+          link.innerHTML = untappdLogoUrl ? '<img src="' + untappdLogoUrl.replace(/"/g, '&quot;') + '" alt="Untappd">' : '';
+          link.hidden = !data.untappdUrl || !untappdLogoUrl;
+          modal.classList.add('is-open');
+        }}
+        if (event.target === modal || event.target.closest('.beer-modal__close')) close();
+      }});
+      document.addEventListener('keydown', function (event) {{ if (event.key === 'Escape') close(); }});
+    }})();
+  </script>
+{age_gate_markup(site_content)}
+</body>
+</html>"""
+
+def gallery_page(content: dict[str, Any] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
+    gallery = site_content.get("gallery") or {}
+
+    def gallery_card(item: dict[str, Any], index: int) -> str:
+        image_url = escape(str(item.get("image_url") or ""))
+        caption = str(item.get("caption") or "")
+        caption_html = f"<span>{escape(caption)}</span>" if caption else ""
+        size = str(item.get("size") or "medium")
+        if size not in {"small", "medium", "large"}:
+            size = "medium"
+        return f"""
+            <button class="gallery-card gallery-card--{escape(size)}" type="button" data-gallery-open data-gallery-src="{image_url}" data-gallery-caption="{escape(caption)}" aria-label="Открыть фото {index + 1}">
+              <img src="{image_url}" alt="{escape(caption or 'Фото Stamm Brewing')}" loading="lazy">
+              {caption_html}
+            </button>
+            """
+
+    source_sections = list(gallery.get("sections") or [])
+    if not source_sections and gallery.get("items"):
+        source_sections = [{"title": str(gallery.get("gallery_title") or GALLERY_DEFAULTS["gallery_title"]), "is_visible": True, "items": gallery.get("items")}]
+    visible_sections = []
+    global_index = 0
+    for section in source_sections:
+        if not is_enabled(section.get("is_visible"), True):
+            continue
+        visible_items = [
+            item for item in section.get("items", [])
+            if item.get("image_url") and is_enabled(item.get("is_visible"), True)
+        ]
+        if not visible_items:
+            continue
+        cards = []
+        for item in visible_items:
+            cards.append(gallery_card(item, global_index))
+            global_index += 1
+        visible_sections.append(
+            f"""
+            <section class="gallery-section">
+              <h2>{escape(str(section.get('title') or 'Раздел галереи'))}</h2>
+              <div class="gallery-grid">{''.join(cards)}</div>
+            </section>
+            """
+        )
+    sections_html = "".join(visible_sections) or "<p class='gallery-empty'>Галерея скоро пополнится новыми фотографиями Stamm Brewing.</p>"
+    title = str(gallery.get("gallery_title") or GALLERY_DEFAULTS["gallery_title"])
+    description = str(gallery.get("gallery_description") or "")
+    description_html = f"<p>{cms_text(description)}</p>" if description else ""
+    gallery_bg_style = section_background_style(site_content, "history")
+    return f"""<!doctype html>
+<html lang="ru">
+<head>
+  {seo_head(site_content, "gallery", "/gallery")}
+  <style>
+{BASE_CSS}
+{typography_style(site_content)}
+    .gallery-page {{ min-height:100vh; padding:calc(var(--menu-offset,176px) + 22px) min(5vw,64px) 84px; background-image:radial-gradient(circle at 18% 12%, rgba(199,177,102,.16), transparent 30%), linear-gradient(180deg, rgba(16,88,89,.9), rgba(11,63,64,.96)), var(--section-bg, linear-gradient(180deg, rgba(16,88,89,.96), rgba(11,63,64,.98))); background-size:auto, cover, cover; background-position:center; background-repeat:no-repeat; background-attachment:scroll, fixed, fixed; }}
+    .gallery-shell {{ width:min(1440px,100%); margin:0 auto; }}
+    .gallery-hero {{ max-width:820px; margin:0 auto 42px; text-align:center; }}
+    .gallery-hero h1 {{ margin:0; color:var(--golden-malt); font-size:var(--stamm-page-title-font-size,42px); line-height:.95; text-transform:uppercase; letter-spacing:.08em; }}
+    .gallery-hero p {{ margin:16px auto 0; color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.55; white-space:pre-line; }}
+    .gallery-sections {{ display:grid; gap:54px; }}
+    .gallery-section h2 {{ margin:0 0 18px; color:var(--foam); font-size:clamp(24px,3vw,36px); line-height:1; text-transform:uppercase; letter-spacing:.07em; }}
+    .gallery-grid {{ display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); grid-auto-flow:dense; gap:14px; }}
+    .gallery-card {{ position:relative; min-height:230px; grid-column:span 2; border:0; padding:0; overflow:hidden; border-radius:28px; background:rgba(246,241,227,.08); cursor:pointer; box-shadow:0 22px 60px rgba(0,0,0,.2); }}
+    .gallery-card--small {{ grid-column:span 2; min-height:220px; }}
+    .gallery-card--medium {{ grid-column:span 3; min-height:300px; }}
+    .gallery-card--large {{ grid-column:span 4; grid-row:span 2; min-height:430px; }}
+    .gallery-card img {{ width:100%; height:100%; position:absolute; inset:0; object-fit:cover; display:block; transform:scale(1.01); transition:transform .45s ease, filter .45s ease; }}
+    .gallery-card::after {{ content:""; position:absolute; inset:0; background:linear-gradient(180deg, transparent 58%, rgba(0,0,0,.42)); opacity:.58; transition:opacity .35s ease; }}
+    .gallery-card span {{ position:absolute; left:18px; right:18px; bottom:16px; z-index:1; color:var(--foam); font-weight:700; font-size:15px; line-height:1.25; text-align:left; }}
+    .gallery-card:hover img {{ transform:scale(1.07); filter:brightness(1.08) saturate(1.02); }}
+    .gallery-card:hover::after {{ opacity:.48; }}
+    .gallery-empty {{ margin:0 auto; max-width:620px; color:rgba(246,241,227,.72); text-align:center; }}
+    .gallery-lightbox {{ position:fixed; inset:0; z-index:900; display:none; place-items:center; padding:28px; background:rgba(7,32,33,.88); backdrop-filter:blur(12px); }}
+    .gallery-lightbox.is-open {{ display:grid; }}
+    .gallery-lightbox__inner {{ width:min(1120px,100%); display:grid; gap:14px; justify-items:center; }}
+    .gallery-lightbox img {{ max-width:100%; max-height:78vh; object-fit:contain; border-radius:22px; box-shadow:0 30px 90px rgba(0,0,0,.42); }}
+    .gallery-lightbox p {{ margin:0; color:var(--foam); font-weight:600; text-align:center; }}
+    .gallery-lightbox button {{ border:0; border-radius:999px; padding:10px 16px; background:var(--golden-malt); color:var(--ink); font-weight:900; cursor:pointer; }}
+    @media (max-width:980px) {{ .gallery-grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} .gallery-card, .gallery-card--small, .gallery-card--medium, .gallery-card--large {{ grid-column:span 1; grid-row:span 1; min-height:260px; }} }}
+    @media (max-width:620px) {{ .gallery-page {{ padding-left:18px; padding-right:18px; }} .gallery-grid {{ grid-template-columns:1fr; }} .gallery-card {{ min-height:280px; border-radius:22px; }} }}
+  </style>
+</head>
+<body>
+{public_nav("history", site_content)}
+  <main class="gallery-page" style="--menu-offset:{menu_offset_px(site_content, 'history')};{gallery_bg_style}">
+    <section class="gallery-shell">
+      <div class="gallery-hero"><h1>{escape(title)}</h1>{description_html}</div>
+      <div class="gallery-sections">{sections_html}</div>
+    </section>
+  </main>
+  <div class="gallery-lightbox" id="galleryLightbox" aria-hidden="true">
+    <div class="gallery-lightbox__inner">
+      <img src="" alt="">
+      <p></p>
+      <button type="button" data-gallery-close>Закрыть</button>
+    </div>
+  </div>
+  <script>
+    (function () {{
+      const lightbox = document.getElementById('galleryLightbox');
+      if (!lightbox) return;
+      const image = lightbox.querySelector('img');
+      const caption = lightbox.querySelector('p');
+      function close() {{
+        lightbox.classList.remove('is-open');
+        lightbox.setAttribute('aria-hidden', 'true');
+        if (image) image.src = '';
+      }}
+      document.querySelectorAll('[data-gallery-open]').forEach((button) => {{
+        button.addEventListener('click', () => {{
+          if (!image || !caption) return;
+          image.src = button.dataset.gallerySrc || '';
+          image.alt = button.dataset.galleryCaption || 'Фото Stamm Brewing';
+          caption.textContent = button.dataset.galleryCaption || '';
+          lightbox.classList.add('is-open');
+          lightbox.setAttribute('aria-hidden', 'false');
+        }});
+      }});
+      lightbox.addEventListener('click', (event) => {{ if (event.target === lightbox) close(); }});
+      lightbox.querySelector('[data-gallery-close]')?.addEventListener('click', close);
+      document.addEventListener('keydown', (event) => {{ if (event.key === 'Escape') close(); }});
+    }})();
+  </script>
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
 def public_placeholder_page(title: str, active: str, content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
+    placeholder_bg_style = section_background_style(site_content, active)
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
-  <title>{title} · Stamm Brewing</title>
+  {seo_head(site_content, active, "/" + active)}
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .placeholder {{ min-height:54vh; display:grid; place-items:center; padding:72px min(6vw,72px); background:linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .placeholder {{ min-height:54vh; display:grid; place-items:center; padding:96px min(6vw,72px) 72px; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .placeholder__card {{ max-width:760px; background:var(--card-hop); border:1px solid rgba(199,177,102,.2); border-radius:24px; padding:30px; }}
     .placeholder__card h1 {{ margin:0 0 10px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
     .placeholder__card p {{ margin:0; color:rgba(246,241,227,.76); }}
   </style>
 </head>
 <body>
-{public_nav(active, content)}
-  <main class="placeholder"><section class="placeholder__card"><h1>{title}</h1><p>Раздел будет собираться после ядра B2B-магазина и админки.</p></section></main>
-{age_gate_markup()}
+{public_nav(active, site_content)}
+  <main class="placeholder" style="--menu-offset:{menu_offset_px(site_content, active)};{placeholder_bg_style}"><section class="placeholder__card"><h1>{title}</h1><p>Раздел будет собираться после ядра B2B-магазина и админки.</p></section></main>
+{age_gate_markup(site_content)}
+</body>
+</html>"""
+
+
+def business_guest_page(content: dict[str, Any] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
+    site_content = {**site_content, "actions": [{**item, "is_visible": False} if item.get("key") == "cart" else item for item in site_content.get("actions", [])]}
+    business = site_content.get("business") or {}
+    message = str(business.get("business_guest_text") or BUSINESS_DEFAULTS["business_guest_text"])
+    message_size = css_font_px(business.get("business_guest_font_size_px"), int(BUSINESS_DEFAULTS["business_guest_font_size_px"]), 12, 72)
+    message_weight = css_weight(business.get("business_guest_font_weight"), int(BUSINESS_DEFAULTS["business_guest_font_weight"]))
+    business_bg_style = section_background_style(site_content, "business")
+    return f"""<!doctype html>
+<html lang="ru">
+<head>
+  {seo_head(site_content, "business", "/business")}
+  <style>
+{BASE_CSS}
+{typography_style(site_content)}
+    html, body {{ min-height:100%; background:var(--deep-hop); }}
+    .business-guest {{ min-height:100vh; padding:var(--menu-offset,176px) min(6vw,72px) 72px; display:grid; place-items:center; background-image:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:auto, cover, cover; background-position:center; background-repeat:no-repeat; background-attachment:scroll, fixed, fixed; }}
+    .business-guest__message {{ max-width:620px; margin:0 auto; text-align:center; color:var(--foam); font-size:var(--business-guest-font-size); line-height:1.38; font-weight:var(--business-guest-font-weight); letter-spacing:.01em; white-space:pre-line; }}
+  </style>
+</head>
+<body>
+{public_nav("business", site_content)}
+  <main class="business-guest" style="--menu-offset:{menu_offset_px(site_content, 'business')}; --business-guest-font-size:{message_size}; --business-guest-font-weight:{message_weight};{business_bg_style}">
+    <p class="business-guest__message">{cms_text(message)}</p>
+  </main>
+{age_gate_markup(site_content)}
 </body>
 </html>"""
 
 
 def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
+    business_bg_style = section_background_style(site_content, "business")
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
-  <title>Бизнес · Stamm Brewing</title>
+  {seo_head(site_content, "business", "/business")}
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .wrap {{ padding:22px min(6vw,72px) 56px; }}
+    .wrap {{ min-height:100vh; padding:58px min(6vw,72px) 56px; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .toolbar {{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:16px; align-items:center; margin-bottom:18px; }}
     .filters {{ display:flex; gap:10px; flex-wrap:wrap; }}
     .filter {{ border:1px solid rgba(199,177,102,.34); background:rgba(11,63,64,.55); color:var(--foam); padding:9px 15px; border-radius:999px; font-weight:600; cursor:pointer; }}
@@ -684,7 +1272,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     .quantity {{ display:grid; grid-template-columns:30px 38px 30px; align-items:center; border:1px solid rgba(199,177,102,.28); border-radius:999px; overflow:hidden; background:rgba(11,63,64,.42); }}
     .quantity__button {{ border:0; width:30px; height:30px; background:var(--golden-malt); color:var(--ink); font-weight:700; cursor:pointer; }}
     .quantity__button:hover {{ filter:brightness(1.06); }}
-    .quantity__value {{ text-align:center; font-weight:700; color:var(--foam); font-size:13px; }}
+    .quantity__value {{ width:38px; min-width:0; border:0; background:transparent; text-align:center; font-weight:700; color:var(--foam); font:inherit; font-size:13px; appearance:textfield; }}
+    .quantity__value::-webkit-outer-spin-button, .quantity__value::-webkit-inner-spin-button {{ -webkit-appearance:none; margin:0; }}
     .cart {{ font-size:var(--stamm-cart-font-size,14px); position:sticky; top:86px; background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:20px; box-shadow:0 14px 34px rgba(0,0,0,.16); overflow:hidden; }}
     .cart__header {{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid rgba(199,177,102,.14); }}
     .cart__title {{ margin:0; color:var(--golden-malt); font-size:var(--stamm-section-title-font-size,18px); text-transform:uppercase; letter-spacing:.08em; }}
@@ -718,7 +1307,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("business", content)}
-  <main class="wrap">
+  <main class="wrap" style="--menu-offset:{menu_offset_px(site_content, 'business')};{business_bg_style}">
     <div class="toolbar">
       <div class="filters" aria-label="Фильтры каталога">
         <button class="filter is-active" data-filter="all">Все</button>
@@ -766,7 +1355,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     }}
 
     function escapeHtml(value) {{
-      return String(value ?? '').replace(/[&<>"']/g, (char) => ({{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }}[char]));
+      return String(value === null || value === undefined ? '' : value).replace(/[&<>"']/g, (char) => ({{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }}[char]));
     }}
 
     function formatMoney(amountMinor, currency = 'RUB') {{
@@ -774,20 +1363,93 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       return `${{Number(amountMinor / 100).toLocaleString('ru-RU')}} ₽`;
     }}
 
+    function numberOrDefault(value, fallback = 0) {{
+      const number = Number(value);
+      return Number.isFinite(number) ? number : fallback;
+    }}
+
+    function normalizeCatalogItem(raw) {{
+      const item = raw && typeof raw === 'object' ? raw : {{}};
+      const price = item.price && typeof item.price === 'object' ? item.price : {{}};
+      const availability = item.availability && typeof item.availability === 'object' ? item.availability : {{}};
+      const rules = item.orderRules && typeof item.orderRules === 'object' ? item.orderRules : {{}};
+      const fallbackId = item.slug || item.externalId || item.sku || item.name || '';
+      const productId = item.productId !== undefined && item.productId !== null ? item.productId : fallbackId;
+      const containerType = item.containerType || 'keg';
+      const maxQuantity = rules.maxQuantity !== undefined && rules.maxQuantity !== null ? rules.maxQuantity : availability.quantity;
+      return {{
+        productId,
+        variantId: item.variantId || null,
+        slug: item.slug || String(productId || ''),
+        name: item.name || item.publicName || item.accountingName || 'Позиция каталога',
+        subtitle: item.subtitle || '',
+        sku: item.sku || '',
+        externalId: item.externalId || null,
+        externalHref: item.externalHref || null,
+        containerType,
+        containerLabel: item.containerLabel || (containerType === 'can' ? 'Банки' : 'Кеги'),
+        volumeLiters: item.volumeLiters || null,
+        alcoholPercent: item.alcoholPercent || null,
+        alcoholLabel: item.alcoholLabel || '',
+        price: {{
+          visibility: price.visibility || 'hidden',
+          amountMinor: numberOrDefault(price.amountMinor, 0),
+          baseAmountMinor: numberOrDefault(price.baseAmountMinor, price.amountMinor || 0),
+          currency: price.currency || 'RUB',
+          label: price.label || 'Цена по запросу',
+          baseLabel: price.baseLabel || '',
+          showBasePrice: Boolean(price.showBasePrice),
+          pricingSource: price.pricingSource || 'base',
+          priceTypeName: price.priceTypeName || null,
+        }},
+        availability: {{
+          status: availability.status || 'unavailable',
+          label: availability.label || '',
+          quantity: numberOrDefault(availability.quantity, 0),
+        }},
+        imageUrl: item.imageUrl || '',
+        ctaLabel: item.ctaLabel || 'В заявку',
+        orderRules: {{
+          allowPreorder: Boolean(rules.allowPreorder),
+          minQuantity: numberOrDefault(rules.minQuantity, containerType === 'can' ? 12 : 1),
+          step: numberOrDefault(rules.step, containerType === 'can' ? 12 : 1),
+          maxQuantity: numberOrDefault(maxQuantity, 0),
+        }},
+      }};
+    }}
+
     function cartQuantity(productId) {{
-      return cart.get(String(productId))?.quantity || 0;
+      const entry = cart.get(String(productId));
+      return entry ? entry.quantity : 0;
     }}
 
     function itemStep(item) {{
-      return Number(item?.orderRules?.step || (item?.containerType === 'can' ? 12 : 1));
+      const rules = item && item.orderRules ? item.orderRules : {{}};
+      return Number(rules.step || (item && item.containerType === 'can' ? 12 : 1));
+    }}
+
+    function availableQuantity(item) {{
+      const rules = item && item.orderRules ? item.orderRules : {{}};
+      const availability = item && item.availability ? item.availability : {{}};
+      const rawMax = rules.maxQuantity !== undefined && rules.maxQuantity !== null ? rules.maxQuantity : availability.quantity;
+      const max = Number(rawMax || 0);
+      return Number.isFinite(max) ? Math.max(0, max) : 0;
+    }}
+
+    function maxOrderQuantity(item) {{
+      const step = itemStep(item);
+      const max = availableQuantity(item);
+      if (step <= 1) return max;
+      return Math.floor(max / step) * step;
     }}
 
     function normalizeQuantity(item, quantity) {{
       const step = itemStep(item);
+      const max = maxOrderQuantity(item);
       const raw = Math.max(0, Number(quantity) || 0);
-      if (raw === 0) return 0;
-      if (item?.containerType === 'can') return Math.ceil(raw / 12) * 12;
-      return Math.ceil(raw / step) * step;
+      if (raw === 0 || max <= 0) return 0;
+      const stepped = Math.ceil(raw / step) * step;
+      return Math.min(stepped, max);
     }}
 
     function renderCards(items) {{
@@ -803,6 +1465,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
           ? `<img src="${{escapeHtml(item.imageUrl)}}" alt="${{safeName}}" loading="lazy" onerror="this.hidden=true; this.nextElementSibling.hidden=false"><div class="product__image-fallback" aria-label="Фото скоро появится" hidden></div>`
           : fallback;
         const quantity = cartQuantity(item.productId);
+        const step = itemStep(item);
+        const maxQuantity = maxOrderQuantity(item);
         const stepHint = item.containerType === 'can' ? '<span class="badge">ящик ×12</span>' : '';
         return `
         <article class="product">
@@ -815,8 +1479,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
           <div class="product__order" aria-label="Количество для ${{safeName}}">
             <div class="quantity" data-product-id="${{escapeHtml(item.productId)}}">
               <button class="quantity__button" type="button" data-action="decrease" aria-label="Уменьшить">−</button>
-              <span class="quantity__value" data-quantity-for="${{escapeHtml(item.productId)}}">${{escapeHtml(quantity)}}</span>
-              <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить">+</button>
+              <input class="quantity__value" data-quantity-for="${{escapeHtml(item.productId)}}" data-quantity-input data-product-id="${{escapeHtml(item.productId)}}" type="number" min="0" max="${{escapeHtml(maxQuantity)}}" step="${{escapeHtml(step)}}" value="${{escapeHtml(quantity)}}" aria-label="Количество">
+              <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить" ${{quantity >= maxQuantity ? 'disabled' : ''}}>+</button>
             </div>
           </div>
         </article>
@@ -826,14 +1490,26 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     }}
 
     function updateQuantityControls(productId) {{
+      const entry = cart.get(String(productId));
+      const item = (entry && entry.item) || currentItems.find((candidate) => String(candidate.productId) === String(productId));
+      const quantity = cartQuantity(productId);
+      const maxQuantity = item ? maxOrderQuantity(item) : 0;
       document.querySelectorAll('[data-quantity-for]').forEach((node) => {{
-        if (node.dataset.quantityFor === String(productId)) node.textContent = cartQuantity(productId);
+        if (node.dataset.quantityFor === String(productId)) node.value = quantity;
+      }});
+      document.querySelectorAll('[data-product-id]').forEach((node) => {{
+        if (node.dataset.productId !== String(productId)) return;
+        node.querySelectorAll('[data-action="increase"]').forEach((button) => {{
+          button.disabled = maxQuantity <= 0 || quantity >= maxQuantity;
+        }});
       }});
     }}
 
     function setCartQuantity(item, nextQuantity) {{
       const productId = String(item.productId);
-      const quantity = normalizeQuantity(item, nextQuantity);
+      const requestedQuantity = Math.max(0, Number(nextQuantity) || 0);
+      const quantity = normalizeQuantity(item, requestedQuantity);
+      const wasClamped = requestedQuantity > quantity;
       if (quantity === 0) {{
         cart.delete(productId);
       }} else {{
@@ -841,10 +1517,12 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       }}
       updateQuantityControls(productId);
       renderCart();
+      if (wasClamped) showCartMessage(`Нельзя добавить больше доступного количества для «${{item.name}}».`, true);
     }}
 
     function changeCartQuantity(productId, delta) {{
-      const item = currentItems.find((entry) => String(entry.productId) === String(productId)) || cart.get(String(productId))?.item;
+      const existingEntry = cart.get(String(productId));
+      const item = currentItems.find((entry) => String(entry.productId) === String(productId)) || (existingEntry ? existingEntry.item : null);
       if (!item) return;
       setCartQuantity(item, cartQuantity(productId) + (delta * itemStep(item)));
     }}
@@ -861,6 +1539,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       }}
       const rows = entries.map(({{ item, quantity }}) => {{
         const lineTotal = (item.price.amountMinor || 0) * quantity;
+        const step = itemStep(item);
+        const maxQuantity = maxOrderQuantity(item);
         return `
           <div class="cart-item">
             <div>
@@ -871,8 +1551,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
             <div class="cart-item__controls">
               <div class="quantity" data-product-id="${{escapeHtml(item.productId)}}">
                 <button class="quantity__button" type="button" data-action="decrease" aria-label="Уменьшить">−</button>
-                <span class="quantity__value">${{escapeHtml(quantity)}}</span>
-                <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить">+</button>
+                <input class="quantity__value" data-quantity-input data-product-id="${{escapeHtml(item.productId)}}" type="number" min="0" max="${{escapeHtml(maxQuantity)}}" step="${{escapeHtml(step)}}" value="${{escapeHtml(quantity)}}" aria-label="Количество">
+                <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить" ${{quantity >= maxQuantity ? 'disabled' : ''}}>+</button>
               </div>
               <button class="cart-remove" type="button" data-action="remove" data-product-id="${{escapeHtml(item.productId)}}">Удалить</button>
             </div>
@@ -885,10 +1565,15 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         <button class="cart__submit" type="button" data-action="submit-order" ${{isBelowMinimum ? 'disabled' : ''}}>Оформить заявку</button>`;
     }}
 
+    function showCartMessage(message, isError = false) {{
+      cartBodyEl.querySelectorAll('.cart__message').forEach((node) => node.remove());
+      cartBodyEl.insertAdjacentHTML('beforeend', `<div class="cart__message${{isError ? ' is-error' : ''}}">${{escapeHtml(message)}}</div>`);
+    }}
+
     async function submitOrder() {{
       const entries = [...cart.values()];
       const payload = {{
-        comment: orderCommentEl?.value || '',
+        comment: (orderCommentEl ? orderCommentEl.value : ''),
         items: entries.map((entry) => ({{
           productId: entry.item.productId,
           quantity: entry.quantity,
@@ -913,8 +1598,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         renderCart();
         cartBodyEl.innerHTML = `<div class="cart__message">Заявка ${{escapeHtml(data.orderNumber)}} принята. Менеджер Stamm Brewing свяжется с вами.</div>`;
       }} catch (error) {{
-        const message = error?.message || 'Не удалось оформить заявку';
-        cartBodyEl.insertAdjacentHTML('beforeend', `<div class="cart__message is-error">${{escapeHtml(message)}}</div>`);
+        const message = (error && error.message) ? error.message : 'Не удалось оформить заявку';
+        showCartMessage(message, true);
       }}
     }}
 
@@ -927,23 +1612,26 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         const response = await fetch(`/api/public/business/catalog${{suffix}}`, {{ headers: {{ 'Accept': 'application/json' }}, signal: controller.signal }});
         if (!response.ok) throw new Error(`Local API error: ${{response.status}}`);
         const data = await response.json();
-        const items = Array.isArray(data.items) ? data.items : [];
+        const rawItems = Array.isArray(data.items) ? data.items : [];
+        const items = rawItems.map(normalizeCatalogItem).filter((item) => item.productId && item.name);
         const meta = data.meta || {{}};
-        minimumOrderAmountMinor = Number(meta.minimumOrder?.amountMinor || minimumOrderAmountMinor);
-        minimumOrderLabel = meta.minimumOrder?.label || minimumOrderLabel;
+        const minimumOrder = meta.minimumOrder || {{}};
+        minimumOrderAmountMinor = Number(minimumOrder.amountMinor || minimumOrderAmountMinor);
+        minimumOrderLabel = minimumOrder.label || minimumOrderLabel;
         if (meta.totalLocalItems === 0) {{
           setState('Каталог скоро появится', 'В локальном каталоге пока нет опубликованных товаров. Оставьте заявку менеджеру Stamm Brewing.', 'empty');
           return;
         }}
         if (items.length === 0) {{
-          const label = filterButtons.find((button) => button.dataset.filter === activeFilter)?.textContent || 'выбранному фильтру';
+          const activeFilterButton = filterButtons.find((button) => button.dataset.filter === activeFilter);
+          const label = activeFilterButton ? activeFilterButton.textContent : 'выбранному фильтру';
           setState('Ничего не найдено', `В локальном каталоге нет товаров по фильтру «${{label}}». Попробуйте другой фильтр.`, 'empty');
           return;
         }}
         renderCards(items);
         renderCart();
       }} catch (error) {{
-        const message = error?.name === 'AbortError' ? 'timeout' : (error?.message || 'unknown error');
+        const message = error && error.name === 'AbortError' ? 'timeout' : ((error && error.message) ? error.message : 'unknown error');
         setState('Не удалось загрузить каталог сайта', 'Попробуйте обновить страницу или свяжитесь с менеджером. Техническое обновление каталога выполняется на стороне сайта.', 'error');
       }} finally {{
         window.clearTimeout(timeoutId);
@@ -958,7 +1646,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         submitOrder();
         return;
       }}
-      const productId = actionButton.dataset.productId || actionButton.closest('[data-product-id]')?.dataset.productId;
+      const productNode = actionButton.closest('[data-product-id]');
+      const productId = actionButton.dataset.productId || (productNode ? productNode.dataset.productId : null);
       if (!productId) return;
       if (action === 'increase') changeCartQuantity(productId, 1);
       if (action === 'decrease') changeCartQuantity(productId, -1);
@@ -966,6 +1655,16 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         const entry = cart.get(String(productId));
         if (entry) setCartQuantity(entry.item, 0);
       }}
+    }});
+
+    document.addEventListener('change', (event) => {{
+      const input = event.target.closest('[data-quantity-input]');
+      if (!input) return;
+      const productId = input.dataset.productId;
+      const existingEntry = cart.get(String(productId));
+      const item = currentItems.find((entry) => String(entry.productId) === String(productId)) || (existingEntry ? existingEntry.item : null);
+      if (!item) return;
+      setCartQuantity(item, input.value);
     }});
 
     filterButtons.forEach((button) => {{
@@ -979,6 +1678,6 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     renderCart();
     loadCatalog();
   </script>
-{age_gate_markup()}
+{age_gate_markup(site_content)}
 </body>
 </html>"""
