@@ -1397,6 +1397,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("cart__minimum is-below", html)
         self.assertNotIn("До оформления осталось", html)
         self.assertNotIn("Цена продажи", html)
+        self.assertIn("normalizeCatalogItem", html)
         self.assertIn("normalizeQuantity", html)
         self.assertIn("maxOrderQuantity", html)
         self.assertIn("data-quantity-input", html)
@@ -1567,7 +1568,13 @@ class CoreFoundationTest(unittest.TestCase):
         data = json.loads(payload)
         self.assertEqual(data["meta"]["source"], "local_read_model")
         self.assertEqual(len(data["items"]), 1)
-        self.assertEqual(data["items"][0]["name"], "Stamm IPA Keg")
+        item = data["items"][0]
+        self.assertEqual(item["name"], "Stamm IPA Keg")
+        self.assertEqual(item["containerType"], "keg")
+        self.assertEqual(item["price"]["label"], "123 ₽")
+        self.assertEqual(item["availability"]["quantity"], 10)
+        self.assertEqual(item["orderRules"]["maxQuantity"], 10)
+        self.assertIn("productId", item)
         self.assertEqual(data["meta"]["minimumOrder"]["amountMinor"], 1500000)
 
     def test_public_business_order_api_enforces_minimum_and_can_boxes(self) -> None:
