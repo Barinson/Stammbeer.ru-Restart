@@ -45,9 +45,19 @@ services:
       # caddy-data хранит выданные сертификаты — критично для автопродления между рестартами.
       - caddy-data:/data
       - caddy-config:/config
+    networks:
+      # default — связь с сервисом app (Stamm); stamm-frontend-network — с контейнером brewatlas-app.
+      - default
+      - stamm-frontend-network
     restart: unless-stopped
 
 volumes:
   app-data:
   caddy-data:
   caddy-config:
+
+networks:
+  # Внешняя сеть, общая с compose-стеком brewatlas. Создать один раз:
+  #   docker network create stamm-frontend-network
+  stamm-frontend-network:
+    external: true

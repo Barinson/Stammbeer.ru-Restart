@@ -5,3 +5,11 @@
 	reverse_proxy app:8080
 	tls {$ACME_EMAIL}
 }
+
+# brewatlas.ru — отдельное приложение в контейнере brewatlas-app (порт 8000),
+# доступно через общую сеть stamm-frontend-network.
+brewatlas.ru {
+	encode gzip
+	reverse_proxy brewatlas-app:8000
+	tls {$ACME_EMAIL}
+}
