@@ -1356,7 +1356,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     }}
 
     function escapeHtml(value) {{
-      return String(value ?? '').replace(/[&<>"']/g, (char) => ({{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }}[char]));
+      return String(value === null || value === undefined ? '' : value).replace(/[&<>"']/g, (char) => ({{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }}[char]));
     }}
 
     function formatMoney(amountMinor, currency = 'RUB') {{
@@ -1365,11 +1365,28 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     }}
 
     function cartQuantity(productId) {{
-      return cart.get(String(productId))?.quantity || 0;
+      const entry = cart.get(String(productId));
+      return entry ? entry.quantity : 0;
     }}
 
     function itemStep(item) {{
-      return Number(item?.orderRules?.step || (item?.containerType === 'can' ? 12 : 1));
+      const rules = item && item.orderRules ? item.orderRules : {{}};
+      return Number(rules.step || (item && item.containerType === 'can' ? 12 : 1));
+    }}
+
+    function availableQuantity(item) {{
+      const rules = item && item.orderRules ? item.orderRules : {{}};
+      const availability = item && item.availability ? item.availability : {{}};
+      const rawMax = rules.maxQuantity !== undefined && rules.maxQuantity !== null ? rules.maxQuantity : availability.quantity;
+      const max = Number(rawMax || 0);
+      return Number.isFinite(max) ? Math.max(0, max) : 0;
+    }}
+
+    function maxOrderQuantity(item) {{
+      const step = itemStep(item);
+      const max = availableQuantity(item);
+      if (step <= 1) return max;
+      return Math.floor(max / step) * step;
     }}
 
     function availableQuantity(item) {{
@@ -1432,7 +1449,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
 
     function updateQuantityControls(productId) {{
       const entry = cart.get(String(productId));
-      const item = entry?.item || currentItems.find((candidate) => String(candidate.productId) === String(productId));
+      const item = (entry && entry.item) || currentItems.find((candidate) => String(candidate.productId) === String(productId));
       const quantity = cartQuantity(productId);
       const maxQuantity = item ? maxOrderQuantity(item) : 0;
       document.querySelectorAll('[data-quantity-for]').forEach((node) => {{
@@ -1462,7 +1479,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     }}
 
     function changeCartQuantity(productId, delta) {{
-      const item = currentItems.find((entry) => String(entry.productId) === String(productId)) || cart.get(String(productId))?.item;
+      const existingEntry = cart.get(String(productId));
+      const item = currentItems.find((entry) => String(entry.productId) === String(productId)) || (existingEntry ? existingEntry.item : null);
       if (!item) return;
       setCartQuantity(item, cartQuantity(productId) + (delta * itemStep(item)));
     }}
@@ -1513,7 +1531,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     async function submitOrder() {{
       const entries = [...cart.values()];
       const payload = {{
-        comment: orderCommentEl?.value || '',
+        comment: (orderCommentEl ? orderCommentEl.value : ''),
         items: entries.map((entry) => ({{
           productId: entry.item.productId,
           quantity: entry.quantity,
@@ -1538,7 +1556,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         renderCart();
         cartBodyEl.innerHTML = `<div class="cart__message">Заявка ${{escapeHtml(data.orderNumber)}} принята. Менеджер Stamm Brewing свяжется с вами.</div>`;
       }} catch (error) {{
-        const message = error?.message || 'Не удалось оформить заявку';
+        const message = (error && error.message) ? error.message : 'Не удалось оформить заявку';
         showCartMessage(message, true);
       }}
     }}
@@ -1554,21 +1572,23 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         const data = await response.json();
         const items = Array.isArray(data.items) ? data.items : [];
         const meta = data.meta || {{}};
-        minimumOrderAmountMinor = Number(meta.minimumOrder?.amountMinor || minimumOrderAmountMinor);
-        minimumOrderLabel = meta.minimumOrder?.label || minimumOrderLabel;
+        const minimumOrder = meta.minimumOrder || {{}};
+        minimumOrderAmountMinor = Number(minimumOrder.amountMinor || minimumOrderAmountMinor);
+        minimumOrderLabel = minimumOrder.label || minimumOrderLabel;
         if (meta.totalLocalItems === 0) {{
           setState('Каталог скоро появится', 'В локальном каталоге пока нет опубликованных товаров. Оставьте заявку менеджеру Stamm Brewing.', 'empty');
           return;
         }}
         if (items.length === 0) {{
-          const label = filterButtons.find((button) => button.dataset.filter === activeFilter)?.textContent || 'выбранному фильтру';
+          const activeFilterButton = filterButtons.find((button) => button.dataset.filter === activeFilter);
+          const label = activeFilterButton ? activeFilterButton.textContent : 'выбранному фильтру';
           setState('Ничего не найдено', `В локальном каталоге нет товаров по фильтру «${{label}}». Попробуйте другой фильтр.`, 'empty');
           return;
         }}
         renderCards(items);
         renderCart();
       }} catch (error) {{
-        const message = error?.name === 'AbortError' ? 'timeout' : (error?.message || 'unknown error');
+        const message = error && error.name === 'AbortError' ? 'timeout' : ((error && error.message) ? error.message : 'unknown error');
         setState('Не удалось загрузить каталог сайта', 'Попробуйте обновить страницу или свяжитесь с менеджером. Техническое обновление каталога выполняется на стороне сайта.', 'error');
       }} finally {{
         window.clearTimeout(timeoutId);
@@ -1583,7 +1603,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
         submitOrder();
         return;
       }}
-      const productId = actionButton.dataset.productId || actionButton.closest('[data-product-id]')?.dataset.productId;
+      const productNode = actionButton.closest('[data-product-id]');
+      const productId = actionButton.dataset.productId || (productNode ? productNode.dataset.productId : null);
       if (!productId) return;
       if (action === 'increase') changeCartQuantity(productId, 1);
       if (action === 'decrease') changeCartQuantity(productId, -1);
@@ -1597,7 +1618,8 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       const input = event.target.closest('[data-quantity-input]');
       if (!input) return;
       const productId = input.dataset.productId;
-      const item = currentItems.find((entry) => String(entry.productId) === String(productId)) || cart.get(String(productId))?.item;
+      const existingEntry = cart.get(String(productId));
+      const item = currentItems.find((entry) => String(entry.productId) === String(productId)) || (existingEntry ? existingEntry.item : null);
       if (!item) return;
       setCartQuantity(item, input.value);
     }});

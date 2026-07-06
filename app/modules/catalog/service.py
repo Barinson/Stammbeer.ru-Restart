@@ -57,6 +57,13 @@ def order_rules_for_container(container_type: str, min_quantity: object = None, 
     return {"minQuantity": minimum, "step": step}
 
 
+def _stock_quantity(value: object) -> int:
+    try:
+        return max(0, int(float(value or 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _price_type_prices(price_type_prices_json: str | None) -> list[dict[str, Any]]:
     if not price_type_prices_json:
         return []
@@ -314,7 +321,7 @@ def public_catalog(
         if selected_filter != "all" and container != selected_filter:
             continue
         order_rules = order_rules_for_container(container, row["min_order_quantity"], row["order_step"])
-        available_quantity = max(0, int(row["stock_quantity"] or 0))
+        available_quantity = _stock_quantity(row["stock_quantity"])
         price_type_prices = _price_type_prices(row["price_type_prices_json"]) or _price_type_prices(row["product_price_type_prices_json"])
         base_price_minor = row["price_minor"] if row["price_minor"] is not None else row["product_price_minor"]
         matched_price_type_price = _matched_price_type_price(
