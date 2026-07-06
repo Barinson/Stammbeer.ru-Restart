@@ -54,14 +54,14 @@ python3 -m app.main
 
 Требования для TLS: публичный домен с A-записью на сервер и открытые порты `80`/`443`. Сертификаты хранятся в томе `caddy-data` — не удаляйте его, чтобы не терять выданные сертификаты между рестартами.
 
-Версия приложения задаётся в `docker-compose.yml`: тег образа `stammbeer-app:0.1.0` и OCI-label `org.opencontainers.image.version` (через `build.args.APP_VERSION`). Больше нигде не дублируется — при выпуске новой версии обновите обе строки в `docker-compose.yml` (тег `image` и `APP_VERSION`). Посмотреть: `docker images | grep stammbeer-app` (тег) и `docker inspect stammbeer-app:0.1.0 --format '{{json .Config.Labels}}'` (лейблы). Для локальной отладки без Caddy можно раскомментировать проброс порта `8000:8000` в сервисе `app` и обращаться к `http://localhost:8000`.
+Версия приложения задаётся в `docker-compose.yml`: тег образа `stammbeer-app:0.1.0` и OCI-label `org.opencontainers.image.version` (через `build.args.APP_VERSION`). Больше нигде не дублируется — при выпуске новой версии обновите обе строки в `docker-compose.yml` (тег `image` и `APP_VERSION`). Посмотреть: `docker images | grep stammbeer-app` (тег) и `docker inspect stammbeer-app:0.1.0 --format '{{json .Config.Labels}}'` (лейблы). Для локальной отладки без Caddy можно раскомментировать проброс порта `8080:8080` в сервисе `app` и обращаться к `http://localhost:8080`.
 
 Резервное копирование БД — копирование `stamm.sqlite3` из тома `app-data` (лучше через `sqlite3 .backup`, чтобы не поймать блокировку записи).
 
 
 ## Первый публичный storefront
 
-- Страница магазина: `http://127.0.0.1:8000/business` или `/business/catalog`.
+- Страница магазина: `http://127.0.0.1:8080/business` или `/business/catalog`.
 - Локальный API каталога: `GET /api/public/business/catalog`.
 - Фильтры: `containerType=all|keg|can`; публичная страница использует только локальную read-model `business_catalog_items` и не делает live-запросы в МойСклад.
 - Если локальная read-model пустая, storefront показывает пустое состояние без предложения пользователю запускать синхронизацию.
@@ -90,7 +90,7 @@ python3 -m app.main
 Минимальная конфигурация задаётся переменными окружения:
 
 ```bash
-export PUBLIC_BASE_URL=http://127.0.0.1:8000
+export PUBLIC_BASE_URL=http://127.0.0.1:8080
 export EMAIL_PROVIDER=yandex
 export EMAIL_ENABLED=true
 export EMAIL_SMTP_HOST=smtp.yandex.com
