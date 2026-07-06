@@ -1455,37 +1455,54 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
 
     function renderCards(items) {{
       currentItems = items;
-      gridEl.innerHTML = items.map((item) => {{
-        const safeName = escapeHtml(item.name);
-        const safeContainer = escapeHtml(item.containerLabel);
-        const safePrice = escapeHtml(item.price.label);
-        const basePrice = item.price.showBasePrice ? `<span class="price-base">${{escapeHtml(item.price.baseLabel)}}</span>` : '';
-        const abvBadge = item.alcoholLabel ? `<span class="badge">${{escapeHtml(item.alcoholLabel)}}</span>` : '';
-        const fallback = `<div class="product__image-fallback" aria-label="Фото скоро появится"></div>`;
-        const imageMarkup = item.imageUrl
-          ? `<img src="${{escapeHtml(item.imageUrl)}}" alt="${{safeName}}" loading="lazy" onerror="this.hidden=true; this.nextElementSibling.hidden=false"><div class="product__image-fallback" aria-label="Фото скоро появится" hidden></div>`
-          : fallback;
-        const quantity = cartQuantity(item.productId);
-        const step = itemStep(item);
-        const maxQuantity = maxOrderQuantity(item);
-        const stepHint = item.containerType === 'can' ? '<span class="badge">ящик ×12</span>' : '';
-        return `
-        <article class="product">
-          <div class="product__image">${{imageMarkup}}</div>
-          <div class="product__body">
-            <div class="badges"><span class="badge">${{safeContainer}}</span>${{stepHint}}${{stockHint}}${{abvBadge}}</div>
-            <h2>${{safeName}}</h2>
-            <div class="meta"><span class="price">${{safePrice}}</span>${{basePrice}}</div>
-          </div>
-          <div class="product__order" aria-label="Количество для ${{safeName}}">
-            <div class="quantity" data-product-id="${{escapeHtml(item.productId)}}">
-              <button class="quantity__button" type="button" data-action="decrease" aria-label="Уменьшить">−</button>
-              <input class="quantity__value" data-quantity-for="${{escapeHtml(item.productId)}}" data-quantity-input data-product-id="${{escapeHtml(item.productId)}}" type="number" min="0" max="${{escapeHtml(maxQuantity)}}" step="${{escapeHtml(step)}}" value="${{escapeHtml(quantity)}}" aria-label="Количество">
-              <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить" ${{quantity >= maxQuantity ? 'disabled' : ''}}>+</button>
+      const cards = items.map((item, index) => {{
+        try {{
+          const price = item && item.price ? item.price : {{}};
+          const safeName = escapeHtml(item && item.name ? item.name : 'Позиция каталога');
+          const safeContainer = escapeHtml(item && item.containerLabel ? item.containerLabel : 'Кеги');
+          const safePrice = escapeHtml(price.label || 'Цена по запросу');
+          const basePrice = price.showBasePrice ? `<span class="price-base">${{escapeHtml(price.baseLabel || '')}}</span>` : '';
+          const abvBadge = item && item.alcoholLabel ? `<span class="badge">${{escapeHtml(item.alcoholLabel)}}</span>` : '';
+          const fallback = `<div class="product__image-fallback" aria-label="Фото скоро появится"></div>`;
+          const imageUrl = item && item.imageUrl ? item.imageUrl : '';
+          const productId = item && item.productId !== undefined && item.productId !== null ? item.productId : `invalid-${{index}}`;
+          const imageMarkup = imageUrl
+            ? `<img src="${{escapeHtml(imageUrl)}}" alt="${{safeName}}" loading="lazy" onerror="this.hidden=true; this.nextElementSibling.hidden=false"><div class="product__image-fallback" aria-label="Фото скоро появится" hidden></div>`
+            : fallback;
+          const quantity = cartQuantity(productId);
+          const step = itemStep(item);
+          const maxQuantity = maxOrderQuantity(item);
+          const stepHint = item && item.containerType === 'can' ? '<span class="badge">ящик ×12</span>' : '';
+          return `
+          <article class="product">
+            <div class="product__image">${{imageMarkup}}</div>
+            <div class="product__body">
+              <div class="badges"><span class="badge">${{safeContainer}}</span>${{stepHint}}${{abvBadge}}</div>
+              <h2>${{safeName}}</h2>
+              <div class="meta"><span class="price">${{safePrice}}</span>${{basePrice}}</div>
             </div>
-          </div>
-        </article>
-      `}}).join('');
+            <div class="product__order" aria-label="Количество для ${{safeName}}">
+              <div class="quantity" data-product-id="${{escapeHtml(productId)}}">
+                <button class="quantity__button" type="button" data-action="decrease" aria-label="Уменьшить">−</button>
+                <input class="quantity__value" data-quantity-for="${{escapeHtml(productId)}}" data-quantity-input data-product-id="${{escapeHtml(productId)}}" type="number" min="0" max="${{escapeHtml(maxQuantity)}}" step="${{escapeHtml(step)}}" value="${{escapeHtml(quantity)}}" aria-label="Количество">
+                <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить" ${{quantity >= maxQuantity ? 'disabled' : ''}}>+</button>
+              </div>
+            </div>
+          </article>
+        `;
+        }} catch (error) {{
+          console.error('[BusinessCatalog] Failed to render item card', {{
+            error,
+            message: error && error.message ? error.message : 'unknown error',
+            stack: error && error.stack ? error.stack : null,
+            index,
+            item,
+          }});
+          return '';
+        }}
+      }}).filter(Boolean);
+      currentItems = items.filter((item) => item && item.productId && item.name);
+      gridEl.innerHTML = cards.join('');
       stateEl.hidden = true;
       gridEl.hidden = false;
     }}
@@ -1609,12 +1626,40 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       const suffix = activeFilter === 'all' ? '' : `?containerType=${{encodeURIComponent(activeFilter)}}`;
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => controller.abort(), 10000);
+      let phase = 'init';
+      let payload = null;
+      let rawItems = [];
+      let rejectedItems = [];
       try {{
+        phase = 'fetch';
         const response = await fetch(`/api/public/business/catalog${{suffix}}`, {{ headers: {{ 'Accept': 'application/json' }}, signal: controller.signal }});
         if (!response.ok) throw new Error(`Local API error: ${{response.status}}`);
+        phase = 'parse-json';
         const data = await response.json();
-        const rawItems = Array.isArray(data.items) ? data.items : [];
-        const items = rawItems.map(normalizeCatalogItem).filter((item) => item.productId && item.name);
+        payload = data;
+        phase = 'normalize-items';
+        rawItems = Array.isArray(data.items) ? data.items : [];
+        const items = [];
+        rawItems.forEach((rawItem, index) => {{
+          try {{
+            const item = normalizeCatalogItem(rawItem);
+            if (item.productId && item.name) {{
+              items.push(item);
+            }} else {{
+              rejectedItems.push({{ index, reason: 'missing productId or name', item: rawItem }});
+            }}
+          }} catch (error) {{
+            rejectedItems.push({{
+              index,
+              reason: error && error.message ? error.message : 'normalization error',
+              stack: error && error.stack ? error.stack : null,
+              item: rawItem,
+            }});
+          }}
+        }});
+        if (rejectedItems.length) {{
+          console.error('[BusinessCatalog] Skipped invalid catalog items', {{ rejectedItems, payload }});
+        }}
         const meta = data.meta || {{}};
         const minimumOrder = meta.minimumOrder || {{}};
         minimumOrderAmountMinor = Number(minimumOrder.amountMinor || minimumOrderAmountMinor);
@@ -1629,10 +1674,22 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
           setState('Ничего не найдено', `В локальном каталоге нет товаров по фильтру «${{label}}». Попробуйте другой фильтр.`, 'empty');
           return;
         }}
+        phase = 'render-cards';
         renderCards(items);
+        phase = 'render-cart';
         renderCart();
       }} catch (error) {{
         const message = error && error.name === 'AbortError' ? 'timeout' : ((error && error.message) ? error.message : 'unknown error');
+        console.error('[BusinessCatalog] Catalog load failed', {{
+          error,
+          message,
+          stack: error && error.stack ? error.stack : null,
+          phase,
+          activeFilter,
+          payload,
+          rawItems,
+          rejectedItems,
+        }});
         setState('Не удалось загрузить каталог сайта', 'Попробуйте обновить страницу или свяжитесь с менеджером. Техническое обновление каталога выполняется на стороне сайта.', 'error');
       }} finally {{
         window.clearTimeout(timeoutId);
