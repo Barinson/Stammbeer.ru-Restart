@@ -975,6 +975,9 @@ class StammApp:
                     site_og_image_file = files.get("site_og_image_file")
                     if site_og_image_file:
                         form["site_og_image_url"] = self.save_uploaded_media(site_og_image_file, "og-image")
+                    mobile_menu_icon_file = files.get("mobile_menu_icon_file")
+                    if mobile_menu_icon_file:
+                        form["mobile_menu_icon_url"] = self.save_uploaded_media(mobile_menu_icon_file, "mobile-menu")
                     maintenance_image_file = files.get("maintenance_image_file")
                     if maintenance_image_file:
                         form["maintenance_image_url"] = self.save_uploaded_media(maintenance_image_file, "maintenance")
