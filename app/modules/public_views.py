@@ -375,6 +375,13 @@ def css_section_gap_px(value: object, fallback: int = 72) -> str:
     return f"{number}px"
 
 
+def beer_can_gap_number(value: object, fallback: int = 16) -> int:
+    try:
+        return max(0, min(80, int(str(value))))
+    except (TypeError, ValueError):
+        return fallback
+
+
 def menu_offset_px(content: dict[str, Any] | None, section: str, fallback: int = 176) -> str:
     site_content = public_content_or_defaults(content)
     layout = site_content.get("layout") or {}
@@ -1051,10 +1058,14 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     products_inner = ""
     if is_enabled(beer.get("beer_new_is_visible"), True):
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_new_title") or "Новинки"))}</h3><div class="new-grid">{new_cards}</div></div>'
+    core_gap_number = beer_can_gap_number(beer.get("beer_core_can_gap_px"), 16)
+    seasonal_gap_number = beer_can_gap_number(beer.get("beer_seasonal_can_gap_px"), 16)
+    core_gap_style = f"--beer-can-gap:{core_gap_number}px;--beer-can-row-gap-total:{core_gap_number * 7}px;"
+    seasonal_gap_style = f"--beer-can-gap:{seasonal_gap_number}px;--beer-can-row-gap-total:{seasonal_gap_number * 7}px;"
     if is_enabled(beer.get("beer_core_is_visible"), True):
-        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_core_title") or "Постоянная линейка"))}</h3><div class="seasonal-grid">{core_cards}</div></div>'
+        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_core_title") or "Постоянная линейка"))}</h3><div class="seasonal-grid beer-can-grid beer-can-grid--core" style="{core_gap_style}">{core_cards}</div></div>'
     if is_enabled(beer.get("beer_seasonal_is_visible"), True):
-        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_seasonal_title") or "Сезонные сорта"))}</h3><div class="seasonal-grid">{seasonal_cards}</div></div>'
+        products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_seasonal_title") or "Сезонные сорта"))}</h3><div class="seasonal-grid beer-can-grid beer-can-grid--seasonal" style="{seasonal_gap_style}">{seasonal_cards}</div></div>'
     products_section = f'<section class="beer-section" data-beer-block="products"><h2>{escape(str(beer.get("beer_products_title") or "Наша продукция"))}</h2>{products_inner}</section>' if is_enabled(beer.get("beer_products_is_visible"), True) else ""
 
     def beer_block_order(key: str, default: int) -> int:
@@ -1096,9 +1107,9 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .product-subsection {{ margin-top:28px; }}
     .product-subsection h3 {{ margin:0 0 18px; color:var(--foam); font-size:var(--stamm-section-title-font-size,28px); }}
     .new-grid {{ width:min(860px,100%); display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:28px; align-items:end; justify-items:center; margin:0 auto; }}
-    .seasonal-grid {{ width:min(1180px,100%); display:grid; grid-template-columns:repeat(8,minmax(72px,132px)); justify-content:center; align-items:end; gap:16px; margin:0 auto; }}
+    .seasonal-grid {{ width:min(1180px,100%); display:flex; flex-wrap:wrap; justify-content:center; align-items:flex-end; gap:var(--beer-can-gap,16px); margin:0 auto; }}
     .beer-can {{ border:0; background:transparent; color:var(--foam); cursor:pointer; display:grid; justify-items:center; gap:10px; font:inherit; font-weight:800; transition:transform .18s ease; }}
-    .seasonal-grid .beer-can {{ width:100%; max-width:132px; min-width:0; justify-self:center; }}
+    .seasonal-grid .beer-can {{ flex:0 0 calc((100% - var(--beer-can-row-gap-total,112px)) / 8); width:auto; max-width:132px; min-width:0; }}
     .beer-can:hover {{ transform:scale(1.045); }}
     .beer-can img {{ width:100%; object-fit:contain; filter:drop-shadow(0 22px 28px rgba(0,0,0,.28)); }}
     .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:360px; }}
@@ -1114,7 +1125,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .untappd-link {{ display:inline-grid; place-items:center; margin-top:12px; text-decoration:none; }}
     .untappd-link img {{ width:42px; height:42px; object-fit:contain; transition:transform .18s ease, filter .18s ease; }}
     .untappd-link:hover img {{ transform:scale(1.06); filter:brightness(1.12); }}
-    @media (max-width:1100px) {{ .seasonal-grid {{ grid-template-columns:repeat(8,minmax(58px,104px)); }} }}
+    @media (max-width:1100px) {{ .seasonal-grid {{ width:min(920px,100%); }} .seasonal-grid .beer-can {{ flex-basis:calc((100% - var(--beer-can-row-gap-total,112px)) / 8); max-width:104px; }} }}
     @media (max-width:760px) {{ .beer-page {{ padding:128px 16px 48px; background-size:cover, cover; background-position:center, center; background-attachment:scroll, fixed; }} .beer-shell {{ gap:clamp(34px,9vw,52px); }} .beer-section h1, .beer-section h2 {{ font-size:clamp(26px,8vw,32px); letter-spacing:.06em; }} .beer-section p {{ max-width:100%; margin-bottom:18px; font-size:15px; line-height:1.45; }} .partners-grid {{ width:100%; gap:12px 18px; }} .partner-card img {{ max-width:calc(var(--logo-size) * .72); max-height:58px; }} .partner-card__fallback {{ font-size:13px; }} .product-subsection {{ margin-top:22px; }} .product-subsection h3 {{ font-size:20px; margin-bottom:14px; }} .new-grid {{ grid-template-columns:repeat(3,minmax(72px,1fr)); gap:14px; }} .seasonal-grid {{ width:min(100%,360px); display:flex; flex-wrap:wrap; justify-content:center; gap:8px 6px; }} .seasonal-grid .beer-can {{ flex:0 0 calc((100% - 24px) / 5); width:auto; max-width:54px; min-width:0; }} .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:178px; }} .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:74px; }} .beer-modal__card {{ padding:24px 18px; border-radius:22px; }} .beer-modal h3 {{ font-size:24px; }} }}
     @media (max-width:420px) {{ .new-grid {{ gap:10px; }} .seasonal-grid {{ gap:7px 5px; }} .seasonal-grid .beer-can {{ flex-basis:calc((100% - 20px) / 5); max-width:48px; }} .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:152px; }} .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:68px; }} }}
   </style>

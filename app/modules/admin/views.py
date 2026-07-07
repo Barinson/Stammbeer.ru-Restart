@@ -1033,6 +1033,8 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <label>Заголовок блока<input name="beer_products_title" value="{escape(str(beer.get('beer_products_title') or 'Наша продукция'))}"></label>
               <label>Порядок блока на странице<input name="beer_products_sort_order" type="number" min="1" max="99" step="1" value="{escape(str(beer.get('beer_products_sort_order') or '20'))}"></label>
               <label>Отступ между блоками «Партнёры» и «Наша продукция», px<input name="beer_section_gap_px" type="number" min="0" max="220" value="{escape(str(beer.get('beer_section_gap_px') or '72'))}"></label>
+              <label>Промежуток между банками — постоянные сорта, px<input name="beer_core_can_gap_px" type="number" min="0" max="80" value="{escape(str(beer.get('beer_core_can_gap_px') or '16'))}"></label>
+              <label>Промежуток между банками — сезонные сорта, px<input name="beer_seasonal_can_gap_px" type="number" min="0" max="80" value="{escape(str(beer.get('beer_seasonal_can_gap_px') or '16'))}"></label>
               <div class="grid">
                 <label>Заголовок новинок<input name="beer_new_title" value="{escape(str(beer.get('beer_new_title') or 'Новинки'))}"></label>
                 <label>Заголовок постоянной линейки<input name="beer_core_title" value="{escape(str(beer.get('beer_core_title') or 'Постоянная линейка'))}"></label>

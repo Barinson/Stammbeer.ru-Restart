@@ -922,6 +922,8 @@ class CoreFoundationTest(unittest.TestCase):
                 "beer_popup_card_color": "#654321",
                 "beer_popup_card_opacity": "72",
                 "beer_section_gap_px": "104",
+                "beer_core_can_gap_px": "22",
+                "beer_seasonal_can_gap_px": "28",
                 "beer_product_name_0": "Stamm IPA",
                 "beer_product_style_0": "IPA",
                 "beer_product_abv_0": "6.5%",
@@ -968,8 +970,11 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("max-height:58px", html)
         self.assertIn("grid-template-columns:repeat(3,minmax(72px,1fr))", html)
         self.assertIn("width:min(1180px,100%)", html)
-        self.assertIn("display:grid; grid-template-columns:repeat(8,minmax(72px,132px)); justify-content:center", html)
-        self.assertIn("width:100%; max-width:132px; min-width:0; justify-self:center", html)
+        self.assertIn("display:flex; flex-wrap:wrap; justify-content:center", html)
+        self.assertIn("gap:var(--beer-can-gap,16px)", html)
+        self.assertIn("flex:0 0 calc((100% - var(--beer-can-row-gap-total,112px)) / 8); width:auto; max-width:132px; min-width:0;", html)
+        self.assertIn('beer-can-grid--core" style="--beer-can-gap:22px;--beer-can-row-gap-total:154px;', html)
+        self.assertIn('beer-can-grid--seasonal" style="--beer-can-gap:28px;--beer-can-row-gap-total:196px;', html)
         self.assertIn(".seasonal-grid { width:min(100%,360px); display:flex; flex-wrap:wrap; justify-content:center; gap:8px 6px; }", html)
         self.assertIn(".seasonal-grid .beer-can { flex:0 0 calc((100% - 24px) / 5); width:auto; max-width:54px; min-width:0; }", html)
         self.assertNotIn("product-subsection--new", html)
@@ -1123,6 +1128,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("beer_popup_card_color", admin_content_html)
         self.assertIn("beer_popup_card_opacity", admin_content_html)
         self.assertIn("beer_section_gap_px", admin_content_html)
+        self.assertIn("beer_core_can_gap_px", admin_content_html)
+        self.assertIn("beer_seasonal_can_gap_px", admin_content_html)
         self.assertIn("beer_partners_sort_order", admin_content_html)
         self.assertIn("beer_products_sort_order", admin_content_html)
         self.assertIn('for="cms-tab-gallery"', admin_content_html)
@@ -1270,6 +1277,7 @@ class CoreFoundationTest(unittest.TestCase):
             field("beer_popup_card_color", "#335577"), field("beer_popup_card_opacity", "80"),
             field("beer_partners_sort_order", "30"), field("beer_products_sort_order", "5"),
             field("beer_section_gap_px", "96"),
+            field("beer_core_can_gap_px", "18"), field("beer_seasonal_can_gap_px", "26"),
             field("menu_beer_label", "Пиво"), field("menu_beer_sort_order", "10"), field("menu_beer_visible", "on"),
             field("menu_visit_label", "Посетить пивоварню"), field("menu_visit_sort_order", "20"), field("menu_visit_visible", "on"),
             field("menu_history_label", "Галерея"), field("menu_history_sort_order", "30"), field("menu_history_visible", "on"),
@@ -1340,6 +1348,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(content["beer"]["beer_partners_sort_order"], "30")
         self.assertEqual(content["beer"]["beer_products_sort_order"], "5")
         self.assertEqual(content["beer"]["beer_section_gap_px"], "96")
+        self.assertEqual(content["beer"]["beer_core_can_gap_px"], "18")
+        self.assertEqual(content["beer"]["beer_seasonal_can_gap_px"], "26")
         self.assertEqual(content["gallery"]["gallery_title"], "Админская галерея")
         self.assertEqual(content["gallery"]["sections"][0]["title"], "Пивоварня")
         self.assertTrue(content["gallery"]["sections"][0]["items"][0]["image_url"].startswith("/media/gallery-0-0-"))
