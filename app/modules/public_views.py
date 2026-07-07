@@ -84,6 +84,20 @@ BASE_CSS = """
     .nav-actions { display:flex; align-items:center; gap:9px; }
     .nav-icon { width:32px; height:32px; border:0; border-radius:999px; display:grid; place-items:center; background:var(--golden-malt); color:var(--ink); text-decoration:none; font-size:11px; font-weight:900; line-height:1; overflow:hidden; padding:0; }
     .nav-icon img { width:100%; height:100%; padding:0; object-fit:contain; display:block; border-radius:inherit; }
+    .mobile-menu-toggle, .mobile-drawer { display:none; }
+    .mobile-menu-toggle { border:1px solid rgba(199,177,102,.36); border-radius:12px; width:34px; height:34px; padding:0; background:rgba(246,241,227,.08); color:var(--golden-malt); cursor:pointer; place-items:center; }
+    .mobile-menu-toggle span, .mobile-menu-toggle::before, .mobile-menu-toggle::after { content:""; display:block; width:15px; height:2px; border-radius:999px; background:currentColor; }
+    .mobile-menu-toggle span { margin:4px 0; }
+    .mobile-drawer__backdrop { position:absolute; inset:0; background:rgba(7,34,35,.54); opacity:0; transition:opacity .18s ease; }
+    .mobile-drawer__panel { position:absolute; top:0; bottom:0; left:0; width:min(78vw,304px); padding:84px 20px 24px; background:linear-gradient(180deg, rgba(13,75,76,.98), rgba(11,63,64,.98)); border-right:1px solid rgba(199,177,102,.22); box-shadow:18px 0 50px rgba(0,0,0,.28); transform:translateX(-104%); transition:transform .22s ease; }
+    .mobile-drawer__close { position:absolute; top:18px; right:18px; width:32px; height:32px; border:1px solid rgba(199,177,102,.34); border-radius:999px; background:rgba(246,241,227,.08); color:var(--golden-malt); font-size:20px; line-height:1; cursor:pointer; }
+    .mobile-drawer__links { display:grid; gap:8px; }
+    .mobile-drawer__links a { display:block; padding:12px 0; border-bottom:1px solid rgba(199,177,102,.14); color:rgba(246,241,227,.88); text-decoration:none; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
+    .mobile-drawer__links a.is-active, .mobile-drawer__links a:hover { color:var(--golden-malt); }
+    body.mobile-nav-open { overflow:hidden; }
+    body.mobile-nav-open .mobile-drawer { pointer-events:auto; }
+    body.mobile-nav-open .mobile-drawer__backdrop { opacity:1; }
+    body.mobile-nav-open .mobile-drawer__panel { transform:translateX(0); }
     .top-nav + main { padding-top:var(--menu-offset,176px); }
     body.age-gate-pending { overflow:hidden; }
     .age-gate { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at 50% 25%, rgba(199,177,102,.16), transparent 30%), rgba(11,63,64,.96); backdrop-filter:blur(14px); }
@@ -106,12 +120,13 @@ BASE_CSS = """
     }
     @media (max-width:560px) {
       :root { --mobile-menu-offset:104px; --stamm-nav-font-size:11px; --stamm-body-font-size:14px; --stamm-lead-font-size:15px; --stamm-page-title-font-size:30px; --stamm-section-title-font-size:22px; }
-      .top-nav { padding:8px 12px; gap:7px 10px; }
-      .brand { max-width:132px; overflow:hidden; text-overflow:ellipsis; font-size:11px; letter-spacing:.07em; }
-      .nav-links { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(max-content,1fr); justify-content:stretch; gap:clamp(6px,2vw,10px); overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
-      .nav-links::-webkit-scrollbar { display:none; }
-      .nav-links a { min-width:0; padding:0 4px; text-align:center; white-space:nowrap; }
+      .top-nav { display:grid; grid-template-columns:34px minmax(0,1fr) auto; padding:8px 12px; gap:8px; }
+      .mobile-menu-toggle { display:grid; }
+      .brand { justify-self:center; max-width:142px; overflow:hidden; text-overflow:ellipsis; font-size:11px; letter-spacing:.07em; }
+      .nav-links { display:none; }
+      .nav-actions { justify-self:end; }
       .nav-icon { width:26px; height:26px; }
+      .mobile-drawer { display:block; position:fixed; inset:0; z-index:80; pointer-events:none; }
       .age-gate { padding:16px; }
       .age-gate__card { border-radius:22px; padding:24px 18px; }
       .age-gate__card h2 { font-size:clamp(30px,12vw,42px); }
@@ -184,10 +199,40 @@ def public_nav(active: str, content: dict[str, Any] | None = None) -> str:
     actions = "".join(action_links)
     return f"""
   <nav class="top-nav" aria-label="Главная навигация">
+    <button class="mobile-menu-toggle" type="button" aria-label="Открыть меню" aria-controls="mobileNavDrawer" aria-expanded="false"><span></span></button>
     <a class="brand" href="/">Stamm Brewing</a>
     <div class="nav-links">{links}</div>
     <div class="nav-actions" aria-label="Быстрые ссылки">{actions}</div>
-  </nav>"""
+  </nav>
+  <div class="mobile-drawer" id="mobileNavDrawer" aria-hidden="true">
+    <button class="mobile-drawer__backdrop" type="button" aria-label="Закрыть меню"></button>
+    <aside class="mobile-drawer__panel" aria-label="Мобильное меню">
+      <button class="mobile-drawer__close" type="button" aria-label="Закрыть меню">×</button>
+      <div class="mobile-drawer__links">{links}</div>
+    </aside>
+  </div>
+  <script>
+    (function () {{
+      const toggle = document.querySelector(".mobile-menu-toggle");
+      const drawer = document.getElementById("mobileNavDrawer");
+      if (!toggle || !drawer) return;
+      const closeButtons = drawer.querySelectorAll(".mobile-drawer__backdrop, .mobile-drawer__close, .mobile-drawer__links a");
+      function setOpen(isOpen) {{
+        document.body.classList.toggle("mobile-nav-open", isOpen);
+        toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        drawer.setAttribute("aria-hidden", isOpen ? "false" : "true");
+      }}
+      toggle.addEventListener("click", function () {{
+        setOpen(!document.body.classList.contains("mobile-nav-open"));
+      }});
+      closeButtons.forEach(function (button) {{
+        button.addEventListener("click", function () {{ setOpen(false); }});
+      }});
+      document.addEventListener("keydown", function (event) {{
+        if (event.key === "Escape") setOpen(false);
+      }});
+    }})();
+  </script>"""
 
 
 def age_gate_markup(content: dict[str, Any] | None = None) -> str:
