@@ -140,6 +140,11 @@ jobs:
           # Обновляем ветку до origin; для detached-коммита checkout уже поставил нужный ref
           git pull --ff-only origin "${DEPLOY_REF}" || true
 
+          # Ревизия и дата сборки зашиваются в образ и OCI-метки (иначе останется дефолт "unknown").
+          export GIT_SHA="$(git rev-parse --short HEAD)"
+          export BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "==> GIT_SHA=${GIT_SHA} BUILD_DATE=${BUILD_DATE}"
+
           echo "==> docker compose up -d --build"
           if docker compose version >/dev/null 2>&1; then
             docker compose up -d --build
