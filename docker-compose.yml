@@ -6,10 +6,10 @@ services:
         # Версия приложения. Попадает в OCI-label образа (org.opencontainers.image.version).
         # Держите в синхроне с тегом `image` ниже — YAML не умеет подставлять одно значение
         # и в тег, и в build-arg одновременно.
-        APP_VERSION: "0.1.0"
+        APP_VERSION: "0.1.1"
         GIT_SHA: ${GIT_SHA:-unknown}
         BUILD_DATE: ${BUILD_DATE:-unknown}
-    image: stammbeer-app:0.1.0
+    image: stammbeer-app:0.1.1
     env_file: .env
     volumes:
       # Единый том на var/ покрывает и файл БД (stamm.sqlite3), и загруженные медиа (media/).
