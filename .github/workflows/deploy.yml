@@ -1,0 +1,155 @@
+name: Deploy to server
+
+# Ручной запуск по кнопке "Run workflow" во вкладке Actions на GitHub.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ветка или коммит для деплоя на сервере"
+        required: false
+        default: "main"
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: SSH deploy & docker compose up
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        env:
+          # --- Доступ к серверу ---
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KEY_PASSPHRASE: ${{ secrets.SSH_KEY_PASSPHRASE }}
+          SSH_PORT: ${{ vars.SSH_PORT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_REF: ${{ inputs.ref }}
+          # --- Значения для .env приложения (генерируется на сервере из этих переменных) ---
+          # Секреты (обязательные — без безопасного дефолта):
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ACME_EMAIL: ${{ vars.ACME_EMAIL }}
+          EMAIL_SMTP_USERNAME: ${{ vars.EMAIL_SMTP_USERNAME }}
+          EMAIL_SMTP_PASSWORD: ${{ secrets.EMAIL_SMTP_PASSWORD }}
+          EMAIL_FROM_EMAIL: ${{ vars.EMAIL_FROM_EMAIL }}
+          # Конфиг с безопасными дефолтами (можно переопределить секретом/variable с тем же именем):
+          DOMAIN: ${{ vars.DOMAIN }}
+          APP_ENV: ${{ vars.APP_ENV }}
+          DATABASE_URL: ${{ vars.DATABASE_URL }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          MOYSKLAD_API_BASE_URL: ${{ vars.MOYSKLAD_API_BASE_URL }}
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+          EMAIL_PROVIDER: ${{ vars.EMAIL_PROVIDER }}
+          EMAIL_ENABLED: ${{ vars.EMAIL_ENABLED }}
+          EMAIL_SMTP_HOST: ${{ vars.EMAIL_SMTP_HOST }}
+          EMAIL_SMTP_PORT: ${{ vars.EMAIL_SMTP_PORT }}
+          EMAIL_FROM_NAME: ${{ vars.EMAIL_FROM_NAME }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SSH_HOST:-}" ] || [ -z "${SSH_USER:-}" ] || [ -z "${SSH_KEY:-}" ]; then
+            echo "::error::Не заданы секреты SSH_HOST / SSH_USER / SSH_KEY в настройках репозитория."
+            exit 1
+          fi
+
+          SSH_PORT="${SSH_PORT:-22}"
+          DEPLOY_PATH="${DEPLOY_PATH:-/home/cicd/apps/Stammbeer.ru-Restart}"
+
+          # --- Проверяем обязательные секреты (без них .env будет невалидным) ---
+          missing=""
+          for var in ADMIN_PASSWORD ACME_EMAIL; do
+            if [ -z "${!var:-}" ]; then
+              missing="${missing} ${var}"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Не заданы обязательные секреты:${missing}"
+            exit 1
+          fi
+
+          # --- Собираем .env на раннере (printf %s не интерпретирует спецсимволы в значениях) ---
+          ENV_FILE="$(mktemp)"
+          put() { printf '%s=%s\n' "$1" "${2:-}" >> "$ENV_FILE"; }
+          put DOMAIN                "${DOMAIN:-}"
+          put ACME_EMAIL            "${ACME_EMAIL:-}"
+          put APP_ENV               "${APP_ENV:-}"
+          put DATABASE_URL          "${DATABASE_URL:-}"
+          put SESSION_SECRET        "${SESSION_SECRET:-}"
+          put ADMIN_EMAIL           "${ADMIN_EMAIL:-}"
+          put ADMIN_PASSWORD        "${ADMIN_PASSWORD:-}"
+          put MOYSKLAD_API_BASE_URL "${MOYSKLAD_API_BASE_URL:-}"
+          put PUBLIC_BASE_URL       "${PUBLIC_BASE_URL:-}"
+          put EMAIL_PROVIDER        "${EMAIL_PROVIDER:-}"
+          put EMAIL_ENABLED         "${EMAIL_ENABLED:-}"
+          put EMAIL_SMTP_HOST       "${EMAIL_SMTP_HOST:-}"
+          put EMAIL_SMTP_PORT       "${EMAIL_SMTP_PORT:-}"
+          put EMAIL_SMTP_USERNAME   "${EMAIL_SMTP_USERNAME:-}"
+          put EMAIL_SMTP_PASSWORD   "${EMAIL_SMTP_PASSWORD:-}"
+          put EMAIL_FROM_EMAIL      "${EMAIL_FROM_EMAIL:-}"
+          put EMAIL_FROM_NAME       "${EMAIL_FROM_NAME:-}"
+
+          # --- Приватный ключ во временный файл ---
+          mkdir -p ~/.ssh
+          KEY_FILE="$(mktemp)"
+          printf '%s\n' "$SSH_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+
+          # --- ssh-agent: расшифровываем ключ passphrase'ом без интерактивного ввода ---
+          # ssh-add берёт passphrase из SSH_ASKPASS; сам passphrase остаётся в переменной
+          # окружения (наследуется дочерним процессом askpass) и не пишется на диск.
+          eval "$(ssh-agent -s)"
+          ASKPASS_FILE="$(mktemp)"
+          cat > "$ASKPASS_FILE" <<'ASKPASS'
+          #!/usr/bin/env bash
+          printf '%s\n' "${SSH_KEY_PASSPHRASE:-}"
+          ASKPASS
+          chmod 700 "$ASKPASS_FILE"
+          # SSH_ASKPASS_REQUIRE=force заставляет ssh-add использовать askpass даже без TTY (OpenSSH 8.4+).
+          SSH_ASKPASS="$ASKPASS_FILE" SSH_ASKPASS_REQUIRE=force DISPLAY=":0" \
+            ssh-add "$KEY_FILE" < /dev/null
+          rm -f "$ASKPASS_FILE"
+
+          # Доверяем host key сервера
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Убеждаемся, что каталог деплоя существует, и заливаем сгенерированный .env
+          # (аутентификация через ssh-agent, поэтому -i не нужен)
+          ssh -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
+            "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_PATH}'"
+          scp -P "$SSH_PORT" -o StrictHostKeyChecking=yes \
+            "$ENV_FILE" "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/.env"
+
+          # --- Обновляем код и перезапускаем стек ---
+          ssh -p "$SSH_PORT" \
+            -o StrictHostKeyChecking=yes \
+            "${SSH_USER}@${SSH_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' DEPLOY_REF='${DEPLOY_REF}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          echo "==> Deploy path: ${DEPLOY_PATH}"
+          echo "==> Ref: ${DEPLOY_REF}"
+          cd "${DEPLOY_PATH}"
+
+          echo "==> Fetching latest code"
+          git fetch --all --prune
+          git checkout "${DEPLOY_REF}"
+          # Обновляем ветку до origin; для detached-коммита checkout уже поставил нужный ref
+          git pull --ff-only origin "${DEPLOY_REF}" || true
+
+          echo "==> docker compose up -d --build"
+          if docker compose version >/dev/null 2>&1; then
+            docker compose up -d --build
+          else
+            docker-compose up -d --build
+          fi
+
+          echo "==> Done"
+          docker compose ps || docker-compose ps || true
+          REMOTE
+
+          rm -f "$KEY_FILE" "$ENV_FILE"
+          ssh-agent -k >/dev/null 2>&1 || true
