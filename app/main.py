@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 import sqlite3
 import urllib.parse
 import uuid
+import email.utils
+from datetime import timezone
 from pathlib import Path
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,7 +17,8 @@ from app.config import Settings, load_settings
 from app.db.connection import connect
 from app.db.migrations import run_migrations
 from app.db.seed import seed_core
-from app.integrations.moysklad.catalog_sync import latest_sync_diagnostics, run_manual_catalog_sync
+from app.integrations.moysklad.auto_sync import compact_auto_sync_history, start_auto_sync_worker
+from app.integrations.moysklad.catalog_sync import run_manual_catalog_sync
 from app.integrations.moysklad.settings_service import (
     get_settings,
     refresh_integration_references,
@@ -28,17 +32,20 @@ from app.modules.catalog.service import admin_catalog_items, business_min_order_
 from app.modules.account.service import (
     DiscountRefreshError,
     authenticate_customer,
+    change_customer_password,
+    create_customer_account_by_admin,
     create_customer_session,
+    delete_customer_account,
     current_customer,
     customer_cookie_header,
     customer_session_from_cookie,
     destroy_customer_session,
     expired_customer_cookie_header,
     list_customer_accounts,
+    list_customer_orders,
     refresh_customer_discount,
     register_customer,
     set_customer_account_status,
-    soft_delete_customer_account,
     utc_now_iso,
 )
 from app.modules.content.service import ensure_public_content_defaults, get_public_site_content, save_public_content
@@ -64,9 +71,13 @@ from app.modules.public_views import (
     account_login_page,
     account_message_page,
     account_register_page,
+    business_guest_page,
     business_storefront_page,
+    beer_page,
     contacts_page,
+    gallery_page,
     home_page,
+    maintenance_page,
     password_reset_confirm_page,
     password_reset_request_page,
     public_placeholder_page,
@@ -86,12 +97,45 @@ from app.modules.auth.service import (
 BUSINESS_STOREFRONT_ROUTES = {"/business", "/business/catalog"}
 BUSINESS_STOREFRONT_REDIRECTS = {"/business/": "/business", "/business/catalog/": "/business/catalog"}
 PUBLIC_PLACEHOLDER_ROUTES = {
-    "/beer": ("Пиво", "beer"),
     "/visit": ("Посетить пивоварню", "visit"),
-    "/history": ("История", "history"),
 }
 PUBLIC_CATALOG_API_ROUTE = "/api/public/business/catalog"
 PUBLIC_ORDER_API_ROUTE = "/api/public/business/order"
+
+INDEXABLE_PUBLIC_ROUTES = {
+    "/": "Главная",
+    "/beer": "Пиво",
+    "/business": "Бизнес",
+    "/contacts": "Контакты",
+    "/visit": "Stammhaus",
+    "/gallery": "Галерея",
+}
+
+def _site_base_url(content: dict[str, Any], settings: Settings) -> str:
+    site = content.get("site") or {}
+    return str(site.get("site_public_base_url") or settings.public_base_url).rstrip("/")
+
+def robots_txt(content: dict[str, Any], settings: Settings) -> str:
+    base_url = _site_base_url(content, settings)
+    return "\n".join([
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /admin",
+        "Disallow: /api/",
+        "Disallow: /account",
+        f"Sitemap: {base_url}/sitemap.xml",
+        "",
+    ])
+
+def sitemap_xml(content: dict[str, Any], settings: Settings) -> str:
+    base_url = _site_base_url(content, settings)
+    urls = "".join(
+        f"  <url><loc>{base_url}{path}</loc><changefreq>weekly</changefreq><priority>{'1.0' if path == '/' else '0.8'}</priority></url>\n"
+        for path in INDEXABLE_PUBLIC_ROUTES
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{urls}</urlset>"""
 
 
 def parse_form(body: bytes) -> dict[str, Any]:
@@ -106,6 +150,9 @@ class StammApp:
         run_migrations(self.conn)
         seed_core(self.conn, settings.admin_email, settings.admin_password)
         ensure_public_content_defaults(self.conn)
+        self.auto_sync_thread = None
+        if settings.env != "test":
+            self.auto_sync_thread = start_auto_sync_worker(settings.sqlite_path, settings.admin_email, settings.admin_password)
 
     def handler_class(self):
         app = self
@@ -133,12 +180,57 @@ class StammApp:
                 self.end_headers()
                 self.wfile.write(payload)
 
-            def send_bytes(self, payload: bytes, content_type: str = "application/octet-stream", status: HTTPStatus = HTTPStatus.OK) -> None:
+            def send_bytes(
+                self,
+                payload: bytes,
+                content_type: str = "application/octet-stream",
+                status: HTTPStatus = HTTPStatus.OK,
+                headers: dict[str, str] | None = None,
+            ) -> None:
                 self.send_response(status)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(payload)))
+                for key, value in (headers or {}).items():
+                    self.send_header(key, value)
                 self.end_headers()
                 self.wfile.write(payload)
+
+            def send_media_file(self, media_path: Path) -> None:
+                stat = media_path.stat()
+                etag = f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+                last_modified = email.utils.formatdate(stat.st_mtime, usegmt=True)
+                cache_headers = {
+                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "ETag": etag,
+                    "Last-Modified": last_modified,
+                }
+                if_none_match = self.headers.get("If-None-Match", "")
+                etags = {item.strip() for item in if_none_match.split(",") if item.strip()}
+                if etag in etags or "*" in etags:
+                    self.send_response(HTTPStatus.NOT_MODIFIED)
+                    for key, value in cache_headers.items():
+                        self.send_header(key, value)
+                    self.end_headers()
+                    return
+                if_modified_since = self.headers.get("If-Modified-Since")
+                if if_modified_since:
+                    try:
+                        modified_since = email.utils.parsedate_to_datetime(if_modified_since)
+                        if modified_since.tzinfo is None:
+                            modified_since = modified_since.replace(tzinfo=timezone.utc)
+                        if int(modified_since.timestamp()) >= int(stat.st_mtime):
+                            self.send_response(HTTPStatus.NOT_MODIFIED)
+                            for key, value in cache_headers.items():
+                                self.send_header(key, value)
+                            self.end_headers()
+                            return
+                    except (TypeError, ValueError, OverflowError):
+                        pass
+                self.send_bytes(
+                    media_path.read_bytes(),
+                    mimetypes.guess_type(str(media_path))[0] or "application/octet-stream",
+                    headers=cache_headers,
+                )
 
             def redirect(self, location: str, headers: dict[str, str] | None = None) -> None:
                 self.send_response(HTTPStatus.SEE_OTHER)
@@ -209,60 +301,95 @@ class StammApp:
                     self.redirect("/admin/login")
                 return user
 
+            def public_content(self) -> dict[str, Any]:
+                content = get_public_site_content(app.conn)
+                if current_customer(app.conn, self.headers.get("Cookie")) is not None:
+                    content["viewer"] = {"is_customer": True}
+                return content
+
+            def maintenance_is_enabled(self, content: dict[str, Any]) -> bool:
+                site = content.get("site") or {}
+                return str(site.get("maintenance_enabled") or "0").strip().lower() not in {"0", "false", "off", "no", ""}
+
             def do_GET(self) -> None:  # noqa: N802
                 path = urllib.parse.urlparse(self.path).path
                 if path == "/healthz":
                     self.send_json({"ok": True, "app": app.settings.app_name})
                     return
+                if path == "/robots.txt":
+                    self.send_bytes(robots_txt(get_public_site_content(app.conn), app.settings).encode("utf-8"), "text/plain; charset=utf-8")
+                    return
+                if path == "/sitemap.xml":
+                    self.send_bytes(sitemap_xml(get_public_site_content(app.conn), app.settings).encode("utf-8"), "application/xml; charset=utf-8")
+                    return
                 if path.startswith("/media/"):
                     media_path = Path("var/media") / path.removeprefix("/media/")
                     if media_path.exists() and media_path.is_file() and media_path.resolve().is_relative_to(Path("var/media").resolve()):
-                        self.send_bytes(media_path.read_bytes(), mimetypes.guess_type(str(media_path))[0] or "application/octet-stream")
+                        self.send_media_file(media_path)
                     else:
                         self.send_html(page("404", "<main class='login'><div class='card'>Файл не найден.</div></main>"), HTTPStatus.NOT_FOUND)
                     return
+                public_content = self.public_content()
+                if not path.startswith("/admin") and self.maintenance_is_enabled(public_content):
+                    self.send_html(maintenance_page(public_content), HTTPStatus.SERVICE_UNAVAILABLE)
+                    return
                 if path == "/":
-                    self.send_html(home_page(get_public_site_content(app.conn)))
+                    self.send_html(home_page(public_content))
                     return
                 if path == "/contacts":
-                    self.send_html(contacts_page(get_public_site_content(app.conn)))
+                    self.send_html(contacts_page(public_content))
+                    return
+                if path == "/beer":
+                    self.send_html(beer_page(public_content))
+                    return
+                if path == "/gallery":
+                    self.send_html(gallery_page(public_content))
+                    return
+                if path == "/history":
+                    self.redirect("/gallery")
                     return
                 if path in PUBLIC_PLACEHOLDER_ROUTES:
                     title, active = PUBLIC_PLACEHOLDER_ROUTES[path]
-                    self.send_html(public_placeholder_page(title, active, get_public_site_content(app.conn)))
+                    self.send_html(public_placeholder_page(title, active, public_content))
                     return
                 if path in BUSINESS_STOREFRONT_REDIRECTS:
                     self.redirect(BUSINESS_STOREFRONT_REDIRECTS[path])
                     return
                 if path in BUSINESS_STOREFRONT_ROUTES:
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
-                    if customer is not None:
-                        refresh_customer_discount(app.conn, customer)
-                    self.send_html(business_storefront_page(get_public_site_content(app.conn)))
+                    content = self.public_content()
+                    if customer is None:
+                        self.send_html(business_guest_page(content))
+                        return
+                    refresh_customer_discount(app.conn, customer)
+                    content["viewer"] = {"is_customer": True}
+                    self.send_html(business_storefront_page(content))
                     return
                 if path == PUBLIC_CATALOG_API_ROUTE:
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
-                    if customer is not None:
-                        customer = refresh_customer_discount(app.conn, customer)
+                    if customer is None:
+                        self.send_json({"ok": False, "error": "Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru"}, HTTPStatus.UNAUTHORIZED)
+                        return
+                    customer = refresh_customer_discount(app.conn, customer)
                     content = get_public_site_content(app.conn)
                     minimum_order_minor = business_min_order_amount_minor((content.get("business") or {}).get("business_min_order_amount_minor"))
                     catalog = public_catalog(
                         app.conn,
                         query.get("containerType", [None])[0],
-                        customer["discount_percent"] if customer is not None else 0,
-                        customer["price_type_href"] if customer is not None else None,
-                        customer["price_type_id"] if customer is not None else None,
-                        customer["price_type_name"] if customer is not None else None,
+                        customer["discount_percent"],
+                        customer["price_type_href"],
+                        customer["price_type_id"],
+                        customer["price_type_name"],
                         minimum_order_minor,
                     )
                     self.send_json(catalog)
                     return
                 if path == "/account/register":
-                    self.send_html(account_register_page(get_public_site_content(app.conn)))
+                    self.send_html(account_register_page(public_content))
                     return
                 if path == "/account/login":
-                    self.send_html(account_login_page(get_public_site_content(app.conn)))
+                    self.send_html(account_login_page(public_content))
                     return
                 if path == "/account/verify-email":
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -271,26 +398,35 @@ class StammApp:
                         account_message_page(
                             "E-mail подтверждён" if ok else "Ссылка недействительна",
                             "Спасибо, e-mail личного кабинета подтверждён." if ok else "Ссылка подтверждения недействительна или устарела.",
-                            get_public_site_content(app.conn),
+                            public_content,
                             is_error=not ok,
                         ),
                         HTTPStatus.OK if ok else HTTPStatus.BAD_REQUEST,
                     )
                     return
                 if path == "/account/password-reset":
-                    self.send_html(password_reset_request_page(get_public_site_content(app.conn)))
+                    self.send_html(password_reset_request_page(public_content))
                     return
                 if path == "/account/password-reset/confirm":
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-                    self.send_html(password_reset_confirm_page(query.get("token", [""])[0], get_public_site_content(app.conn)))
+                    self.send_html(password_reset_confirm_page(query.get("token", [""])[0], public_content))
                     return
                 if path == "/account":
+                    query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                     customer = current_customer(app.conn, self.headers.get("Cookie"))
                     if customer is None:
                         self.redirect("/account/login")
                         return
                     customer = refresh_customer_discount(app.conn, customer)
-                    self.send_html(account_dashboard_page(customer, get_public_site_content(app.conn)))
+                    self.send_html(
+                        account_dashboard_page(
+                            customer,
+                            {**public_content, "viewer": {"is_customer": True}},
+                            list_customer_orders(app.conn, customer["id"]),
+                            password_result=query.get("password_result", [None])[0],
+                            password_error=query.get("password_error", [None])[0],
+                        )
+                    )
                     return
                 if path == "/admin/login":
                     self.send_html(login_page())
@@ -317,7 +453,7 @@ class StammApp:
                             return
                         settings = serialize_settings(get_settings(app.conn))
                         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-                        self.send_html(moysklad_settings_page(user["email"], settings, result=query.get("result", [None])[0], error=query.get("error", [None])[0], diagnostics=latest_sync_diagnostics(app.conn)))
+                        self.send_html(moysklad_settings_page(user["email"], settings, result=query.get("result", [None])[0], error=query.get("error", [None])[0], auto_history=compact_auto_sync_history(app.conn)))
                         return
                     if path == "/admin/b2b-orders":
                         self.send_html(placeholder("B2B-заявки", "Здесь будет список заявок, статусы, детали и заметки менеджера.", user["email"]))
@@ -366,6 +502,13 @@ class StammApp:
 
             def do_POST(self) -> None:  # noqa: N802
                 path = urllib.parse.urlparse(self.path).path
+                if path == "/account/logout":
+                    destroy_customer_session(app.conn, customer_session_from_cookie(self.headers.get("Cookie")))
+                    self.redirect("/account/login", {"Set-Cookie": expired_customer_cookie_header()})
+                    return
+                if not path.startswith("/admin") and self.maintenance_is_enabled(self.public_content()):
+                    self.send_html(maintenance_page(get_public_site_content(app.conn)), HTTPStatus.SERVICE_UNAVAILABLE)
+                    return
                 if path == PUBLIC_ORDER_API_ROUTE:
                     payload = self.read_json()
                     requested_items = payload.get("items") if isinstance(payload.get("items"), list) else []
@@ -381,10 +524,10 @@ class StammApp:
                     catalog = public_catalog(
                         app.conn,
                         None,
-                        customer["discount_percent"] if customer is not None else 0,
-                        customer["price_type_href"] if customer is not None else None,
-                        customer["price_type_id"] if customer is not None else None,
-                        customer["price_type_name"] if customer is not None else None,
+                        customer["discount_percent"],
+                        customer["price_type_href"],
+                        customer["price_type_id"],
+                        customer["price_type_name"],
                         minimum_order_minor,
                     )
                     catalog_by_id = {str(item["productId"]): item for item in catalog["items"]}
@@ -408,6 +551,20 @@ class StammApp:
                             return
                         if step > 1 and quantity % step != 0:
                             self.send_json({"ok": False, "error": f"Количество для «{item['name']}» должно быть кратно {step}."}, HTTPStatus.BAD_REQUEST)
+                            return
+                        try:
+                            max_quantity = max(0, int(float((item.get("orderRules") or {}).get("maxQuantity") or (item.get("availability") or {}).get("quantity") or 0)))
+                        except (TypeError, ValueError):
+                            max_quantity = 0
+                        if max_quantity <= 0 or quantity > max_quantity:
+                            self.send_json(
+                                {
+                                    "ok": False,
+                                    "error": f"Нельзя заказать больше доступного количества для «{item['name']}».",
+                                    "availableQuantity": max_quantity,
+                                },
+                                HTTPStatus.BAD_REQUEST,
+                            )
                             return
                         amount_minor = int((item.get("price") or {}).get("amountMinor") or 0)
                         line_total_minor = amount_minor * quantity
@@ -629,9 +786,21 @@ class StammApp:
                         return
                     self.send_html(account_message_page("Пароль обновлён", message, get_public_site_content(app.conn)))
                     return
-                if path == "/account/logout":
-                    destroy_customer_session(app.conn, customer_session_from_cookie(self.headers.get("Cookie")))
-                    self.redirect("/account/login", {"Set-Cookie": expired_customer_cookie_header()})
+                if path == "/account/password":
+                    customer = current_customer(app.conn, self.headers.get("Cookie"))
+                    if customer is None:
+                        self.redirect("/account/login")
+                        return
+                    form = self.read_form()
+                    ok, message = change_customer_password(
+                        app.conn,
+                        customer["id"],
+                        form.get("current_password", ""),
+                        form.get("new_password", ""),
+                        form.get("new_password_confirm", ""),
+                    )
+                    target = "password_result" if ok else "password_error"
+                    self.redirect(f"/account?{target}=" + urllib.parse.quote(message))
                     return
                 if path == "/admin/login":
                     form = self.read_form()
@@ -677,7 +846,7 @@ class StammApp:
                         return
                     if path == "/admin/moysklad/sync-products":
                         try:
-                            result = run_manual_catalog_sync(app.conn, user["id"], diagnostic_mode="diagnostic_mode" in form)
+                            result = run_manual_catalog_sync(app.conn, user["id"])
                             stats = result["stats"]
                             message = f"Sync завершён: найдено {stats['found']}, создано {stats['created']}, обновлено {stats['updated']}"
                             self.redirect("/admin/moysklad?result=" + urllib.parse.quote(message))
@@ -737,6 +906,15 @@ class StammApp:
                     except Exception as exc:
                         self.redirect("/admin/email?error=" + urllib.parse.quote(str(exc)))
                         return
+                if path == "/admin/users/create":
+                    user = self.require_admin()
+                    if user is None:
+                        return
+                    form = self.read_form()
+                    result = create_customer_account_by_admin(app.conn, form.get("inn", ""), form.get("email", ""), form.get("temporary_password", ""))
+                    target = "result" if result.ok else "error"
+                    self.redirect(f"/admin/users?{target}=" + urllib.parse.quote(result.message))
+                    return
                 if path in {"/admin/users/status", "/admin/users/delete", "/admin/users/reset-password"}:
                     user = self.require_admin()
                     if user is None:
@@ -755,7 +933,7 @@ class StammApp:
                         try:
                             status = form.get("status", "")
                             set_customer_account_status(app.conn, account_id, status)
-                            message = "Пользователь активирован." if status == "active" else "Пользователь деактивирован."
+                            message = "Пользователь активирован." if status == "active" else "Пользователь приостановлен."
                             self.redirect("/admin/users?result=" + urllib.parse.quote(message))
                         except Exception as exc:
                             self.redirect("/admin/users?error=" + urllib.parse.quote(str(exc)))
@@ -764,8 +942,8 @@ class StammApp:
                         if form.get("confirm") != "yes":
                             self.redirect("/admin/users?error=" + urllib.parse.quote("Удаление требует подтверждения."))
                             return
-                        soft_delete_customer_account(app.conn, account_id)
-                        self.redirect("/admin/users?result=" + urllib.parse.quote("Пользователь мягко удалён. История заказов сохранена."))
+                        delete_customer_account(app.conn, account_id)
+                        self.redirect("/admin/users?result=" + urllib.parse.quote("Пользователь полностью удалён. Его e-mail и ИНН снова доступны для создания аккаунта."))
                         return
                     if path == "/admin/users/reset-password":
                         if account["status"] != "active":
@@ -791,10 +969,38 @@ class StammApp:
                     news_file = files.get("home_news_image_file")
                     if news_file:
                         form["home_news_image_url"] = self.save_uploaded_media(news_file, "home-news")
+                    site_favicon_file = files.get("site_favicon_file")
+                    if site_favicon_file:
+                        form["site_favicon_url"] = self.save_uploaded_media(site_favicon_file, "favicon")
+                    site_og_image_file = files.get("site_og_image_file")
+                    if site_og_image_file:
+                        form["site_og_image_url"] = self.save_uploaded_media(site_og_image_file, "og-image")
+                    maintenance_image_file = files.get("maintenance_image_file")
+                    if maintenance_image_file:
+                        form["maintenance_image_url"] = self.save_uploaded_media(maintenance_image_file, "maintenance")
+                    beer_untappd_logo_file = files.get("beer_untappd_logo_file")
+                    if beer_untappd_logo_file:
+                        form["beer_untappd_logo_url"] = self.save_uploaded_media(beer_untappd_logo_file, "beer-untappd")
                     for field_name, upload in files.items():
+                        if field_name.startswith("section_bg_") and field_name.endswith("_file"):
+                            section = field_name.removeprefix("section_bg_").removesuffix("_file")
+                            form[f"section_bg_{section}_url"] = self.save_uploaded_media(upload, f"section-bg-{section}")
                         if field_name.startswith("action_") and field_name.endswith("_icon_file"):
                             key = field_name.removeprefix("action_").removesuffix("_icon_file")
                             form[f"action_{key}_icon_url"] = self.save_uploaded_media(upload, f"nav-{key}")
+                        if field_name.startswith("beer_partner_logo_file_"):
+                            index = field_name.removeprefix("beer_partner_logo_file_")
+                            form[f"beer_partner_logo_url_{index}"] = self.save_uploaded_media(upload, f"beer-partner-{index}")
+                        if field_name.startswith("beer_product_image_file_"):
+                            index = field_name.removeprefix("beer_product_image_file_")
+                            form[f"beer_product_image_url_{index}"] = self.save_uploaded_media(upload, f"beer-product-{index}")
+                        gallery_section_match = re.match(r"gallery_section_(\d+)_item_image_file_(\d+)$", field_name)
+                        if gallery_section_match:
+                            section_index, item_index = gallery_section_match.groups()
+                            form[f"gallery_section_{section_index}_item_image_url_{item_index}"] = self.save_uploaded_media(upload, f"gallery-{section_index}-{item_index}")
+                        if field_name.startswith("gallery_item_image_file_"):
+                            index = field_name.removeprefix("gallery_item_image_file_")
+                            form[f"gallery_item_image_url_{index}"] = self.save_uploaded_media(upload, f"gallery-{index}")
                     save_public_content(app.conn, form)
                     self.redirect("/admin/content?result=" + urllib.parse.quote("Контент сохранён"))
                     return
