@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import sqlite3
 import tempfile
 import threading
 import unittest
@@ -11,14 +12,18 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from app.config import Settings, load_settings
+from app.db.migrations import ensure_compatibility_columns
+from app.integrations.moysklad.auto_sync import auto_sync_status, compact_auto_sync_history, run_auto_catalog_sync_if_due
 from app.integrations.moysklad.catalog_sync import extract_alcohol_percent, infer_container_type, latest_sync_diagnostics, run_manual_catalog_sync
 from app.integrations.moysklad.client import MoyskladClient, normalize_counterparty
 from app.modules.account.service import (
     DiscountRefreshError,
     authenticate_customer,
+    change_customer_password,
     create_customer_session,
     current_customer,
     customer_session_from_cookie,
+    list_customer_orders,
     register_customer,
 )
 from app.integrations.moysklad.settings_service import get_settings, refresh_integration_references, save_settings, serialize_settings
@@ -26,7 +31,9 @@ from app.modules.email import service as email_service
 from app.main import StammApp, admin_stats
 from app.modules.catalog.service import admin_catalog_items, public_catalog, publish_product
 from app.modules.content.service import get_public_site_content, save_public_content
-from app.modules.public_views import business_storefront_page, contacts_page, home_page
+from app.modules.admin.views import admin_catalog_page
+from app.modules import public_views as public_views_module
+from app.modules.public_views import account_dashboard_page, beer_page, business_guest_page, business_storefront_page, contacts_page, gallery_page, home_page, maintenance_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
 
 
@@ -122,6 +129,34 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("email_templates", tables)
         self.assertEqual(admin_stats(app.conn)["Статус sync"], "foundation ready")
 
+    def test_migrations_backfill_catalog_columns_for_legacy_databases(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(
+            """
+            CREATE TABLE products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                accounting_name TEXT NOT NULL
+            );
+            CREATE TABLE business_catalog_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                public_name TEXT NOT NULL
+            );
+            """
+        )
+
+        added = ensure_compatibility_columns(conn)
+        product_columns = {row[1] for row in conn.execute("PRAGMA table_info(products)")}
+        item_columns = {row[1] for row in conn.execute("PRAGMA table_info(business_catalog_items)")}
+
+        self.assertIn("products.stock_quantity", added)
+        self.assertIn("products.alcohol_percent", added)
+        self.assertIn("business_catalog_items.price_type_prices_json", added)
+        self.assertIn("business_catalog_items.alcohol_percent", added)
+        self.assertIn("stock_quantity", product_columns)
+        self.assertIn("price_type_prices_json", item_columns)
+
     def test_admin_auth_session(self) -> None:
         app = self.make_app()
         user = authenticate(app.conn, "admin", "1")
@@ -188,11 +223,73 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("ООО Админ Партнёр", users_html)
         self.assertIn("B2B 10%", users_html)
         self.assertIn("подтверждён", users_html)
-        self.assertIn("Сброс пароля", users_html)
+        self.assertIn("Сброс", users_html)
+        self.assertIn("/admin/users/create", users_html)
+        self.assertIn("Временный пароль", users_html)
+        self.assertIn("users-create-grid", users_html)
+        self.assertIn("users-table", users_html)
+        self.assertIn("Приостановить", users_html)
+        self.assertIn("Удалить", users_html)
+
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "token-123",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "360",
+                "stock_sync_interval_minutes": "120",
+                "is_enabled": True,
+            },
+            admin["id"],
+        )
+        original_urlopen = urllib.request.urlopen
+
+        def fake_urlopen(request, timeout=0):
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            if "api.moysklad.ru" not in url:
+                return original_urlopen(request, timeout=timeout)
+            rows = [] if "filter=inn%3D7700000000" in url else [
+                {
+                    "id": "counterparty-created",
+                    "name": "ООО Новый Партнёр",
+                    "inn": "7709998887",
+                    "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-created"},
+                }
+            ]
+            return FakeMoyskladResponse(json.dumps({"rows": rows}).encode("utf-8"))
+
+        urllib.request.urlopen = fake_urlopen
+        try:
+            create_missing = urllib.request.Request(
+                base + "/admin/users/create",
+                data=urllib.parse.urlencode({"inn": "7700000000", "email": "missing-admin@example.com", "temporary_password": "secret123"}).encode("utf-8"),
+                headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            missing_response = open_without_redirects(create_missing)
+            self.assertEqual(missing_response.status, 303)
+            self.assertIn("error=", missing_response.headers["Location"])
+            self.assertIsNone(app.conn.execute("SELECT * FROM customer_accounts WHERE email = 'missing-admin@example.com'").fetchone())
+
+            create_ok = urllib.request.Request(
+                base + "/admin/users/create",
+                data=urllib.parse.urlencode({"inn": "7709998887", "email": "created-admin@example.com", "temporary_password": "secret123"}).encode("utf-8"),
+                headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            created_response = open_without_redirects(create_ok)
+        finally:
+            urllib.request.urlopen = original_urlopen
+        self.assertEqual(created_response.status, 303)
+        self.assertIn("result=", created_response.headers["Location"])
+        created_account = authenticate_customer(app.conn, "created-admin@example.com", "secret123", refresh_discount=False)
+        self.assertIsNotNone(created_account)
+        self.assertEqual(created_account["counterparty_name"], "ООО Новый Партнёр")
 
         disable = urllib.request.Request(
             base + "/admin/users/status",
-            data=urllib.parse.urlencode({"account_id": customer_id, "status": "disabled"}).encode("utf-8"),
+            data=urllib.parse.urlencode({"account_id": customer_id, "status": "suspended"}).encode("utf-8"),
             headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
             method="POST",
         )
@@ -229,9 +326,35 @@ class CoreFoundationTest(unittest.TestCase):
         )
         self.assertEqual(open_without_redirects(delete).status, 303)
         account = app.conn.execute("SELECT status FROM customer_accounts WHERE id = ?", (customer_id,)).fetchone()
-        self.assertEqual(account["status"], "deleted")
+        self.assertIsNone(account)
         order = app.conn.execute("SELECT number, customer_account_id FROM b2b_orders WHERE number = 'B2B-ADMIN'").fetchone()
-        self.assertEqual(order["customer_account_id"], customer_id)
+        self.assertIsNone(order["customer_account_id"])
+
+        def fake_recreate_urlopen(request, timeout=0):
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            if "api.moysklad.ru" not in url:
+                return original_urlopen(request, timeout=timeout)
+            return FakeMoyskladResponse(json.dumps({"rows": [{
+                "id": "counterparty-admin",
+                "name": "ООО Админ Партнёр",
+                "inn": "7701234567",
+                "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-admin"},
+            }]}).encode("utf-8"))
+
+        urllib.request.urlopen = fake_recreate_urlopen
+        try:
+            recreate = urllib.request.Request(
+                base + "/admin/users/create",
+                data=urllib.parse.urlencode({"inn": "7701234567", "email": "partner-admin@example.com", "temporary_password": "secret123"}).encode("utf-8"),
+                headers={"Cookie": admin_cookie, "Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            recreate_response = open_without_redirects(recreate)
+        finally:
+            urllib.request.urlopen = original_urlopen
+        self.assertEqual(recreate_response.status, 303)
+        self.assertIn("result=", recreate_response.headers["Location"])
+        self.assertIsNotNone(authenticate_customer(app.conn, "partner-admin@example.com", "secret123", refresh_discount=False))
 
 
     def test_admin_email_management_page_settings_logs_and_manual_actions(self) -> None:
@@ -461,7 +584,62 @@ class CoreFoundationTest(unittest.TestCase):
                 "home_news_image_url": "/media/news.jpg",
                 "home_news_link_url": "/business/catalog",
                 "home_news_link_label": "Order now",
+                "site_public_base_url": "https://example.test",
+                "site_title": "Stamm Test",
+                "site_description": "Тестовое описание Stamm для поиска.",
+                "site_favicon_url": "/media/favicon.svg",
+                "site_og_image_url": "/media/og.jpg",
                 "business_min_order_amount_minor": "2500000",
+                "business_guest_text": "Партнёрам — напишите на marketing@stammbeer.ru",
+                "business_guest_font_size_px": "28",
+                "business_guest_font_weight": "700",
+                "age_gate_title": "Проверка возраста",
+                "age_gate_text": "Вам уже исполнилось 18 лет?",
+                "age_gate_title_font_size_px": "44",
+                "age_gate_title_font_weight": "800",
+                "age_gate_text_font_size_px": "20",
+                "age_gate_text_font_weight": "600",
+                "age_gate_confirm_label": "Да, можно",
+                "age_gate_deny_label": "Нет",
+                "maintenance_enabled": "1",
+                "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
+                "maintenance_font_size_px": "30",
+                "maintenance_font_weight": "700",
+                "maintenance_image_url": "/media/maintenance.png",
+                "gallery_title": "Галерея Stamm",
+                "gallery_description": "Производство\nи события",
+                "gallery_section_0_title": "Пивоварня",
+                "gallery_section_0_sort_order": "10",
+                "gallery_section_0_visible": "1",
+                "gallery_section_0_item_caption_0": "Варочный порядок",
+                "gallery_section_0_item_image_url_0": "/media/gallery-brew.jpg",
+                "gallery_section_0_item_size_0": "large",
+                "gallery_section_0_item_sort_order_0": "20",
+                "gallery_section_0_item_visible_0": "1",
+                "gallery_section_1_title": "Скрытый блок",
+                "gallery_section_1_sort_order": "20",
+                "gallery_section_1_visible": "0",
+                "gallery_section_1_item_caption_0": "Скрытое фото",
+                "gallery_section_1_item_image_url_0": "/media/gallery-hidden.jpg",
+                "gallery_section_1_item_size_0": "small",
+                "gallery_section_1_item_sort_order_0": "10",
+                "gallery_section_1_item_visible_0": "1",
+                "gallery_item_caption_0": "Варочный порядок",
+                "gallery_item_image_url_0": "/media/gallery-brew.jpg",
+                "gallery_item_size_0": "large",
+                "gallery_item_sort_order_0": "20",
+                "gallery_item_visible_0": "1",
+                "gallery_item_caption_1": "Скрытое фото",
+                "gallery_item_image_url_1": "/media/gallery-hidden.jpg",
+                "gallery_item_size_1": "small",
+                "gallery_item_sort_order_1": "10",
+                "gallery_item_visible_1": "0",
+                "section_bg_home_url": "/media/bg-home.jpg",
+                "section_bg_beer_url": "/media/bg-beer.jpg",
+                "section_bg_business_url": "/media/bg-business.jpg",
+                "section_bg_history_url": "/media/bg-gallery.jpg",
+                "section_bg_contacts_url": "/media/bg-contacts.jpg",
+                "section_bg_visit_url": "/media/bg-visit.jpg",
                 "contact_email_label_0": "Основной",
                 "contact_email_value_0": "hello@stamm.test",
                 "contact_email_sort_order_0": "20",
@@ -473,11 +651,15 @@ class CoreFoundationTest(unittest.TestCase):
                 "contact_phone_value_0": "+7 999 111-22-33",
                 "contact_phone_sort_order_0": "10",
                 "contact_phone_visible_0": "on",
-                "contacts_address": "Москва, тестовый завод",
+                "contacts_address": "Москва, тестовый завод\nстроение 2",
+                "contacts_address_color": "#C7B166",
                 "contacts_description": "Контакты производства Stamm",
+                "contacts_description_color": "#F6F1E3",
                 "contacts_map_lat": "55.7001",
                 "contacts_map_lng": "37.6002",
                 "contacts_map_zoom": "15",
+                "contacts_map_height_px": "280",
+                "contacts_map_width_px": "360",
                 "contacts_map_title": "Stamm Test Brewery",
                 "typography_nav_font_size_px": "18",
                 "typography_page_title_font_size_px": "52",
@@ -525,7 +707,16 @@ class CoreFoundationTest(unittest.TestCase):
             },
         )
         content = get_public_site_content(app.conn)
+        self.assertEqual(content["site"]["site_public_base_url"], "https://example.test")
+        self.assertEqual(content["site"]["site_favicon_url"], "/media/favicon.svg")
         self.assertEqual(content["business"]["business_min_order_amount_minor"], "2500000")
+        self.assertEqual(content["business"]["business_guest_text"], "Партнёрам — напишите на marketing@stammbeer.ru")
+        self.assertEqual(content["business"]["business_guest_font_size_px"], "28")
+        self.assertEqual(content["business"]["business_guest_font_weight"], "700")
+        self.assertEqual(content["site"]["age_gate_title"], "Проверка возраста")
+        self.assertEqual(content["site"]["age_gate_text_font_size_px"], "20")
+        self.assertEqual(content["site"]["maintenance_enabled"], "1")
+        self.assertEqual(content["site"]["maintenance_image_url"], "/media/maintenance.png")
         self.assertEqual(content["contacts"]["emails"][0]["value"], "hidden@stamm.test")
         self.assertFalse(content["contacts"]["emails"][0]["is_visible"])
         self.assertEqual(content["contacts"]["emails"][1]["value"], "hello@stamm.test")
@@ -535,8 +726,25 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("hello@stamm.test", contacts_html)
         self.assertNotIn("hidden@stamm.test", contacts_html)
         self.assertIn("+7 999 111-22-33", contacts_html)
-        self.assertIn("Москва, тестовый завод", contacts_html)
+        self.assertIn("Москва, тестовый завод\nстроение 2", contacts_html)
+        self.assertIn("color:#F6F1E3", contacts_html)
+        self.assertIn("<span>Адрес</span>", contacts_html)
+        self.assertNotIn("map-info", contacts_html)
+        self.assertNotIn("map-compact-badge", contacts_html)
+        self.assertNotIn("оценка на Яндекс Картах", contacts_html)
+        self.assertNotIn("Stamm Brewing★ оценка на Яндекс Картах", contacts_html)
+        self.assertIn("display:block; line-height:0", contacts_html)
+        self.assertIn("contacts-info-card", contacts_html)
+        self.assertNotIn("<h1>Контакты</h1>", contacts_html)
+        self.assertIn("grid-template-columns:1fr", contacts_html)
+        self.assertIn("justify-self:center", contacts_html)
+        self.assertIn("mode=search", contacts_html)
+        self.assertIn("text=Stamm%20Test%20Brewery", contacts_html)
+        self.assertIn("font-weight:500; white-space:pre-line", contacts_html)
+        self.assertIn("min-height:180px; max-height:420px", contacts_html)
         self.assertIn("Stamm Test Brewery", contacts_html)
+        self.assertIn("--contacts-map-height:280px; --contacts-map-width:360px", contacts_html)
+        self.assertIn("width:min(100%, var(--contacts-map-width))", contacts_html)
         self.assertIn("yandex.ru/map-widget", contacts_html)
         self.assertIn("55.7001", contacts_html)
         self.assertIn("37.6002", contacts_html)
@@ -545,6 +753,12 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertNotIn("map-caption", contacts_html)
         html = home_page(content)
         self.assertIn("CUSTOM", html)
+        self.assertIn('<meta name="description" content="Stamm Brewing: крафтовая пивоварня, новости, партнёры и контакты.">', html)
+        self.assertIn('<meta name="robots" content="index,follow">', html)
+        self.assertIn('<link rel="canonical" href="https://example.test/">', html)
+        self.assertIn('<link rel="icon" href="/media/favicon.svg">', html)
+        self.assertIn('<meta property="og:title" content="Stamm Brewing — крафтовая пивоварня">', html)
+        self.assertIn('<meta property="og:image" content="https://example.test/media/og.jpg">', html)
         self.assertIn("GOLD", html)
         self.assertIn("/media/custom-logo.svg", html)
         self.assertIn("Fresh release", html)
@@ -552,8 +766,10 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("/media/news.jpg", html)
         self.assertIn("/business/catalog", html)
         self.assertIn("Order now", html)
-        self.assertIn("/media/taproom-bg.jpg", html)
-        self.assertIn("--home-content-bg:url", html)
+        self.assertNotIn('aria-label="Корзина"', html)
+        self.assertNotIn('/business#cart', html)
+        self.assertIn("/media/bg-home.jpg", html)
+        self.assertIn("--section-bg:url('/media/bg-home.jpg')", html)
         self.assertIn("background-attachment:fixed", html)
         self.assertIn("linear-gradient(180deg, rgba(16,88,89,.84)", html)
         self.assertIn("min-height:100vh", html)
@@ -571,6 +787,20 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("background:transparent; border:0; border-radius:0; padding:0; box-shadow:none", html)
         self.assertIn("gap:clamp(34px,4vw,64px)", html)
         self.assertIn(".nav-icon { width:32px; height:32px; border:0; border-radius:999px", html)
+        self.assertIn("@media (max-width:920px)", html)
+        self.assertIn("--mobile-menu-offset:112px", html)
+        self.assertIn(".top-nav { position:fixed; align-items:center; flex-direction:row; flex-wrap:wrap", html)
+        self.assertIn(".nav-links a { flex:1 1 max-content; min-width:max-content; text-align:center; }", html)
+        self.assertIn("mobile-menu-toggle", html)
+        self.assertIn('aria-controls="mobileNavDrawer"', html)
+        self.assertIn('id="mobileNavDrawer"', html)
+        self.assertIn("mobile-drawer__links", html)
+        self.assertIn(".top-nav { display:grid; grid-template-columns:34px minmax(0,1fr) auto", html)
+        self.assertIn(".nav-links { display:none; }", html)
+        self.assertIn('document.body.classList.toggle("mobile-nav-open", isOpen)', html)
+        self.assertIn(".nav-icon { width:26px; height:26px; }", html)
+        self.assertIn(".home-subtitle { font-size:clamp(18px,6vw,26px); letter-spacing:.14em; }", html)
+        self.assertIn(".home-content { background-size:cover, cover; background-position:center, center; background-attachment:scroll, fixed; }", html)
         self.assertIn("background:var(--golden-malt); color:var(--ink)", html)
         self.assertIn(".nav-icon img { width:100%; height:100%; padding:0; object-fit:contain", html)
         self.assertNotIn("nav-icon--cart", html)
@@ -579,13 +809,270 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Beer list", html)
         self.assertIn("https://untappd.com/stamm", html)
         self.assertIn("/media/untappd.svg", html)
-        self.assertIn("Вам есть 18+?", html)
-        self.assertIn("Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет", html)
-        self.assertIn("Да, мне есть 18", html)
-        self.assertIn("Нет, мне нет 18", html)
+        self.assertIn("Проверка возраста", html)
+        self.assertIn("Вам уже исполнилось 18 лет?", html)
+        self.assertIn("Да, можно", html)
+        self.assertIn("Нет", html)
         self.assertIn("window.history.back()", html)
         self.assertIn("about:blank", html)
-        self.assertIn("stamm_age_confirmed", html)
+        self.assertIn("stamm_age_confirmed_session", html)
+        self.assertIn("--age-gate-title-size:44px", html)
+        self.assertIn("--age-gate-title-weight:800", html)
+        self.assertIn("--age-gate-text-size:20px", html)
+        self.assertIn("--age-gate-text-weight:600", html)
+        html_for_customer = home_page({**content, "viewer": {"is_customer": True}})
+        self.assertIn('aria-label="Корзина"', html_for_customer)
+        self.assertIn('/business#cart', html_for_customer)
+        self.assertNotIn("ageGate", html_for_customer)
+        guest_html = business_guest_page(content)
+        self.assertIn("Партнёрам — напишите на marketing@stammbeer.ru", guest_html)
+        self.assertIn("min-height:100vh", guest_html)
+        self.assertIn("--business-guest-font-size:28px", guest_html)
+        self.assertIn("--business-guest-font-weight:700", guest_html)
+        self.assertIn("--section-bg:url('/media/bg-business.jpg')", guest_html)
+        self.assertIn("background-size:auto, cover, cover", guest_html)
+        self.assertIn("background-attachment:scroll, scroll, fixed", guest_html)
+        self.assertIn("font-size:min(var(--business-guest-font-size), 22px)", guest_html)
+        maintenance_html = maintenance_page(content)
+        self.assertIn("Технические работы", maintenance_html)
+        self.assertIn("mailto:marketing@stammbeer.ru", maintenance_html)
+        self.assertIn("/media/maintenance.png", maintenance_html)
+        self.assertIn("--maintenance-font-size:30px", maintenance_html)
+        self.assertIn("--maintenance-font-weight:700", maintenance_html)
+        self.assertEqual(content["gallery"]["gallery_title"], "Галерея Stamm")
+        gallery_html = gallery_page(content)
+        self.assertIn("Галерея Stamm", gallery_html)
+        self.assertIn("Производство\nи события", gallery_html)
+        self.assertIn("Пивоварня", gallery_html)
+        self.assertNotIn("Скрытый блок", gallery_html)
+        self.assertIn("/media/gallery-brew.jpg", gallery_html)
+        self.assertIn("gallery-section", gallery_html)
+        self.assertIn("gallery-card--large", gallery_html)
+        self.assertIn("data-gallery-open", gallery_html)
+        self.assertIn("galleryLightbox", gallery_html)
+        self.assertIn("filter:brightness(1.08) saturate(1.02)", gallery_html)
+        self.assertIn("rgba(0,0,0,.42)", gallery_html)
+        self.assertIn("--section-bg:url('/media/bg-gallery.jpg')", gallery_html)
+        self.assertIn(".gallery-card { min-height:220px; border-radius:20px; }", gallery_html)
+        self.assertNotIn("rgba(11,63,64,.78)", gallery_html)
+        self.assertNotIn("/media/gallery-hidden.jpg", gallery_html)
+
+    def test_maintenance_page_uses_safe_fallbacks_with_incomplete_defaults(self) -> None:
+        original_defaults = dict(public_views_module.SITE_DEFAULTS)
+        try:
+            for key in (
+                "maintenance_font_size_px",
+                "maintenance_font_weight",
+                "maintenance_text",
+                "maintenance_image_url",
+                "site_public_base_url",
+            ):
+                public_views_module.SITE_DEFAULTS.pop(key, None)
+            html = public_views_module.maintenance_page(
+                {
+                    "site": {
+                        "maintenance_enabled": "1",
+                        "maintenance_text": "Сервисное окно\nmarketing@stammbeer.ru",
+                    }
+                }
+            )
+        finally:
+            public_views_module.SITE_DEFAULTS.clear()
+            public_views_module.SITE_DEFAULTS.update(original_defaults)
+        self.assertIn("Сервисное окно", html)
+        self.assertIn("mailto:marketing@stammbeer.ru", html)
+        self.assertIn("--maintenance-font-size:24px", html)
+        self.assertIn("--maintenance-font-weight:500", html)
+        self.assertIn('<link rel="canonical" href="https://stammbeer.ru/">', html)
+
+    def test_beer_page_content_is_cms_managed(self) -> None:
+        app = self.make_app()
+        save_public_content(
+            app.conn,
+            {
+                "beer_partners_title": "Где найти Stamm Brewing",
+                "beer_partners_description": "Партнёры\nи бары",
+                "home_content_bg_url": "/media/taproom-bg.jpg",
+                "beer_partners_is_visible": "1",
+                "beer_partners_sort_order": "20",
+                "beer_products_sort_order": "10",
+                "beer_partner_name_0": "Bottle Shop",
+                "beer_partner_logo_url_0": "/media/partner.svg",
+                "beer_partner_url_0": "https://partner.test",
+                "beer_partner_size_0": "large",
+                "beer_partner_sort_order_0": "10",
+                "beer_partner_visible_0": "1",
+                "beer_products_title": "Наша продукция",
+                "beer_new_title": "Новинки",
+                "beer_core_title": "Постоянная линейка",
+                "beer_seasonal_title": "Сезонные сорта",
+                "beer_products_is_visible": "1",
+                "beer_new_is_visible": "1",
+                "beer_core_is_visible": "1",
+                "beer_seasonal_is_visible": "1",
+                "menu_offset_beer_px": "232",
+                "beer_untappd_logo_url": "/media/untappd-global.svg",
+                "beer_popup_backdrop_color": "#123456",
+                "beer_popup_backdrop_opacity": "45",
+                "beer_popup_card_color": "#654321",
+                "beer_popup_card_opacity": "72",
+                "beer_section_gap_px": "104",
+                "beer_product_name_0": "Stamm IPA",
+                "beer_product_style_0": "IPA",
+                "beer_product_abv_0": "6.5%",
+                "beer_product_image_url_0": "/media/ipa.png",
+                "beer_product_untappd_url_0": "https://untappd.com/b/stamm-ipa",
+                "beer_product_category_0": "new",
+                "beer_product_sort_order_0": "10",
+                "beer_product_visible_0": "1",
+                "beer_product_name_1": "Stamm Lager",
+                "beer_product_style_1": "Lager",
+                "beer_product_abv_1": "4.8%",
+                "beer_product_image_url_1": "/media/lager.png",
+                "beer_product_category_1": "core",
+                "beer_product_sort_order_1": "20",
+                "beer_product_visible_1": "1",
+                "beer_product_name_24": "Stamm Saison",
+                "beer_product_style_24": "Saison",
+                "beer_product_abv_24": "5.2%",
+                "beer_product_image_url_24": "/media/saison.png",
+                "beer_product_category_24": "seasonal",
+                "beer_product_sort_order_24": "30",
+                "beer_product_visible_24": "1",
+            },
+        )
+        content = get_public_site_content(app.conn)
+        self.assertEqual(content["beer"]["partners"][0]["name"], "Bottle Shop")
+        self.assertEqual(content["beer"]["beer_partners_sort_order"], "20")
+        self.assertEqual(content["beer"]["beer_products_sort_order"], "10")
+        html = beer_page(content)
+        self.assertLess(html.index('data-beer-block="products"'), html.index('data-beer-block="partners"'))
+        self.assertIn("Где найти Stamm Brewing", html)
+        self.assertIn("Партнёры\nи бары", html)
+        self.assertIn('target="_blank"', html)
+        self.assertIn("--logo-size:154px", html)
+        self.assertIn("width:max-content", html)
+        self.assertIn("display:flex; flex-wrap:wrap", html)
+        self.assertIn("--section-bg:url", html)
+        self.assertIn("linear-gradient(180deg, rgba(16,88,89,.78)", html)
+        self.assertIn("max-width:1440px", html)
+        self.assertIn("gap:104px", html)
+        self.assertIn(".beer-shell { gap:clamp(34px,9vw,52px); }", html)
+        self.assertIn(".beer-page { padding:128px 16px 48px; background-size:cover, cover", html)
+        self.assertIn("background-attachment:scroll, fixed", html)
+        self.assertIn("max-height:58px", html)
+        self.assertIn("grid-template-columns:repeat(3,minmax(72px,1fr))", html)
+        self.assertIn("width:min(1320px,100%)", html)
+        self.assertIn("display:grid; grid-template-columns:repeat(auto-fit,minmax(72px,132px)); justify-content:center", html)
+        self.assertIn("width:100%; max-width:132px; min-width:0; justify-self:center", html)
+        self.assertIn(".seasonal-grid { width:min(100%,360px); grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px 6px; }", html)
+        self.assertIn(".seasonal-grid .beer-can { width:100%; max-width:54px; min-width:0; }", html)
+        self.assertNotIn("product-subsection--new", html)
+        self.assertIn("--menu-offset:232px", html)
+        self.assertIn(".partner-card:hover img", html)
+        self.assertNotIn("min-height:132px", html)
+        self.assertIn("beer-can--featured", html)
+        self.assertIn("Постоянная линейка", html)
+        self.assertIn("beer-can--seasonal", html)
+        self.assertEqual(len(content["beer"]["products"]), 3)
+        self.assertIn("beer-modal", html)
+        self.assertIn("beer-modal__mockup", html)
+        self.assertIn("rgba(18,52,86,0.45)", html)
+        self.assertIn("background:rgba(101,67,33,0.72)", html)
+        self.assertIn('const untappdLogoUrl = "/media/untappd-global.svg"', html)
+        self.assertNotIn("untappdLogoUrl", html.split("data-product=", 1)[1].split(" aria-label", 1)[0])
+        self.assertIn("style.textContent = data.style || ''", html)
+        self.assertNotIn(">Stamm IPA</span>", html)
+        self.assertIn("https://untappd.com/b/stamm-ipa", html)
+
+
+    def test_admin_catalog_uses_compact_table_styles(self) -> None:
+        html = admin_catalog_page(
+            "admin@example.test",
+            [{
+                "id": "product-1",
+                "public_name": "Stamm IPA 0.5",
+                "container_type": "can",
+                "price_minor": 25000,
+                "currency": "RUB",
+                "available_quantity": 24,
+                "availability_status": "in_stock",
+                "latest_stock": 30,
+                "latest_reserve": 6,
+                "sync_state": "synced",
+                "is_published": True,
+                "last_synced_at": "2026-06-29",
+            }],
+        )
+        self.assertIn("admin-catalog-card", html)
+        self.assertIn("admin-catalog-table", html)
+        self.assertIn("font-size:12px", html)
+        self.assertIn("font-size:11px", html)
+        self.assertIn("font-weight:600", html)
+        self.assertIn("stamm_admin_catalog_scroll", html)
+        self.assertIn("admin-catalog-publication-form", html)
+
+    def test_business_catalog_exactly_follows_admin_publication_flags(self) -> None:
+        app = self.make_app()
+        product_id = self.add_catalog_item(app, "Stamm Exact IPA", "keg", "stamm-exact-ipa")
+        self.assertEqual([item["productId"] for item in public_catalog(app.conn)["items"]], [product_id])
+
+        publish_product(app.conn, product_id, False)
+        self.assertEqual(public_catalog(app.conn)["items"], [])
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items WHERE product_id = ?", (product_id,)).fetchone()[0], 0)
+
+        publish_product(app.conn, product_id, True)
+        self.assertEqual([item["productId"] for item in public_catalog(app.conn)["items"]], [product_id])
+
+        app.conn.execute("UPDATE product_overrides SET is_published = 0 WHERE product_id = ?", (product_id,))
+        app.conn.execute(
+            """
+            INSERT INTO business_catalog_items (product_id, slug, public_name, price_minor, currency, container_type, availability_status, search_text)
+            VALUES (?, 'stale-visible', 'Stale visible row', 10000, 'RUB', 'keg', 'available', 'Stale visible row')
+            """,
+            (product_id,),
+        )
+        app.conn.commit()
+        self.assertEqual(public_catalog(app.conn)["items"], [])
+
+        app.conn.execute("UPDATE product_overrides SET is_published = 1 WHERE product_id = ?", (product_id,))
+        app.conn.execute("DELETE FROM business_catalog_items WHERE product_id = ?", (product_id,))
+        app.conn.commit()
+        self.assertEqual([item["productId"] for item in public_catalog(app.conn)["items"]], [product_id])
+
+
+    def test_public_cms_text_preserves_line_breaks_without_raw_html(self) -> None:
+        app = self.make_app()
+        save_public_content(
+            app.conn,
+            {
+                "home_news_text": "Строка 1\nСтрока 2\n<script>alert(1)</script>",
+                "contacts_address": "Адрес 1\nАдрес 2\n<em>не html</em>",
+                "contacts_address_is_visible": "0",
+                "contacts_address_color": "#C7B166",
+                "contacts_description": "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>",
+                "contacts_description_is_visible": "0",
+                "contacts_description_color": "#F6F1E3",
+            },
+        )
+        content = get_public_site_content(app.conn)
+        self.assertEqual(content["home"]["home_news_text"], "Строка 1\nСтрока 2\n<script>alert(1)</script>")
+        self.assertEqual(content["contacts"]["contacts_address"], "Адрес 1\nАдрес 2\n<em>не html</em>")
+        self.assertEqual(content["contacts"]["contacts_address_is_visible"], "0")
+        self.assertEqual(content["contacts"]["contacts_description"], "Контакты 1\r\nКонтакты 2\n<strong>не html</strong>")
+        self.assertEqual(content["contacts"]["contacts_description_is_visible"], "0")
+        home_html = home_page(content)
+        contacts_html = contacts_page(content)
+        self.assertIn("white-space:pre-line", home_html)
+        self.assertIn("Строка 1\nСтрока 2", home_html)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", home_html)
+        self.assertNotIn("<script>alert(1)</script>", home_html)
+        self.assertIn("white-space:pre-line", contacts_html)
+        self.assertNotIn("Адрес 1\nАдрес 2", contacts_html)
+        self.assertNotIn("&lt;em&gt;не html&lt;/em&gt;", contacts_html)
+        self.assertNotIn("Контакты 1\r\nКонтакты 2", contacts_html)
+        self.assertNotIn("&lt;strong&gt;не html&lt;/strong&gt;", contacts_html)
+
 
     def test_admin_content_uploads_logo_and_nav_icon_assets(self) -> None:
         app = self.make_app()
@@ -615,6 +1102,56 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('for="cms-tab-contacts"', admin_content_html)
         self.assertIn("Контакты", admin_content_html)
         self.assertIn("contacts-map-picker", admin_content_html)
+        self.assertIn('for="cms-tab-beer"', admin_content_html)
+        self.assertIn("beer_core_title", admin_content_html)
+        self.assertIn("data-add-beer-product", admin_content_html)
+        self.assertIn('data-dynamic-list="beer-products-new"', admin_content_html)
+        self.assertIn('data-dynamic-list="beer-products-core"', admin_content_html)
+        self.assertIn('data-dynamic-list="beer-products-seasonal"', admin_content_html)
+        self.assertIn("data-delete-beer-product", admin_content_html)
+        self.assertIn("beer-product-fields", admin_content_html)
+        self.assertIn("beer-asset-fields", admin_content_html)
+        self.assertIn("beer_untappd_logo_file", admin_content_html)
+        self.assertIn("beer_popup_backdrop_color", admin_content_html)
+        self.assertIn("beer_popup_backdrop_opacity", admin_content_html)
+        self.assertIn("beer_popup_card_color", admin_content_html)
+        self.assertIn("beer_popup_card_opacity", admin_content_html)
+        self.assertIn("beer_section_gap_px", admin_content_html)
+        self.assertIn("beer_partners_sort_order", admin_content_html)
+        self.assertIn("beer_products_sort_order", admin_content_html)
+        self.assertIn('for="cms-tab-gallery"', admin_content_html)
+        self.assertIn("gallery_title", admin_content_html)
+        self.assertIn("gallery_section_0_title", admin_content_html)
+        self.assertIn("gallery_section_0_item_image_file_0", admin_content_html)
+        self.assertIn("data-add-gallery-section", admin_content_html)
+        self.assertIn("data-add-gallery-item", admin_content_html)
+        self.assertIn("data-delete-gallery-section", admin_content_html)
+        self.assertIn("data-delete-gallery-item", admin_content_html)
+        self.assertIn("site_public_base_url", admin_content_html)
+        self.assertIn("site_title", admin_content_html)
+        self.assertIn("site_description", admin_content_html)
+        self.assertIn("site_favicon_file", admin_content_html)
+        self.assertIn("site_og_image_file", admin_content_html)
+        self.assertIn("age_gate_text_font_size_px", admin_content_html)
+        self.assertIn("age_gate_text_font_weight", admin_content_html)
+        self.assertIn("maintenance_font_size_px", admin_content_html)
+        self.assertIn("maintenance_font_weight", admin_content_html)
+        self.assertIn("maintenance_image_file", admin_content_html)
+        self.assertIn("business_guest_text", admin_content_html)
+        self.assertIn("business_guest_font_size_px", admin_content_html)
+        self.assertIn("business_guest_font_weight", admin_content_html)
+        self.assertNotIn("beer_product_untappd_logo_file_0", admin_content_html)
+        self.assertIn("stamm_admin_content_scroll", admin_content_html)
+        self.assertIn("contacts_map_height_px", admin_content_html)
+        self.assertIn("contacts_map_width_px", admin_content_html)
+        self.assertIn("Высота карты, px", admin_content_html)
+        self.assertIn("Ширина карты, px", admin_content_html)
+        self.assertIn("contacts_address_is_visible", admin_content_html)
+        self.assertIn("contacts_description_is_visible", admin_content_html)
+        self.assertIn("contacts_address_color", admin_content_html)
+        self.assertIn("contacts_description_color", admin_content_html)
+        self.assertIn('min="180" max="420"', admin_content_html)
+        self.assertIn('min="280" max="640"', admin_content_html)
         self.assertIn("api-maps.yandex.ru", admin_content_html)
         self.assertNotIn("Широта<input", admin_content_html)
         self.assertNotIn("Долгота<input", admin_content_html)
@@ -623,6 +1160,14 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('for="cms-tab-typography"', admin_content_html)
         self.assertIn("Типографика", admin_content_html)
         self.assertIn("typography_product_title_font_size_px", admin_content_html)
+        self.assertIn("menu_offset_home_px", admin_content_html)
+        self.assertIn("Отступ контента от меню — Пиво", admin_content_html)
+        self.assertIn("section_bg_home_file", admin_content_html)
+        self.assertIn("section_bg_beer_file", admin_content_html)
+        self.assertIn("section_bg_business_file", admin_content_html)
+        self.assertIn("section_bg_history_file", admin_content_html)
+        self.assertIn("section_bg_contacts_file", admin_content_html)
+        self.assertIn("section_bg_visit_file", admin_content_html)
 
         parts = [
             field("home_hero_title", "STAMM"),
@@ -642,21 +1187,78 @@ class CoreFoundationTest(unittest.TestCase):
             file_field("home_news_image_file", "news.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"),
             field("home_news_link_url", "/news/admin"),
             field("home_news_link_label", "Читать"),
+            field("site_public_base_url", "https://admin.example"),
+            field("site_title", "Admin Stamm"),
+            field("site_description", "Admin SEO description"),
+            field("site_favicon_url", ""),
+            file_field("site_favicon_file", "favicon.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'></svg>"),
+            field("site_og_image_url", ""),
+            file_field("site_og_image_file", "og.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='630'></svg>"),
             field("business_min_order_amount_minor", "2500000"),
+            field("business_guest_text", "Админский текст для партнёров"),
+            field("business_guest_font_size_px", "26"),
+            field("business_guest_font_weight", "650"),
+            field("age_gate_title", "Админ 18+"),
+            field("age_gate_text", "Админский текст 18+"),
+            field("age_gate_title_font_size_px", "46"), field("age_gate_title_font_weight", "850"),
+            field("age_gate_text_font_size_px", "21"), field("age_gate_text_font_weight", "550"),
+            field("age_gate_confirm_label", "Да"), field("age_gate_deny_label", "Нет"),
+            field("maintenance_enabled", "1"),
+            field("maintenance_text", "Админская шторка marketing@stammbeer.ru"),
+            field("maintenance_font_size_px", "32"), field("maintenance_font_weight", "750"),
+            field("maintenance_image_url", ""),
+            file_field("maintenance_image_file", "maintenance.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='800' height='400'></svg>"),
+            field("gallery_title", "Админская галерея"),
+            field("gallery_description", "Фото из админки"),
+            field("gallery_section_0_title", "Пивоварня"),
+            field("gallery_section_0_sort_order", "20"),
+            field("gallery_section_0_visible", "1"),
+            field("gallery_section_0_item_caption_0", "Зал варки"),
+            field("gallery_section_0_item_image_url_0", ""),
+            file_field("gallery_section_0_item_image_file_0", "gallery.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='900'></svg>"),
+            field("gallery_section_0_item_size_0", "large"),
+            field("gallery_section_0_item_sort_order_0", "10"),
+            field("gallery_section_0_item_visible_0", "1"),
+            field("gallery_section_1_title", "Ретроспектива"),
+            field("gallery_section_1_sort_order", "10"),
+            field("gallery_section_1_visible", "1"),
+            field("gallery_section_1_item_caption_0", "Удалить фото"),
+            field("gallery_section_1_item_image_url_0", "/media/delete-me.jpg"),
+            field("gallery_section_1_item_size_0", "small"),
+            field("gallery_section_1_item_sort_order_0", "20"),
+            field("gallery_section_1_item_visible_0", "1"),
+            field("gallery_section_1_delete", "1"),
             field("contact_email_label_0", "Основной"), field("contact_email_value_0", "admin@stamm.test"), field("contact_email_sort_order_0", "10"), field("contact_email_visible_0", "on"),
             field("contact_email_label_1", "Скрытая почта"), field("contact_email_value_1", "hidden-admin@stamm.test"), field("contact_email_sort_order_1", "20"),
             field("contact_phone_label_0", "Отдел продаж"), field("contact_phone_value_0", "+7 999 000-00-00"), field("contact_phone_sort_order_0", "10"), field("contact_phone_visible_0", "on"),
-            field("contacts_address", "Админский адрес завода"),
+            field("contacts_address", "Админский адрес завода\nкорпус 1"),
+            field("contacts_address_is_visible", "1"), field("contacts_address_color", "#C7B166"),
             field("contacts_description", "Описание контактов из админки"),
+            field("contacts_description_is_visible", "1"), field("contacts_description_color", "#F6F1E3"),
             field("contacts_map_lat", "55.7100"), field("contacts_map_lng", "37.6100"),
-            field("contacts_map_zoom", "14"), field("contacts_map_title", "Админская точка Stamm"),
+            field("contacts_map_zoom", "14"), field("contacts_map_height_px", "260"), field("contacts_map_width_px", "380"), field("contacts_map_title", "Админская точка Stamm"),
             field("typography_nav_font_size_px", "19"), field("typography_page_title_font_size_px", "54"),
             field("typography_body_font_size_px", "18"), field("typography_contact_text_font_size_px", "22"),
             field("typography_product_title_font_size_px", "20"), field("typography_price_font_size_px", "24"),
             field("typography_cart_font_size_px", "16"),
+            field("menu_offset_home_px", "210"), field("menu_offset_beer_px", "230"),
+            field("menu_offset_visit_px", "190"), field("menu_offset_history_px", "200"),
+            field("menu_offset_business_px", "240"), field("menu_offset_contacts_px", "220"),
+            field("section_bg_home_url", ""), file_field("section_bg_home_file", "bg-home.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_home_enabled", "1"),
+            field("section_bg_beer_url", ""), file_field("section_bg_beer_file", "bg-beer.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_beer_enabled", "1"),
+            field("section_bg_business_url", ""), file_field("section_bg_business_file", "bg-business.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_business_enabled", "1"),
+            field("section_bg_history_url", ""), file_field("section_bg_history_file", "bg-gallery.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_history_enabled", "1"),
+            field("section_bg_contacts_url", ""), file_field("section_bg_contacts_file", "bg-contacts.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_contacts_enabled", "1"),
+            field("section_bg_visit_url", ""), file_field("section_bg_visit_file", "bg-visit.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_visit_enabled", "1"),
+            field("beer_untappd_logo_url", ""),
+            file_field("beer_untappd_logo_file", "untappd.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'></svg>"),
+            field("beer_popup_backdrop_color", "#224466"), field("beer_popup_backdrop_opacity", "35"),
+            field("beer_popup_card_color", "#335577"), field("beer_popup_card_opacity", "80"),
+            field("beer_partners_sort_order", "30"), field("beer_products_sort_order", "5"),
+            field("beer_section_gap_px", "96"),
             field("menu_beer_label", "Пиво"), field("menu_beer_sort_order", "10"), field("menu_beer_visible", "on"),
             field("menu_visit_label", "Посетить пивоварню"), field("menu_visit_sort_order", "20"), field("menu_visit_visible", "on"),
-            field("menu_history_label", "История"), field("menu_history_sort_order", "30"), field("menu_history_visible", "on"),
+            field("menu_history_label", "Галерея"), field("menu_history_sort_order", "30"), field("menu_history_visible", "on"),
             field("menu_business_label", "Бизнес"), field("menu_business_sort_order", "40"), field("menu_business_visible", "on"),
             field("menu_contacts_label", "Контакты"), field("menu_contacts_sort_order", "50"), field("menu_contacts_visible", "on"),
             field("action_tg_label", "TG"), field("action_tg_href", "https://t.me/"), field("action_tg_icon_url", ""), field("action_tg_sort_order", "10"), field("action_tg_visible", "on"),
@@ -682,6 +1284,23 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertTrue(content["home"]["home_logo_url"].startswith("/media/home-logo-"))
         self.assertTrue(content["home"]["home_news_image_url"].startswith("/media/home-news-"))
         self.assertTrue(content["home"]["home_content_bg_url"].startswith("/media/home-content-bg-"))
+        self.assertTrue(content["site"]["site_favicon_url"].startswith("/media/favicon-"))
+        self.assertTrue(content["site"]["site_og_image_url"].startswith("/media/og-image-"))
+        self.assertEqual(content["site"]["site_public_base_url"], "https://admin.example")
+        self.assertEqual(content["site"]["site_title"], "Admin Stamm")
+        self.assertTrue(content["site"]["maintenance_image_url"].startswith("/media/maintenance-"))
+        self.assertEqual(content["site"]["maintenance_font_size_px"], "32")
+        self.assertEqual(content["site"]["age_gate_text_font_weight"], "550")
+        maintenance_html = maintenance_page(content)
+        self.assertIn(content["site"]["maintenance_image_url"], maintenance_html)
+        self.assertIn("maintenance-image", maintenance_html)
+        self.assertIn("--maintenance-font-size:32px", maintenance_html)
+        self.assertIn("--maintenance-font-weight:750", maintenance_html)
+        self.assertIn("place-items:start center", maintenance_html)
+        self.assertIn("box-shadow:none", maintenance_html)
+        self.assertIn("background:transparent; border-radius:0", maintenance_html)
+        self.assertEqual(content["business"]["business_guest_text"], "Админский текст для партнёров")
+        self.assertEqual(content["business"]["business_guest_font_weight"], "650")
         self.assertEqual(content["home"]["home_news_title"], "Админская новость")
         self.assertEqual(content["home"]["home_news_link_url"], "/news/admin")
         self.assertEqual(content["home"]["home_hero_line_gap_px"], "24")
@@ -694,11 +1313,39 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("--stamm-page-title-font-size:54px", contacts_page(content))
         self.assertIn("--stamm-product-title-font-size:20px", business_storefront_page(content))
         self.assertIn("--stamm-price-font-size:24px", business_storefront_page(content))
+        self.assertEqual(content["layout"]["menu_offset_home_px"], "210")
+        self.assertTrue(content["beer"]["beer_untappd_logo_url"].startswith("/media/beer-untappd-"))
+        self.assertEqual(content["beer"]["beer_popup_backdrop_color"], "#224466")
+        self.assertEqual(content["beer"]["beer_popup_backdrop_opacity"], "35")
+        self.assertEqual(content["beer"]["beer_popup_card_color"], "#335577")
+        self.assertEqual(content["beer"]["beer_popup_card_opacity"], "80")
+        self.assertEqual(content["beer"]["beer_partners_sort_order"], "30")
+        self.assertEqual(content["beer"]["beer_products_sort_order"], "5")
+        self.assertEqual(content["beer"]["beer_section_gap_px"], "96")
+        self.assertEqual(content["gallery"]["gallery_title"], "Админская галерея")
+        self.assertEqual(content["gallery"]["sections"][0]["title"], "Пивоварня")
+        self.assertTrue(content["gallery"]["sections"][0]["items"][0]["image_url"].startswith("/media/gallery-0-0-"))
+        self.assertEqual(content["gallery"]["sections"][0]["items"][0]["size"], "large")
+        self.assertIn("Пивоварня", gallery_page(content))
+        self.assertNotIn("Ретроспектива", gallery_page(content))
+        self.assertNotIn("/media/delete-me.jpg", gallery_page(content))
+        self.assertIn("--menu-offset:210px", home_page(content))
+        self.assertIn("--menu-offset:220px", contacts_page(content))
+        self.assertIn("--menu-offset:240px", business_storefront_page(content))
+        self.assertTrue(content["layout"]["section_bg_beer_url"].startswith("/media/section-bg-beer-"))
+        self.assertTrue(content["layout"]["section_bg_history_url"].startswith("/media/section-bg-history-"))
+        self.assertTrue(content["layout"]["section_bg_contacts_url"].startswith("/media/section-bg-contacts-"))
+        self.assertIn(content["layout"]["section_bg_home_url"], home_page(content))
+        self.assertIn(content["layout"]["section_bg_beer_url"], beer_page(content))
+        self.assertIn(content["layout"]["section_bg_business_url"], business_storefront_page(content))
+        self.assertIn(content["layout"]["section_bg_history_url"], gallery_page(content))
+        self.assertIn(content["layout"]["section_bg_contacts_url"], contacts_page(content))
+        self.assertIn(content["layout"]["section_bg_visit_url"], public_views_module.public_placeholder_page("Посетить пивоварню", "visit", content))
         tg = next(item for item in content["actions"] if item["key"] == "tg")
         self.assertTrue(tg["icon_url"].startswith("/media/nav-tg-"))
         self.assertIn(content["home"]["home_logo_url"], home_page(content))
         self.assertIn(content["home"]["home_news_image_url"], home_page(content))
-        self.assertIn(content["home"]["home_content_bg_url"], home_page(content))
+        self.assertTrue(content["home"]["home_content_bg_url"].startswith("/media/home-content-bg-"))
         self.assertIn("Админская новость", home_page(content))
         self.assertIn("Читать", home_page(content))
         self.assertIn("--home-line-gap:24px", home_page(content))
@@ -750,7 +1397,10 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(cans["items"][0]["containerType"], "can")
         self.assertEqual(cans["items"][0]["orderRules"]["step"], 12)
         self.assertEqual(cans["items"][0]["orderRules"]["minQuantity"], 12)
+        self.assertEqual(cans["items"][0]["orderRules"]["maxQuantity"], 10)
+        self.assertEqual(cans["items"][0]["availability"]["quantity"], 10)
         self.assertEqual(kegs["items"][0]["orderRules"]["step"], 1)
+        self.assertEqual(kegs["items"][0]["orderRules"]["maxQuantity"], 10)
         self.assertEqual(public_catalog(app.conn, minimum_order_amount_minor=2500000)["meta"]["minimumOrder"]["amountMinor"], 2500000)
 
     def test_extract_alcohol_percent_handles_moysklad_description_formats(self) -> None:
@@ -782,11 +1432,24 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("cart__minimum is-below", html)
         self.assertNotIn("До оформления осталось", html)
         self.assertNotIn("Цена продажи", html)
+        self.assertIn("normalizeCatalogItem", html)
+        self.assertIn("[BusinessCatalog] Catalog load failed", html)
+        self.assertIn("[BusinessCatalog] Skipped invalid catalog items", html)
+        self.assertIn("[BusinessCatalog] Failed to render item card", html)
+        self.assertIn("rejectedItems", html)
         self.assertIn("normalizeQuantity", html)
+        self.assertIn("maxOrderQuantity", html)
+        self.assertIn("data-quantity-input", html)
+        self.assertNotIn("Доступно:", html)
+        self.assertNotIn("максимум в заказ", html)
         self.assertIn("submitOrder", html)
         self.assertIn("/api/public/business/order", html)
         self.assertIn("Вам есть 18+?", html)
-        self.assertIn("stamm_age_confirmed", html)
+        self.assertIn("stamm_age_confirmed_session", html)
+        self.assertIn("--age-gate-title-size:48px", html)
+        self.assertIn("--age-gate-title-weight:900", html)
+        self.assertIn("--age-gate-text-size:18px", html)
+        self.assertIn("--age-gate-text-weight:500", html)
         self.assertIn("Stamm Brewing</a>", html)
         self.assertNotIn('href="/">Главная</a>', html)
         self.assertIn("Untappd", html)
@@ -822,20 +1485,129 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Вам есть 18+?", home_html)
         self.assertIn("Да, мне есть 18", home_html)
         self.assertIn("Нет, мне нет 18", home_html)
+        self.assertIn("sessionStorage", home_html)
+        self.assertIn("stamm_age_confirmed_session", home_html)
         self.assertNotIn('href="/">Главная</a>', home_html)
+
+        robots_body = urllib.request.urlopen(base + "/robots.txt", timeout=5).read().decode("utf-8")
+        self.assertIn("User-agent: *", robots_body)
+        self.assertIn("Disallow: /admin", robots_body)
+        self.assertIn("Disallow: /api/", robots_body)
+        self.assertIn("Sitemap: https://stammbeer.ru/sitemap.xml", robots_body)
+        sitemap_body = urllib.request.urlopen(base + "/sitemap.xml", timeout=5).read().decode("utf-8")
+        self.assertIn("<loc>https://stammbeer.ru/beer</loc>", sitemap_body)
+        self.assertIn("<loc>https://stammbeer.ru/gallery</loc>", sitemap_body)
+        self.assertIn("<loc>https://stammbeer.ru/contacts</loc>", sitemap_body)
+        self.assertNotIn("/history", sitemap_body)
+        self.assertNotIn("/admin", sitemap_body)
+        self.assertNotIn("/api/", sitemap_body)
+
+        gallery_response = urllib.request.urlopen(base + "/gallery", timeout=5)
+        self.assertEqual(gallery_response.status, 200)
+        gallery_body = gallery_response.read().decode("utf-8")
+        self.assertIn("Галерея", gallery_body)
+        self.assertIn("gallery-grid", gallery_body)
+        legacy_history = open_without_redirects(base + "/history")
+        self.assertEqual(legacy_history.status, 303)
+        self.assertEqual(legacy_history.headers["Location"], "/gallery")
 
         for path in ("/business", "/business/catalog"):
             response = urllib.request.urlopen(base + path, timeout=5)
             self.assertEqual(response.status, 200)
             body = response.read().decode("utf-8")
-            self.assertIn("Корзина", body)
-            self.assertNotIn("<h1>БИЗНЕС</h1>", body)
+            self.assertIn("Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru", body)
+            self.assertIn("business-guest__message", body)
+            self.assertNotIn("business-guest__card", body)
+            self.assertNotIn("Корзина", body)
+            self.assertNotIn('/business#cart', body)
+            self.assertNotIn("/api/public/business/catalog", body)
+
+        from app.modules.auth.security import hash_password
+        customer_id = app.conn.execute(
+            """
+            INSERT INTO customer_accounts (email, password_hash, inn, counterparty_id, counterparty_href, counterparty_name, counterparty_meta_json)
+            VALUES ('route-buyer@example.com', ?, '7701234567', 'counterparty-route', 'https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-route', 'ООО Route Buyer', '{}')
+            """,
+            (hash_password("secret123"),),
+        ).lastrowid
+        app.conn.commit()
+        session_id = create_customer_session(app.conn, customer_id)
+        auth_request = urllib.request.Request(base + "/business", headers={"Cookie": f"stamm_customer_session={session_id}"})
+        auth_body = urllib.request.urlopen(auth_request, timeout=5).read().decode("utf-8")
+        self.assertIn("Корзина", auth_body)
+        self.assertIn('/business#cart', auth_body)
+        self.assertIn("/api/public/business/catalog", auth_body)
 
         redirects = {"/business/": "/business", "/business/catalog/": "/business/catalog"}
         for path, expected_location in redirects.items():
             response = open_without_redirects(base + path)
             self.assertEqual(response.status, 303)
             self.assertEqual(response.headers["Location"], expected_location)
+
+    def test_media_assets_are_served_with_browser_cache_headers(self) -> None:
+        app = self.make_app()
+        media_dir = Path("var/media")
+        media_dir.mkdir(parents=True, exist_ok=True)
+        media_path = media_dir / "cache-test.svg"
+        media_path.write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'></svg>")
+        self.addCleanup(lambda: media_path.unlink(missing_ok=True))
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        response = urllib.request.urlopen(base + "/media/cache-test.svg", timeout=5)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.headers["Cache-Control"], "public, max-age=31536000, immutable")
+        self.assertIn("image/svg", response.headers["Content-Type"])
+        self.assertTrue(response.headers["ETag"])
+        self.assertTrue(response.headers["Last-Modified"])
+
+        request = urllib.request.Request(base + "/media/cache-test.svg", headers={"If-None-Match": response.headers["ETag"]})
+        with self.assertRaises(urllib.error.HTTPError) as raised:
+            urllib.request.urlopen(request, timeout=5)
+        self.assertEqual(raised.exception.code, 304)
+        self.assertEqual(raised.exception.headers["Cache-Control"], "public, max-age=31536000, immutable")
+
+    def test_maintenance_mode_closes_public_site_but_not_admin(self) -> None:
+        app = self.make_app()
+        save_public_content(
+            app.conn,
+            {
+                "maintenance_enabled": "1",
+                "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
+            },
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        for path in ("/", "/contacts", "/beer", "/business", "/visit", "/api/public/business/catalog"):
+            response = open_without_redirects(base + path)
+            self.assertEqual(response.status, 503)
+            body = response.read().decode("utf-8")
+            self.assertIn("Сайт находится на технических работах", body)
+            self.assertIn("mailto:marketing@stammbeer.ru", body)
+
+        admin_login = urllib.request.urlopen(base + "/admin/login", timeout=5)
+        self.assertEqual(admin_login.status, 200)
+        self.assertIn("Вход", admin_login.read().decode("utf-8"))
+        admin_user = authenticate(app.conn, "admin", "1")
+        admin_cookie = cookie_header(create_session(app.conn, admin_user["id"]))
+        admin_public_request = urllib.request.Request(base + "/contacts", headers={"Cookie": admin_cookie})
+        opener = urllib.request.build_opener(NoRedirect)
+        try:
+            opener.open(admin_public_request, timeout=5)
+            self.fail("Public contacts must remain behind maintenance even with an admin cookie")
+        except urllib.error.HTTPError as exc:
+            self.assertEqual(exc.status, 503)
+            self.assertIn("Сайт находится на технических работах", exc.read().decode("utf-8"))
 
     def test_public_catalog_api_endpoint_returns_local_data(self) -> None:
         app = self.make_app()
@@ -845,12 +1617,31 @@ class CoreFoundationTest(unittest.TestCase):
         thread.start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
+        from app.modules.auth.security import hash_password
+        customer_id = app.conn.execute(
+            """
+            INSERT INTO customer_accounts (email, password_hash, inn, counterparty_id, counterparty_href, counterparty_name, counterparty_meta_json)
+            VALUES ('catalog-buyer@example.com', ?, '7701234567', 'counterparty-catalog', 'https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-catalog', 'ООО Catalog Buyer', '{}')
+            """,
+            (hash_password("secret123"),),
+        ).lastrowid
+        app.conn.commit()
+        session_id = create_customer_session(app.conn, customer_id)
         url = f"http://127.0.0.1:{server.server_port}/api/public/business/catalog?containerType=keg"
-        payload = urllib.request.urlopen(url, timeout=5).read().decode("utf-8")
+        anonymous = open_without_redirects(url)
+        self.assertEqual(anonymous.code, 401)
+        self.assertIn("Чтобы стать нашим партнёром", anonymous.read().decode("utf-8"))
+        payload = urllib.request.urlopen(urllib.request.Request(url, headers={"Cookie": f"stamm_customer_session={session_id}"}), timeout=5).read().decode("utf-8")
         data = json.loads(payload)
         self.assertEqual(data["meta"]["source"], "local_read_model")
         self.assertEqual(len(data["items"]), 1)
-        self.assertEqual(data["items"][0]["name"], "Stamm IPA Keg")
+        item = data["items"][0]
+        self.assertEqual(item["name"], "Stamm IPA Keg")
+        self.assertEqual(item["containerType"], "keg")
+        self.assertEqual(item["price"]["label"], "123 ₽")
+        self.assertEqual(item["availability"]["quantity"], 10)
+        self.assertEqual(item["orderRules"]["maxQuantity"], 10)
+        self.assertIn("productId", item)
         self.assertEqual(data["meta"]["minimumOrder"]["amountMinor"], 1500000)
 
     def test_public_business_order_api_enforces_minimum_and_can_boxes(self) -> None:
@@ -859,7 +1650,7 @@ class CoreFoundationTest(unittest.TestCase):
         can_id = self.add_catalog_item(app, "Stamm Pale Ale 0,45 Can", "keg", "stamm-pale-ale-can")
         can_href = "https://api.moysklad.ru/api/remap/1.2/entity/product/can-1"
         app.conn.execute("UPDATE business_catalog_items SET price_minor = 500000 WHERE product_id IN (?, ?)", (keg_id, can_id))
-        app.conn.execute("UPDATE products SET external_href = ? WHERE id = ?", (can_href, can_id))
+        app.conn.execute("UPDATE products SET external_href = ?, stock_quantity = 24 WHERE id = ?", (can_href, can_id))
         from app.modules.auth.security import hash_password
         customer_id = app.conn.execute(
             """
@@ -997,6 +1788,19 @@ class CoreFoundationTest(unittest.TestCase):
         invalid_can_response = open_without_redirects(invalid_can)
         self.assertEqual(invalid_can_response.status, 400)
         self.assertIn("коробками по 12", invalid_can_response.read().decode("utf-8"))
+
+        too_many = urllib.request.Request(
+            base + "/api/public/business/order",
+            data=json.dumps({"items": [{"productId": can_id, "quantity": 36}]}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Cookie": f"stamm_customer_session={session_id}"},
+            method="POST",
+        )
+        too_many_response = open_without_redirects(too_many)
+        self.assertEqual(too_many_response.status, 400)
+        too_many_payload = too_many_response.read().decode("utf-8")
+        self.assertIn("Нельзя заказать больше доступного количества", too_many_payload)
+        self.assertNotIn("доступно только 24", too_many_payload)
+        self.assertIn("availableQuantity", too_many_payload)
 
         valid = urllib.request.Request(
             base + "/api/public/business/order",
@@ -1234,7 +2038,7 @@ class CoreFoundationTest(unittest.TestCase):
             publish_product(app.conn, unavailable_id, True)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 1)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_jobs WHERE status = 'success'").fetchone()[0], 2)
-        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_logs").fetchone()[0], 5)
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_logs").fetchone()[0], 4)
 
         publish_product(app.conn, products[0]["id"], True)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 1)
@@ -1314,6 +2118,46 @@ class CoreFoundationTest(unittest.TestCase):
         product = admin_catalog_items(app.conn)[0]
         self.assertEqual(product["source_folder_href"], grandchild_href)
         self.assertEqual(product["container_type"], "can")
+
+
+    def test_moysklad_auto_sync_status_uses_interval_and_compact_history(self) -> None:
+        app = self.make_app()
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "token",
+                "store_href": "https://api.moysklad.ru/api/remap/1.2/entity/store/store-1",
+                "source_product_folder_href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "60",
+                "stock_sync_interval_minutes": "30",
+                "is_enabled": True,
+            },
+            None,
+        )
+        app.conn.execute(
+            """
+            INSERT INTO moysklad_sync_jobs (type, status, trigger_source, started_at, finished_at, error_summary)
+            VALUES
+              ('auto_catalog', 'success', 'auto', '2999-07-01T10:00:00Z', '2999-07-01T10:01:00Z', NULL),
+              ('auto_catalog', 'failed', 'auto', '2026-07-01T09:00:00Z', '2026-07-01T09:01:00Z', 'ошибка авторизации'),
+              ('auto_catalog', 'success', 'auto', '2026-07-01T08:00:00Z', '2026-07-01T08:01:00Z', NULL),
+              ('auto_catalog', 'success', 'auto', '2026-07-01T07:00:00Z', '2026-07-01T07:01:00Z', NULL)
+            """
+        )
+        app.conn.commit()
+
+        history = compact_auto_sync_history(app.conn)
+        self.assertEqual(len(history), 3)
+        self.assertEqual(history[0]["status"], "success")
+        self.assertEqual(history[1]["error"], "ошибка авторизации")
+        status = auto_sync_status(app.conn)
+        self.assertTrue(status["enabled"])
+        self.assertTrue(status["configured"])
+        skipped = run_auto_catalog_sync_if_due(app.conn)
+        self.assertEqual(skipped["status"], "skipped")
+        self.assertEqual(skipped["reason"], "not_due")
 
     def test_moysklad_reference_refresh_and_selection_persist_api_entities(self) -> None:
         app = self.make_app()
@@ -1558,6 +2402,28 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIsNotNone(loaded)
         self.assertEqual(loaded["counterparty_name"], "ООО Штамм Партнёр")
         self.assertIsNone(current_user(app.conn, cookie))
+        order_id = app.conn.execute(
+            """
+            INSERT INTO b2b_orders (
+                number, status, contact_name, company_name, inn, email, phone, city,
+                total_minor, currency, source_json, customer_account_id, counterparty_href
+            ) VALUES (
+                'B2B-LK-1', 'sent_to_moysklad', 'partner@example.com', 'ООО Штамм Партнёр',
+                '7701234567', 'partner@example.com', '—', '—', 1250000, 'RUB', '{}', ?, ?
+            )
+            """,
+            (customer["id"], customer["counterparty_href"]),
+        ).lastrowid
+        app.conn.execute(
+            """
+            INSERT INTO b2b_order_items (
+                order_id, product_id, variant_id, quantity, price_minor, line_total_minor,
+                product_snapshot_json, availability_snapshot_json
+            ) VALUES (?, NULL, NULL, 24, 50000, 1200000, ?, '{}')
+            """,
+            (order_id, json.dumps({"name": "Stamm IPA банка"}, ensure_ascii=False)),
+        )
+        app.conn.commit()
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -1569,12 +2435,82 @@ class CoreFoundationTest(unittest.TestCase):
         request = urllib.request.Request(base + "/account", headers={"Cookie": cookie})
         page_html = urllib.request.urlopen(request, timeout=5).read().decode("utf-8")
         self.assertIn("ООО Штамм Партнёр", page_html)
-        self.assertIn("Контрагент МойСклад найден", page_html)
-        self.assertIn("Диагностика скидки МойСклад", page_html)
+        self.assertIn("История заказов", page_html)
+        self.assertIn("Заказ 1", page_html)
+        self.assertIn("max-height:420px; overflow-y:auto", page_html)
+        self.assertIn("overscroll-behavior:contain", page_html)
+        self.assertNotIn("B2B-LK-1", page_html)
+        self.assertIn("Stamm IPA банка", page_html)
+        self.assertIn("Смена пароля", page_html)
+        self.assertIn("Забыл пароль", page_html)
+        self.assertIn("Выйти", page_html)
+        self.assertIn("account-actions account-actions--single-row", page_html)
+        self.assertIn('form="logoutForm"', page_html)
+        self.assertNotIn("Здесь собраны данные B2B-аккаунта, история заказов и управление паролем.", page_html)
+        self.assertIn('form="forgotPasswordForm"', page_html)
+        self.assertIn('action="/account/password-reset"', page_html)
+        self.assertNotIn("Контрагент МойСклад найден", page_html)
+        self.assertNotIn("Диагностика скидки МойСклад", page_html)
+        self.assertNotIn("Персональный тип цен", page_html)
+        self.assertNotIn("Персональная скидка", page_html)
+        self.assertNotIn("Обновлена", page_html)
+        self.assertNotIn("Статус связи", page_html)
+        self.assertNotIn("Статус: sent_to_moysklad", page_html)
+        self.assertNotIn("2026-06-29T", page_html)
+        app.conn.execute("UPDATE customer_accounts SET discount_percent = 7.5, discount_synced_at = '2026-06-29T00:00:00Z' WHERE id = ?", (customer["id"],))
+        app.conn.commit()
+        discounted_html = urllib.request.urlopen(request, timeout=5).read().decode("utf-8")
+        self.assertIn("Персональная скидка", discounted_html)
+        self.assertIn("7.5%", discounted_html)
+        bad_password = open_without_redirects(
+            urllib.request.Request(
+                base + "/account/password",
+                data=urllib.parse.urlencode({"current_password": "wrong", "new_password": "newsecret123", "new_password_confirm": "newsecret123"}).encode("utf-8"),
+                headers={"Cookie": cookie},
+                method="POST",
+            )
+        )
+        self.assertEqual(bad_password.code, 303)
+        self.assertIn("password_error", bad_password.headers["Location"])
+        ok_password = open_without_redirects(
+            urllib.request.Request(
+                base + "/account/password",
+                data=urllib.parse.urlencode({"current_password": "secret123", "new_password": "newsecret123", "new_password_confirm": "newsecret123"}).encode("utf-8"),
+                headers={"Cookie": cookie},
+                method="POST",
+            )
+        )
+        self.assertEqual(ok_password.code, 303)
+        self.assertIn("password_result", ok_password.headers["Location"])
+        self.assertIsNotNone(authenticate_customer(app.conn, "partner@example.com", "newsecret123", refresh_discount=False))
 
         anonymous = open_without_redirects(base + "/account")
         self.assertEqual(anonymous.code, 303)
         self.assertEqual(anonymous.headers["Location"], "/account/login")
+
+        save_public_content(
+            app.conn,
+            {
+                "maintenance_enabled": "1",
+                "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
+            },
+        )
+        logout_response = open_without_redirects(
+            urllib.request.Request(
+                base + "/account/logout",
+                data=b"",
+                headers={"Cookie": cookie},
+                method="POST",
+            )
+        )
+        self.assertEqual(logout_response.code, 303)
+        self.assertEqual(logout_response.headers["Location"], "/account/login")
+        self.assertIn("stamm_customer_session=;", logout_response.headers["Set-Cookie"])
+        maintenance_login = open_without_redirects(base + "/account/login")
+        self.assertEqual(maintenance_login.status, 503)
+        maintenance_body = maintenance_login.read().decode("utf-8")
+        self.assertIn("Сайт находится на технических работах", maintenance_body)
+        self.assertIn("mailto:marketing@stammbeer.ru", maintenance_body)
 
     def test_public_catalog_applies_customer_discount_without_changing_base_catalog_price(self) -> None:
         app = self.make_app()
@@ -1708,13 +2644,13 @@ class CoreFoundationTest(unittest.TestCase):
         self.addCleanup(server.shutdown)
         base = f"http://127.0.0.1:{server.server_port}"
 
-        guest = json.loads(urllib.request.urlopen(base + "/api/public/business/catalog", timeout=5).read().decode("utf-8"))
+        guest_response = open_without_redirects(base + "/api/public/business/catalog")
+        self.assertEqual(guest_response.code, 401)
         request_a = urllib.request.Request(base + "/api/public/business/catalog", headers={"Cookie": f"stamm_customer_session={session_a}"})
         request_b = urllib.request.Request(base + "/api/public/business/catalog", headers={"Cookie": f"stamm_customer_session={session_b}"})
         response_a = json.loads(urllib.request.urlopen(request_a, timeout=5).read().decode("utf-8"))
         response_b = json.loads(urllib.request.urlopen(request_b, timeout=5).read().decode("utf-8"))
 
-        self.assertEqual(guest["items"][0]["price"]["amountMinor"], 12300)
         self.assertEqual(response_a["items"][0]["price"]["amountMinor"], 9800)
         self.assertEqual(response_b["items"][0]["price"]["amountMinor"], 8700)
         self.assertEqual(response_a["meta"]["customerPriceType"]["name"], "B2B A")
