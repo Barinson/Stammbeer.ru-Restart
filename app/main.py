@@ -6,6 +6,8 @@ import re
 import sqlite3
 import urllib.parse
 import uuid
+import email.utils
+from datetime import timezone
 from pathlib import Path
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -178,12 +180,57 @@ class StammApp:
                 self.end_headers()
                 self.wfile.write(payload)
 
-            def send_bytes(self, payload: bytes, content_type: str = "application/octet-stream", status: HTTPStatus = HTTPStatus.OK) -> None:
+            def send_bytes(
+                self,
+                payload: bytes,
+                content_type: str = "application/octet-stream",
+                status: HTTPStatus = HTTPStatus.OK,
+                headers: dict[str, str] | None = None,
+            ) -> None:
                 self.send_response(status)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(payload)))
+                for key, value in (headers or {}).items():
+                    self.send_header(key, value)
                 self.end_headers()
                 self.wfile.write(payload)
+
+            def send_media_file(self, media_path: Path) -> None:
+                stat = media_path.stat()
+                etag = f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+                last_modified = email.utils.formatdate(stat.st_mtime, usegmt=True)
+                cache_headers = {
+                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "ETag": etag,
+                    "Last-Modified": last_modified,
+                }
+                if_none_match = self.headers.get("If-None-Match", "")
+                etags = {item.strip() for item in if_none_match.split(",") if item.strip()}
+                if etag in etags or "*" in etags:
+                    self.send_response(HTTPStatus.NOT_MODIFIED)
+                    for key, value in cache_headers.items():
+                        self.send_header(key, value)
+                    self.end_headers()
+                    return
+                if_modified_since = self.headers.get("If-Modified-Since")
+                if if_modified_since:
+                    try:
+                        modified_since = email.utils.parsedate_to_datetime(if_modified_since)
+                        if modified_since.tzinfo is None:
+                            modified_since = modified_since.replace(tzinfo=timezone.utc)
+                        if int(modified_since.timestamp()) >= int(stat.st_mtime):
+                            self.send_response(HTTPStatus.NOT_MODIFIED)
+                            for key, value in cache_headers.items():
+                                self.send_header(key, value)
+                            self.end_headers()
+                            return
+                    except (TypeError, ValueError, OverflowError):
+                        pass
+                self.send_bytes(
+                    media_path.read_bytes(),
+                    mimetypes.guess_type(str(media_path))[0] or "application/octet-stream",
+                    headers=cache_headers,
+                )
 
             def redirect(self, location: str, headers: dict[str, str] | None = None) -> None:
                 self.send_response(HTTPStatus.SEE_OTHER)
@@ -278,7 +325,7 @@ class StammApp:
                 if path.startswith("/media/"):
                     media_path = Path("var/media") / path.removeprefix("/media/")
                     if media_path.exists() and media_path.is_file() and media_path.resolve().is_relative_to(Path("var/media").resolve()):
-                        self.send_bytes(media_path.read_bytes(), mimetypes.guess_type(str(media_path))[0] or "application/octet-stream")
+                        self.send_media_file(media_path)
                     else:
                         self.send_html(page("404", "<main class='login'><div class='card'>Файл не найден.</div></main>"), HTTPStatus.NOT_FOUND)
                     return
