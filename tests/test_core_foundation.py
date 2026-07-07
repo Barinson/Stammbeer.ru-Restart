@@ -1534,6 +1534,34 @@ class CoreFoundationTest(unittest.TestCase):
             self.assertEqual(response.status, 303)
             self.assertEqual(response.headers["Location"], expected_location)
 
+    def test_media_assets_are_served_with_browser_cache_headers(self) -> None:
+        app = self.make_app()
+        media_dir = Path("var/media")
+        media_dir.mkdir(parents=True, exist_ok=True)
+        media_path = media_dir / "cache-test.svg"
+        media_path.write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'></svg>")
+        self.addCleanup(lambda: media_path.unlink(missing_ok=True))
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        response = urllib.request.urlopen(base + "/media/cache-test.svg", timeout=5)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.headers["Cache-Control"], "public, max-age=31536000, immutable")
+        self.assertIn("image/svg", response.headers["Content-Type"])
+        self.assertTrue(response.headers["ETag"])
+        self.assertTrue(response.headers["Last-Modified"])
+
+        request = urllib.request.Request(base + "/media/cache-test.svg", headers={"If-None-Match": response.headers["ETag"]})
+        with self.assertRaises(urllib.error.HTTPError) as raised:
+            urllib.request.urlopen(request, timeout=5)
+        self.assertEqual(raised.exception.code, 304)
+        self.assertEqual(raised.exception.headers["Cache-Control"], "public, max-age=31536000, immutable")
+
     def test_maintenance_mode_closes_public_site_but_not_admin(self) -> None:
         app = self.make_app()
         save_public_content(
