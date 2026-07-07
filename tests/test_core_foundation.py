@@ -915,6 +915,7 @@ class CoreFoundationTest(unittest.TestCase):
                 "beer_core_is_visible": "1",
                 "beer_seasonal_is_visible": "1",
                 "menu_offset_beer_px": "232",
+                "menu_mobile_offset_beer_px": "118",
                 "beer_untappd_logo_url": "/media/untappd-global.svg",
                 "beer_popup_backdrop_color": "#123456",
                 "beer_popup_backdrop_opacity": "45",
@@ -966,13 +967,14 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("background-attachment:scroll, fixed", html)
         self.assertIn("max-height:58px", html)
         self.assertIn("grid-template-columns:repeat(3,minmax(72px,1fr))", html)
-        self.assertIn("width:min(1320px,100%)", html)
-        self.assertIn("display:grid; grid-template-columns:repeat(auto-fit,minmax(72px,132px)); justify-content:center", html)
+        self.assertIn("width:min(1180px,100%)", html)
+        self.assertIn("display:grid; grid-template-columns:repeat(8,minmax(72px,132px)); justify-content:center", html)
         self.assertIn("width:100%; max-width:132px; min-width:0; justify-self:center", html)
-        self.assertIn(".seasonal-grid { width:min(100%,360px); grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px 6px; }", html)
-        self.assertIn(".seasonal-grid .beer-can { width:100%; max-width:54px; min-width:0; }", html)
+        self.assertIn(".seasonal-grid { width:min(100%,360px); display:flex; flex-wrap:wrap; justify-content:center; gap:8px 6px; }", html)
+        self.assertIn(".seasonal-grid .beer-can { flex:0 0 calc((100% - 24px) / 5); width:auto; max-width:54px; min-width:0; }", html)
         self.assertNotIn("product-subsection--new", html)
         self.assertIn("--menu-offset:232px", html)
+        self.assertIn("--menu-mobile-offset:118px", html)
         self.assertIn(".partner-card:hover img", html)
         self.assertNotIn("min-height:132px", html)
         self.assertIn("beer-can--featured", html)
@@ -1166,6 +1168,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Типографика", admin_content_html)
         self.assertIn("typography_product_title_font_size_px", admin_content_html)
         self.assertIn("menu_offset_home_px", admin_content_html)
+        self.assertIn("menu_mobile_offset_home_px", admin_content_html)
+        self.assertIn("Мобильные отступы от верхнего меню", admin_content_html)
         self.assertIn("Отступ контента от меню — Пиво", admin_content_html)
         self.assertIn("section_bg_home_file", admin_content_html)
         self.assertIn("section_bg_beer_file", admin_content_html)
@@ -1251,6 +1255,9 @@ class CoreFoundationTest(unittest.TestCase):
             field("menu_offset_home_px", "210"), field("menu_offset_beer_px", "230"),
             field("menu_offset_visit_px", "190"), field("menu_offset_history_px", "200"),
             field("menu_offset_business_px", "240"), field("menu_offset_contacts_px", "220"),
+            field("menu_mobile_offset_home_px", "96"), field("menu_mobile_offset_beer_px", "98"),
+            field("menu_mobile_offset_visit_px", "92"), field("menu_mobile_offset_history_px", "94"),
+            field("menu_mobile_offset_business_px", "100"), field("menu_mobile_offset_contacts_px", "97"),
             field("section_bg_home_url", ""), file_field("section_bg_home_file", "bg-home.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_home_enabled", "1"),
             field("section_bg_beer_url", ""), file_field("section_bg_beer_file", "bg-beer.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_beer_enabled", "1"),
             field("section_bg_business_url", ""), file_field("section_bg_business_file", "bg-business.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='900'></svg>"), field("section_bg_business_enabled", "1"),
@@ -1322,6 +1329,9 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("--stamm-product-title-font-size:20px", business_storefront_page(content))
         self.assertIn("--stamm-price-font-size:24px", business_storefront_page(content))
         self.assertEqual(content["layout"]["menu_offset_home_px"], "210")
+        self.assertEqual(content["layout"]["menu_mobile_offset_home_px"], "96")
+        self.assertIn("--menu-offset:210px", home_page(content))
+        self.assertIn("--menu-mobile-offset:96px", home_page(content))
         self.assertTrue(content["beer"]["beer_untappd_logo_url"].startswith("/media/beer-untappd-"))
         self.assertEqual(content["beer"]["beer_popup_backdrop_color"], "#224466")
         self.assertEqual(content["beer"]["beer_popup_backdrop_opacity"], "35")
