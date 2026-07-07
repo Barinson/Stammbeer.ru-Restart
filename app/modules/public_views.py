@@ -101,7 +101,7 @@ BASE_CSS = """
     body.mobile-nav-open .mobile-drawer { pointer-events:auto; }
     body.mobile-nav-open .mobile-drawer__backdrop { opacity:1; }
     body.mobile-nav-open .mobile-drawer__panel { transform:translateX(0); }
-    .top-nav + main { padding-top:var(--menu-offset,176px); }
+    .top-nav + main { padding-top:var(--menu-offset,176px) !important; }
     body.age-gate-pending { overflow:hidden; }
     .age-gate { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at 50% 25%, rgba(199,177,102,.16), transparent 30%), rgba(11,63,64,.96); backdrop-filter:blur(14px); }
     .age-gate.is-hidden { display:none; }
@@ -119,7 +119,7 @@ BASE_CSS = """
       .nav-links a { flex:1 1 max-content; min-width:max-content; text-align:center; }
       .nav-actions { margin-left:auto; gap:6px; }
       .nav-icon { width:28px; height:28px; font-size:9px; }
-      .top-nav + main { padding-top:var(--menu-mobile-offset,var(--mobile-menu-offset)); }
+      .top-nav + main { padding-top:var(--menu-mobile-offset,var(--mobile-menu-offset)) !important; }
     }
     @media (max-width:560px) {
       :root { --mobile-menu-offset:104px; --stamm-nav-font-size:11px; --stamm-body-font-size:14px; --stamm-lead-font-size:15px; --stamm-page-title-font-size:30px; --stamm-section-title-font-size:22px; }
@@ -492,7 +492,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    body.home-body .top-nav + main {{ padding-top:var(--menu-offset,176px); }}
+    body.home-body .top-nav + main {{ padding-top:var(--menu-offset,176px) !important; }}
     .home-hero {{ min-height:100vh; display:grid; place-items:center; text-align:center; padding:104px min(6vw,72px) 72px; background:radial-gradient(circle at 50% 16%, rgba(199,177,102,.18), transparent 28%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
     .home-hero__inner {{ display:grid; justify-items:center; gap:0; }}
     .home-logo {{ max-width:154px; max-height:154px; object-fit:contain; margin-bottom:28px; }}
@@ -510,7 +510,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
     .news-card__image--fallback {{ background:radial-gradient(circle at 50% 40%, rgba(199,177,102,.35), transparent 35%), linear-gradient(135deg, rgba(246,241,227,.08), rgba(16,88,89,.4)); }}
     .news-card h2 {{ margin:0 0 14px; color:var(--white); font-size:var(--stamm-section-title-font-size,26px); line-height:1.08; }}
     .news-card p {{ margin:0; color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-body-font-size,16px); white-space:pre-line; }}
-    @media (max-width:760px) {{ body.home-body .top-nav + main {{ padding-top:0; }} .home-hero {{ min-height:88vh; padding:132px 18px 54px; }} .home-title {{ font-size:clamp(44px,16vw,66px); line-height:.82; }} .home-subtitle {{ font-size:clamp(18px,6vw,26px); letter-spacing:.14em; }} .home-content {{ background-size:cover, cover; background-position:center, center; background-attachment:scroll, fixed; }} .home-news {{ min-height:auto; padding:56px 18px; }} .news-card {{ grid-template-columns:1fr; gap:20px; }} .home-logo {{ max-width:96px; max-height:96px; margin-bottom:18px; }} .news-card__image {{ border-radius:18px; }} }}
+    @media (max-width:760px) {{ body.home-body .top-nav + main {{ padding-top:var(--menu-mobile-offset,104px) !important; }} .home-hero {{ min-height:88vh; padding:132px 18px 54px; }} .home-title {{ font-size:clamp(44px,16vw,66px); line-height:.82; }} .home-subtitle {{ font-size:clamp(18px,6vw,26px); letter-spacing:.14em; }} .home-content {{ background-size:cover, cover; background-position:center, center; background-attachment:scroll, fixed; }} .home-news {{ min-height:auto; padding:56px 18px; }} .news-card {{ grid-template-columns:1fr; gap:20px; }} .home-logo {{ max-width:96px; max-height:96px; margin-bottom:18px; }} .news-card__image {{ border-radius:18px; }} }}
   </style>
 </head>
 <body class="home-body">
