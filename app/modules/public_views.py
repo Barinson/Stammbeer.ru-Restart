@@ -88,8 +88,11 @@ BASE_CSS = """
     .mobile-menu-toggle { border:1px solid rgba(199,177,102,.36); border-radius:12px; width:34px; height:34px; padding:0; background:rgba(246,241,227,.08); color:var(--golden-malt); cursor:pointer; place-items:center; }
     .mobile-menu-toggle span, .mobile-menu-toggle::before, .mobile-menu-toggle::after { content:""; display:block; width:15px; height:2px; border-radius:999px; background:currentColor; }
     .mobile-menu-toggle span { margin:4px 0; }
+    .mobile-menu-toggle--image { border-color:rgba(199,177,102,.28); background:transparent; overflow:hidden; }
+    .mobile-menu-toggle--image span, .mobile-menu-toggle--image::before, .mobile-menu-toggle--image::after { display:none; }
+    .mobile-menu-toggle img { width:100%; height:100%; object-fit:contain; display:block; }
     .mobile-drawer__backdrop { position:absolute; inset:0; background:rgba(7,34,35,.54); opacity:0; transition:opacity .18s ease; }
-    .mobile-drawer__panel { position:absolute; top:0; bottom:0; left:0; width:min(78vw,304px); padding:84px 20px 24px; background:linear-gradient(180deg, rgba(13,75,76,.98), rgba(11,63,64,.98)); border-right:1px solid rgba(199,177,102,.22); box-shadow:18px 0 50px rgba(0,0,0,.28); transform:translateX(-104%); transition:transform .22s ease; }
+    .mobile-drawer__panel { position:absolute; top:0; bottom:0; left:0; width:min(64vw,220px); padding:78px 16px 22px; background:linear-gradient(180deg, rgba(13,75,76,.98), rgba(11,63,64,.98)); border-right:1px solid rgba(199,177,102,.22); box-shadow:18px 0 50px rgba(0,0,0,.28); transform:translateX(-104%); transition:transform .22s ease; }
     .mobile-drawer__close { position:absolute; top:18px; right:18px; width:32px; height:32px; border:1px solid rgba(199,177,102,.34); border-radius:999px; background:rgba(246,241,227,.08); color:var(--golden-malt); font-size:20px; line-height:1; cursor:pointer; }
     .mobile-drawer__links { display:grid; gap:8px; }
     .mobile-drawer__links a { display:block; padding:12px 0; border-bottom:1px solid rgba(199,177,102,.14); color:rgba(246,241,227,.88); text-decoration:none; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
@@ -178,6 +181,10 @@ def typography_style(content: dict[str, Any] | None = None) -> str:
 
 def public_nav(active: str, content: dict[str, Any] | None = None) -> str:
     site_content = public_content_or_defaults(content)
+    site = site_content.get("site") or {}
+    mobile_menu_icon_url = str(site.get("mobile_menu_icon_url") or "").strip()
+    mobile_menu_icon = f'<img src="{escape(mobile_menu_icon_url)}" alt="">' if mobile_menu_icon_url else "<span></span>"
+    mobile_menu_class = "mobile-menu-toggle mobile-menu-toggle--image" if mobile_menu_icon_url else "mobile-menu-toggle"
     links = "".join(
         f'<a class="{"is-active" if item.get("key") == active else ""}" href="{escape(str(item.get("href") or "#"))}">{escape(str(item.get("label") or ""))}</a>'
         for item in site_content["menu"]
@@ -199,7 +206,7 @@ def public_nav(active: str, content: dict[str, Any] | None = None) -> str:
     actions = "".join(action_links)
     return f"""
   <nav class="top-nav" aria-label="Главная навигация">
-    <button class="mobile-menu-toggle" type="button" aria-label="Открыть меню" aria-controls="mobileNavDrawer" aria-expanded="false"><span></span></button>
+    <button class="{mobile_menu_class}" type="button" aria-label="Открыть меню" aria-controls="mobileNavDrawer" aria-expanded="false">{mobile_menu_icon}</button>
     <a class="brand" href="/">Stamm Brewing</a>
     <div class="nav-links">{links}</div>
     <div class="nav-actions" aria-label="Быстрые ссылки">{actions}</div>

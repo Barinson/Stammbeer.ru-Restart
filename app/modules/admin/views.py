@@ -418,6 +418,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
     site_description = str(site.get("site_description") or "Stamm Brewing — независимая крафтовая пивоварня, пиво, партнёры и контакты.")
     site_favicon_url = str(site.get("site_favicon_url") or "")
     site_og_image_url = str(site.get("site_og_image_url") or "")
+    mobile_menu_icon_url = str(site.get("mobile_menu_icon_url") or "")
     age_gate_title = str(site.get("age_gate_title") or "Вам есть 18+?")
     age_gate_text = str(site.get("age_gate_text") or "Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет")
     age_gate_title_font_size = str(site.get("age_gate_title_font_size_px") or "48")
@@ -874,6 +875,10 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               {f"<p><img src='{escape(site_og_image_url)}' alt='OG image' style='max-width:220px; max-height:120px; object-fit:contain; border-radius:12px;'></p>" if site_og_image_url else "<p class='muted'>OG image не загружен. Если пусто, для og:image будет использован favicon при наличии.</p>"}
               <input type="hidden" name="site_og_image_url" value="{escape(site_og_image_url)}">
               <input name="site_og_image_file" type="file" accept="image/*">
+              <label>Иконка кнопки мобильного меню</label>
+              {f"<p><img src='{escape(mobile_menu_icon_url)}' alt='Mobile menu icon' style='width:42px; height:42px; object-fit:contain; border-radius:10px;'></p>" if mobile_menu_icon_url else "<p class='muted'>Если не загружена, используется стандартный hamburger.</p>"}
+              <input type="hidden" name="mobile_menu_icon_url" value="{escape(mobile_menu_icon_url)}">
+              <input name="mobile_menu_icon_file" type="file" accept="image/*">
             </div>
             <div class="card">
               <h3>Окно 18+</h3>

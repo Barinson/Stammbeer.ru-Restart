@@ -65,6 +65,7 @@ SITE_DEFAULTS = {
     "site_description": "Stamm Brewing — независимая крафтовая пивоварня, пиво, партнёры и контакты.",
     "site_favicon_url": "",
     "site_og_image_url": "",
+    "mobile_menu_icon_url": "",
     "age_gate_title": "Вам есть 18+?",
     "age_gate_text": "Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет",
     "age_gate_title_font_size_px": "48",

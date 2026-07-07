@@ -589,6 +589,7 @@ class CoreFoundationTest(unittest.TestCase):
                 "site_description": "Тестовое описание Stamm для поиска.",
                 "site_favicon_url": "/media/favicon.svg",
                 "site_og_image_url": "/media/og.jpg",
+                "mobile_menu_icon_url": "/media/mobile-menu.svg",
                 "business_min_order_amount_minor": "2500000",
                 "business_guest_text": "Партнёрам — напишите на marketing@stammbeer.ru",
                 "business_guest_font_size_px": "28",
@@ -792,9 +793,12 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn(".top-nav { position:fixed; align-items:center; flex-direction:row; flex-wrap:wrap", html)
         self.assertIn(".nav-links a { flex:1 1 max-content; min-width:max-content; text-align:center; }", html)
         self.assertIn("mobile-menu-toggle", html)
+        self.assertIn('class="mobile-menu-toggle mobile-menu-toggle--image"', html)
+        self.assertIn('/media/mobile-menu.svg', html)
         self.assertIn('aria-controls="mobileNavDrawer"', html)
         self.assertIn('id="mobileNavDrawer"', html)
         self.assertIn("mobile-drawer__links", html)
+        self.assertIn("width:min(64vw,220px)", html)
         self.assertIn(".top-nav { display:grid; grid-template-columns:34px minmax(0,1fr) auto", html)
         self.assertIn(".nav-links { display:none; }", html)
         self.assertIn('document.body.classList.toggle("mobile-nav-open", isOpen)', html)
@@ -1132,6 +1136,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("site_description", admin_content_html)
         self.assertIn("site_favicon_file", admin_content_html)
         self.assertIn("site_og_image_file", admin_content_html)
+        self.assertIn("mobile_menu_icon_file", admin_content_html)
         self.assertIn("age_gate_text_font_size_px", admin_content_html)
         self.assertIn("age_gate_text_font_weight", admin_content_html)
         self.assertIn("maintenance_font_size_px", admin_content_html)
@@ -1194,6 +1199,8 @@ class CoreFoundationTest(unittest.TestCase):
             file_field("site_favicon_file", "favicon.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'></svg>"),
             field("site_og_image_url", ""),
             file_field("site_og_image_file", "og.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='630'></svg>"),
+            field("mobile_menu_icon_url", ""),
+            file_field("mobile_menu_icon_file", "mobile-menu.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'></svg>"),
             field("business_min_order_amount_minor", "2500000"),
             field("business_guest_text", "Админский текст для партнёров"),
             field("business_guest_font_size_px", "26"),
@@ -1286,6 +1293,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertTrue(content["home"]["home_content_bg_url"].startswith("/media/home-content-bg-"))
         self.assertTrue(content["site"]["site_favicon_url"].startswith("/media/favicon-"))
         self.assertTrue(content["site"]["site_og_image_url"].startswith("/media/og-image-"))
+        self.assertTrue(content["site"]["mobile_menu_icon_url"].startswith("/media/mobile-menu-"))
         self.assertEqual(content["site"]["site_public_base_url"], "https://admin.example")
         self.assertEqual(content["site"]["site_title"], "Admin Stamm")
         self.assertTrue(content["site"]["maintenance_image_url"].startswith("/media/maintenance-"))
