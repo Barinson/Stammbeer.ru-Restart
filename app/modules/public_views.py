@@ -119,7 +119,7 @@ BASE_CSS = """
       .nav-links a { flex:1 1 max-content; min-width:max-content; text-align:center; }
       .nav-actions { margin-left:auto; gap:6px; }
       .nav-icon { width:28px; height:28px; font-size:9px; }
-      .top-nav + main { padding-top:var(--mobile-menu-offset); }
+      .top-nav + main { padding-top:var(--menu-mobile-offset,var(--mobile-menu-offset)); }
     }
     @media (max-width:560px) {
       :root { --mobile-menu-offset:104px; --stamm-nav-font-size:11px; --stamm-body-font-size:14px; --stamm-lead-font-size:15px; --stamm-page-title-font-size:30px; --stamm-section-title-font-size:22px; }
@@ -386,6 +386,17 @@ def menu_offset_px(content: dict[str, Any] | None, section: str, fallback: int =
     return f"{number}px"
 
 
+def menu_mobile_offset_px(content: dict[str, Any] | None, section: str, fallback: int = 104) -> str:
+    site_content = public_content_or_defaults(content)
+    layout = site_content.get("layout") or {}
+    raw_value = layout.get(f"menu_mobile_offset_{section}_px")
+    try:
+        number = max(0, min(320, int(str(raw_value or "").strip())))
+    except (TypeError, ValueError):
+        number = fallback
+    return f"{number}px"
+
+
 def section_background_style(content: dict[str, Any] | None, section: str, fallback_url: object = "") -> str:
     site_content = public_content_or_defaults(content)
     layout = site_content.get("layout") or {}
@@ -497,7 +508,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body class="home-body">
 {public_nav("home", site_content)}
-  <main style="--menu-offset:{menu_offset_px(site_content, 'home')};">
+  <main style="--menu-offset:{menu_offset_px(site_content, 'home')};--menu-mobile-offset:{menu_mobile_offset_px(site_content, 'home')};">
     <section class="home-hero" style="--home-title-size:{title_size}; --home-title-weight:{title_weight}; --home-subtitle-size:{subtitle_size}; --home-subtitle-weight:{subtitle_weight}; --home-line-gap:{line_gap};">
       <div class="home-hero__inner">
         {logo_markup}
@@ -986,7 +997,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("contacts", site_content)}
-  <main class="contacts-page" style="--menu-offset:{menu_offset_px(site_content, 'contacts')};{contacts_bg_style}">
+  <main class="contacts-page" style="--menu-offset:{menu_offset_px(site_content, 'contacts')};--menu-mobile-offset:{menu_mobile_offset_px(site_content, 'contacts')};{contacts_bg_style}">
     <section class="contacts-hero">
       <div class="contacts-card contacts-info-card">
         {description_markup}
@@ -1058,7 +1069,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     )
     beer_sections_html = "".join(section for _, _, section in beer_sections if section)
     beer_bg_url = str(site_content.get("home", {}).get("home_content_bg_url") or "")
-    beer_style_values = [f"--menu-offset:{menu_offset_px(site_content, 'beer')}"]
+    beer_style_values = [f"--menu-offset:{menu_offset_px(site_content, 'beer')}", f"--menu-mobile-offset:{menu_mobile_offset_px(site_content, 'beer')}"]
     beer_section_gap = css_section_gap_px(beer.get("beer_section_gap_px"), 72)
     beer_bg_style = section_background_style(site_content, "beer", beer_bg_url)
     if beer_bg_style:
@@ -1085,7 +1096,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .product-subsection {{ margin-top:28px; }}
     .product-subsection h3 {{ margin:0 0 18px; color:var(--foam); font-size:var(--stamm-section-title-font-size,28px); }}
     .new-grid {{ width:min(860px,100%); display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:28px; align-items:end; justify-items:center; margin:0 auto; }}
-    .seasonal-grid {{ width:min(1320px,100%); display:grid; grid-template-columns:repeat(auto-fit,minmax(72px,132px)); justify-content:center; align-items:end; gap:16px; margin:0 auto; }}
+    .seasonal-grid {{ width:min(1180px,100%); display:grid; grid-template-columns:repeat(8,minmax(72px,132px)); justify-content:center; align-items:end; gap:16px; margin:0 auto; }}
     .beer-can {{ border:0; background:transparent; color:var(--foam); cursor:pointer; display:grid; justify-items:center; gap:10px; font:inherit; font-weight:800; transition:transform .18s ease; }}
     .seasonal-grid .beer-can {{ width:100%; max-width:132px; min-width:0; justify-self:center; }}
     .beer-can:hover {{ transform:scale(1.045); }}
@@ -1103,9 +1114,9 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .untappd-link {{ display:inline-grid; place-items:center; margin-top:12px; text-decoration:none; }}
     .untappd-link img {{ width:42px; height:42px; object-fit:contain; transition:transform .18s ease, filter .18s ease; }}
     .untappd-link:hover img {{ transform:scale(1.06); filter:brightness(1.12); }}
-    @media (max-width:1100px) {{ .seasonal-grid {{ grid-template-columns:repeat(auto-fit,minmax(64px,104px)); }} }}
-    @media (max-width:760px) {{ .beer-page {{ padding:128px 16px 48px; background-size:cover, cover; background-position:center, center; background-attachment:scroll, fixed; }} .beer-shell {{ gap:clamp(34px,9vw,52px); }} .beer-section h1, .beer-section h2 {{ font-size:clamp(26px,8vw,32px); letter-spacing:.06em; }} .beer-section p {{ max-width:100%; margin-bottom:18px; font-size:15px; line-height:1.45; }} .partners-grid {{ width:100%; gap:12px 18px; }} .partner-card img {{ max-width:calc(var(--logo-size) * .72); max-height:58px; }} .partner-card__fallback {{ font-size:13px; }} .product-subsection {{ margin-top:22px; }} .product-subsection h3 {{ font-size:20px; margin-bottom:14px; }} .new-grid {{ grid-template-columns:repeat(3,minmax(72px,1fr)); gap:14px; }} .seasonal-grid {{ width:min(100%,360px); grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px 6px; }} .seasonal-grid .beer-can {{ width:100%; max-width:54px; min-width:0; }} .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:178px; }} .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:74px; }} .beer-modal__card {{ padding:24px 18px; border-radius:22px; }} .beer-modal h3 {{ font-size:24px; }} }}
-    @media (max-width:420px) {{ .new-grid {{ gap:10px; }} .seasonal-grid {{ gap:7px 5px; }} .seasonal-grid .beer-can {{ max-width:48px; }} .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:152px; }} .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:68px; }} }}
+    @media (max-width:1100px) {{ .seasonal-grid {{ grid-template-columns:repeat(8,minmax(58px,104px)); }} }}
+    @media (max-width:760px) {{ .beer-page {{ padding:128px 16px 48px; background-size:cover, cover; background-position:center, center; background-attachment:scroll, fixed; }} .beer-shell {{ gap:clamp(34px,9vw,52px); }} .beer-section h1, .beer-section h2 {{ font-size:clamp(26px,8vw,32px); letter-spacing:.06em; }} .beer-section p {{ max-width:100%; margin-bottom:18px; font-size:15px; line-height:1.45; }} .partners-grid {{ width:100%; gap:12px 18px; }} .partner-card img {{ max-width:calc(var(--logo-size) * .72); max-height:58px; }} .partner-card__fallback {{ font-size:13px; }} .product-subsection {{ margin-top:22px; }} .product-subsection h3 {{ font-size:20px; margin-bottom:14px; }} .new-grid {{ grid-template-columns:repeat(3,minmax(72px,1fr)); gap:14px; }} .seasonal-grid {{ width:min(100%,360px); display:flex; flex-wrap:wrap; justify-content:center; gap:8px 6px; }} .seasonal-grid .beer-can {{ flex:0 0 calc((100% - 24px) / 5); width:auto; max-width:54px; min-width:0; }} .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:178px; }} .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:74px; }} .beer-modal__card {{ padding:24px 18px; border-radius:22px; }} .beer-modal h3 {{ font-size:24px; }} }}
+    @media (max-width:420px) {{ .new-grid {{ gap:10px; }} .seasonal-grid {{ gap:7px 5px; }} .seasonal-grid .beer-can {{ flex-basis:calc((100% - 20px) / 5); max-width:48px; }} .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:152px; }} .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:68px; }} }}
   </style>
 </head>
 <body>
@@ -1232,7 +1243,7 @@ def gallery_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("history", site_content)}
-  <main class="gallery-page" style="--menu-offset:{menu_offset_px(site_content, 'history')};{gallery_bg_style}">
+  <main class="gallery-page" style="--menu-offset:{menu_offset_px(site_content, 'history')};--menu-mobile-offset:{menu_mobile_offset_px(site_content, 'history')};{gallery_bg_style}">
     <section class="gallery-shell">
       <div class="gallery-hero"><h1>{escape(title)}</h1>{description_html}</div>
       <div class="gallery-sections">{sections_html}</div>
@@ -1294,7 +1305,7 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
 </head>
 <body>
 {public_nav(active, site_content)}
-  <main class="placeholder" style="--menu-offset:{menu_offset_px(site_content, active)};{placeholder_bg_style}"><section class="placeholder__card"><h1>{title}</h1><p>Раздел будет собираться после ядра B2B-магазина и админки.</p></section></main>
+  <main class="placeholder" style="--menu-offset:{menu_offset_px(site_content, active)};--menu-mobile-offset:{menu_mobile_offset_px(site_content, active)};{placeholder_bg_style}"><section class="placeholder__card"><h1>{title}</h1><p>Раздел будет собираться после ядра B2B-магазина и админки.</p></section></main>
 {age_gate_markup(site_content)}
 </body>
 </html>"""
@@ -1324,7 +1335,7 @@ def business_guest_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("business", site_content)}
-  <main class="business-guest" style="--menu-offset:{menu_offset_px(site_content, 'business')}; --business-guest-font-size:{message_size}; --business-guest-font-weight:{message_weight};{business_bg_style}">
+  <main class="business-guest" style="--menu-offset:{menu_offset_px(site_content, 'business')};--menu-mobile-offset:{menu_mobile_offset_px(site_content, 'business')}; --business-guest-font-size:{message_size}; --business-guest-font-weight:{message_weight};{business_bg_style}">
     <p class="business-guest__message">{cms_text(message)}</p>
   </main>
 {age_gate_markup(site_content)}
@@ -1399,7 +1410,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
 </head>
 <body>
 {public_nav("business", content)}
-  <main class="wrap" style="--menu-offset:{menu_offset_px(site_content, 'business')};{business_bg_style}">
+  <main class="wrap" style="--menu-offset:{menu_offset_px(site_content, 'business')};--menu-mobile-offset:{menu_mobile_offset_px(site_content, 'business')};{business_bg_style}">
     <div class="toolbar">
       <div class="filters" aria-label="Фильтры каталога">
         <button class="filter is-active" data-filter="all">Все</button>

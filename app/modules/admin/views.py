@@ -558,6 +558,20 @@ def content_management_page(user_email: str, content: dict[str, object], result:
         """
         for key, label in menu_offset_tokens
     )
+    menu_mobile_offset_tokens = [
+        ("menu_mobile_offset_home_px", "Мобильный отступ контента — Главная"),
+        ("menu_mobile_offset_beer_px", "Мобильный отступ контента — Пиво"),
+        ("menu_mobile_offset_visit_px", "Мобильный отступ контента — Stammhaus / Посетить пивоварню"),
+        ("menu_mobile_offset_history_px", "Мобильный отступ контента — Галерея"),
+        ("menu_mobile_offset_business_px", "Мобильный отступ контента — Бизнес"),
+        ("menu_mobile_offset_contacts_px", "Мобильный отступ контента — Контакты"),
+    ]
+    menu_mobile_offset_rows = "".join(
+        f"""
+        <label>{escape(label)}<input name='{escape(key)}' type='number' min='0' max='320' value='{escape(str(layout.get(key) or '104'))}'></label>
+        """
+        for key, label in menu_mobile_offset_tokens
+    )
     section_bg_tokens = [
         ("home", "Главная"),
         ("beer", "Пиво"),
@@ -1073,8 +1087,11 @@ def content_management_page(user_email: str, content: dict[str, object], result:
                 <small>Label / подпись · цена · карточка товара · контакты</small>
               </div>
               <h3>Отступы от верхнего меню</h3>
-              <p class="muted">Каждый публичный раздел получает собственный отступ между фиксированным меню и началом контента. Изменение одного значения не влияет на остальные страницы.</p>
+              <p class="muted">Каждый публичный раздел получает собственный десктопный отступ между фиксированным меню и началом контента. Изменение одного значения не влияет на остальные страницы.</p>
               <div class="grid">{menu_offset_rows}</div>
+              <h4>Мобильные отступы от верхнего меню</h4>
+              <p class="muted">Отдельные значения для телефонов: они применяются только на мобильном брейкпоинте и не меняют десктопную композицию.</p>
+              <div class="grid">{menu_mobile_offset_rows}</div>
               <h3>Фоны контентных разделов</h3>
               <p class="muted">Каждый публичный раздел может иметь собственный фон основной контентной части. Очистите URL и сохраните, чтобы убрать фон; если файл не загружен, останется текущий фирменный fallback.</p>
               <div>{section_bg_rows}</div>
