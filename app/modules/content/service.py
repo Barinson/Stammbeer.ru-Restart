@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from typing import Any
 
@@ -25,10 +26,16 @@ CONTACT_DEFAULTS = {
     "contacts_emails_json": '[{"label":"Основной","value":"info@stammbeer.ru","sort_order":10,"is_visible":true},{"label":"Заказы","value":"order@stammbeer.ru","sort_order":20,"is_visible":true}]',
     "contacts_phones_json": '[{"label":"Офис","value":"+7 (000) 000-00-00","sort_order":10,"is_visible":true},{"label":"Отдел продаж","value":"+7 (000) 000-00-01","sort_order":20,"is_visible":true}]',
     "contacts_address": "Адрес завода Stamm Brewing",
+    "contacts_address_is_visible": "1",
+    "contacts_address_color": "",
     "contacts_description": "Свяжитесь с нами по вопросам заказов, сотрудничества и визитов на производство.",
+    "contacts_description_is_visible": "1",
+    "contacts_description_color": "",
     "contacts_map_lat": "55.7558",
     "contacts_map_lng": "37.6173",
     "contacts_map_zoom": "13",
+    "contacts_map_height_px": "240",
+    "contacts_map_width_px": "420",
     "contacts_map_title": "Stamm Brewing",
 }
 
@@ -47,12 +54,95 @@ TYPOGRAPHY_DEFAULTS = {
 
 BUSINESS_DEFAULTS = {
     "business_min_order_amount_minor": "1500000",
+    "business_guest_text": "Чтобы стать нашим партнёром, напишите на marketing@stammbeer.ru",
+    "business_guest_font_size_px": "22",
+    "business_guest_font_weight": "600",
+}
+
+SITE_DEFAULTS = {
+    "site_public_base_url": "https://stammbeer.ru",
+    "site_title": "Stamm Brewing",
+    "site_description": "Stamm Brewing — независимая крафтовая пивоварня, пиво, партнёры и контакты.",
+    "site_favicon_url": "",
+    "site_og_image_url": "",
+    "mobile_menu_icon_url": "",
+    "age_gate_title": "Вам есть 18+?",
+    "age_gate_text": "Сайт содержит информацию о продукции, предназначенной для лиц старше 18 лет",
+    "age_gate_title_font_size_px": "48",
+    "age_gate_title_font_weight": "900",
+    "age_gate_text_font_size_px": "18",
+    "age_gate_text_font_weight": "500",
+    "age_gate_confirm_label": "Да, мне есть 18",
+    "age_gate_deny_label": "Нет, мне нет 18",
+    "maintenance_enabled": "0",
+    "maintenance_text": "Сайт находится на технических работах, по всем вопросам пишите marketing@stammbeer.ru",
+    "maintenance_font_size_px": "24",
+    "maintenance_font_weight": "500",
+    "maintenance_image_url": "",
+}
+
+LAYOUT_DEFAULTS = {
+    "menu_offset_home_px": "176",
+    "menu_offset_beer_px": "176",
+    "menu_offset_visit_px": "176",
+    "menu_offset_history_px": "176",
+    "menu_offset_business_px": "176",
+    "menu_offset_contacts_px": "176",
+    "menu_mobile_offset_home_px": "104",
+    "menu_mobile_offset_beer_px": "104",
+    "menu_mobile_offset_visit_px": "104",
+    "menu_mobile_offset_history_px": "104",
+    "menu_mobile_offset_business_px": "104",
+    "menu_mobile_offset_contacts_px": "104",
+    "section_bg_home_url": "",
+    "section_bg_home_enabled": "1",
+    "section_bg_beer_url": "",
+    "section_bg_beer_enabled": "1",
+    "section_bg_business_url": "",
+    "section_bg_business_enabled": "1",
+    "section_bg_history_url": "",
+    "section_bg_history_enabled": "1",
+    "section_bg_contacts_url": "",
+    "section_bg_contacts_enabled": "1",
+    "section_bg_visit_url": "",
+    "section_bg_visit_enabled": "1",
+}
+
+BEER_DEFAULTS = {
+    "beer_partners_title": "Где найти Stamm Brewing",
+    "beer_partners_description": "Партнёры, бары и магазины, где представлена наша продукция.",
+    "beer_partners_is_visible": "1",
+    "beer_partners_sort_order": "10",
+    "beer_partners_json": "[]",
+    "beer_section_gap_px": "72",
+    "beer_products_title": "Наша продукция",
+    "beer_products_sort_order": "20",
+    "beer_new_title": "Новинки",
+    "beer_core_title": "Постоянная линейка",
+    "beer_seasonal_title": "Сезонные сорта",
+    "beer_products_is_visible": "1",
+    "beer_new_is_visible": "1",
+    "beer_core_is_visible": "1",
+    "beer_seasonal_is_visible": "1",
+    "beer_untappd_logo_url": "",
+    "beer_popup_backdrop_color": "#0b3f40",
+    "beer_popup_backdrop_opacity": "30",
+    "beer_popup_card_color": "#0d4b4c",
+    "beer_popup_card_opacity": "100",
+    "beer_products_json": "[]",
+}
+
+GALLERY_DEFAULTS = {
+    "gallery_title": "Галерея",
+    "gallery_description": "Фотографии Stamm Brewing: производство, команда, события и настроение пивоварни.",
+    "gallery_items_json": "[]",
+    "gallery_sections_json": "[]",
 }
 
 MENU_DEFAULTS = [
     {"key": "beer", "href": "/beer", "label": "Пиво", "sort_order": 10, "is_visible": True},
     {"key": "visit", "href": "/visit", "label": "Посетить пивоварню", "sort_order": 20, "is_visible": True},
-    {"key": "history", "href": "/history", "label": "История", "sort_order": 30, "is_visible": True},
+    {"key": "history", "href": "/gallery", "label": "Галерея", "sort_order": 30, "is_visible": True},
     {"key": "business", "href": "/business", "label": "Бизнес", "sort_order": 40, "is_visible": True},
     {"key": "contacts", "href": "/contacts", "label": "Контакты", "sort_order": 50, "is_visible": True},
 ]
@@ -75,6 +165,14 @@ def ensure_public_content_defaults(conn: sqlite3.Connection) -> None:
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for key, value in BUSINESS_DEFAULTS.items():
         conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
+    for key, value in SITE_DEFAULTS.items():
+        conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
+    for key, value in LAYOUT_DEFAULTS.items():
+        conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
+    for key, value in BEER_DEFAULTS.items():
+        conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
+    for key, value in GALLERY_DEFAULTS.items():
+        conn.execute("INSERT OR IGNORE INTO site_content_settings (key, value) VALUES (?, ?)", (key, value))
     for item in MENU_DEFAULTS:
         conn.execute(
             """
@@ -83,6 +181,15 @@ def ensure_public_content_defaults(conn: sqlite3.Connection) -> None:
             """,
             (item["key"], item["href"], item["label"], item["sort_order"], 1 if item["is_visible"] else 0),
         )
+    conn.execute(
+        """
+        UPDATE public_menu_items
+        SET href = '/gallery',
+            label = CASE WHEN label IN ('История', 'History') THEN 'Галерея' ELSE label END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE key = 'history' AND href = '/history'
+        """
+    )
     for item in ACTION_DEFAULTS:
         conn.execute(
             """
@@ -128,11 +235,78 @@ def get_public_site_content(conn: sqlite3.Connection, include_hidden: bool = Fal
                 "is_visible": bool(item.get("is_visible", True)),
             })
         contacts[target] = sorted(normalized_items, key=lambda item: (item["sort_order"], item["label"]))
+    beer = {**BEER_DEFAULTS, **settings}
+    for key in ("beer_partners_json", "beer_products_json"):
+        try:
+            items = json.loads(str(beer.get(key) or "[]"))
+        except json.JSONDecodeError:
+            items = []
+        beer[key.removeprefix("beer_").removesuffix("_json")] = sorted(
+            [item for item in items if isinstance(item, dict)],
+            key=lambda item: (int(item.get("sort_order") or 100), str(item.get("name") or "")),
+        )
+    gallery = {**GALLERY_DEFAULTS, **settings}
+
+    def normalize_gallery_item(item: Any, index: int) -> dict[str, Any] | None:
+        if not isinstance(item, dict):
+            return None
+        return {
+            "caption": str(item.get("caption") or ""),
+            "image_url": str(item.get("image_url") or ""),
+            "size": str(item.get("size") or "medium"),
+            "sort_order": int(item.get("sort_order") or ((index + 1) * 10)),
+            "is_visible": bool(item.get("is_visible", True)),
+        }
+
+    try:
+        gallery_items = json.loads(str(gallery.get("gallery_items_json") or "[]"))
+    except json.JSONDecodeError:
+        gallery_items = []
+    normalized_gallery_items = [
+        normalized
+        for index, item in enumerate(gallery_items if isinstance(gallery_items, list) else [])
+        if (normalized := normalize_gallery_item(item, index)) is not None
+    ]
+    gallery["items"] = sorted(normalized_gallery_items, key=lambda item: (item["sort_order"], item["caption"]))
+
+    try:
+        gallery_sections = json.loads(str(gallery.get("gallery_sections_json") or "[]"))
+    except json.JSONDecodeError:
+        gallery_sections = []
+    normalized_gallery_sections = []
+    for section_index, section in enumerate(gallery_sections if isinstance(gallery_sections, list) else []):
+        if not isinstance(section, dict):
+            continue
+        section_items = [
+            normalized
+            for item_index, item in enumerate(section.get("items") if isinstance(section.get("items"), list) else [])
+            if (normalized := normalize_gallery_item(item, item_index)) is not None
+        ]
+        title = str(section.get("title") or "").strip()
+        if title or section_items:
+            normalized_gallery_sections.append({
+                "title": title or "Раздел галереи",
+                "sort_order": int(section.get("sort_order") or ((section_index + 1) * 10)),
+                "is_visible": bool(section.get("is_visible", True)),
+                "items": sorted(section_items, key=lambda item: (item["sort_order"], item["caption"])),
+            })
+    if not normalized_gallery_sections and gallery["items"]:
+        normalized_gallery_sections.append({
+            "title": str(gallery.get("gallery_title") or GALLERY_DEFAULTS["gallery_title"]),
+            "sort_order": 10,
+            "is_visible": True,
+            "items": gallery["items"],
+        })
+    gallery["sections"] = sorted(normalized_gallery_sections, key=lambda section: (section["sort_order"], section["title"]))
     return {
         "home": {**HOME_DEFAULTS, **settings},
         "contacts": contacts,
         "typography": {**TYPOGRAPHY_DEFAULTS, **settings},
         "business": {**BUSINESS_DEFAULTS, **settings},
+        "site": {**SITE_DEFAULTS, **settings},
+        "layout": {**LAYOUT_DEFAULTS, **settings},
+        "beer": beer,
+        "gallery": gallery,
         "menu": menu,
         "actions": actions,
     }
@@ -183,9 +357,11 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
             "contacts_emails_json": json.dumps(contact_emails, ensure_ascii=False),
             "contacts_phones_json": json.dumps(contact_phones, ensure_ascii=False),
         }
-        for key in ("contacts_address", "contacts_description", "contacts_map_lat", "contacts_map_lng", "contacts_map_zoom", "contacts_map_title"):
+        for key in ("contacts_address", "contacts_address_color", "contacts_description", "contacts_description_color", "contacts_map_lat", "contacts_map_lng", "contacts_map_zoom", "contacts_map_height_px", "contacts_map_width_px", "contacts_map_title"):
             if key in data:
                 contact_values[key] = str(data.get(key) or "")
+        contact_values["contacts_address_is_visible"] = "1" if str(data.get("contacts_address_is_visible", "1")).strip().lower() not in {"0", "false", "off", "no"} else "0"
+        contact_values["contacts_description_is_visible"] = "1" if str(data.get("contacts_description_is_visible", "1")).strip().lower() not in {"0", "false", "off", "no"} else "0"
         for key, value in contact_values.items():
             conn.execute(
                 """
@@ -203,16 +379,174 @@ def save_public_content(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
                 """,
                 (key, str(data.get(key) or "")),
             )
+    for key in SITE_DEFAULTS:
+        if key in data:
+            value = str(data.get(key) or SITE_DEFAULTS[key])
+            if key == "maintenance_enabled":
+                value = "1" if value.strip().lower() not in {"0", "false", "off", "no"} else "0"
+            conn.execute(
+                """
+                INSERT INTO site_content_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, value),
+            )
+    for key in LAYOUT_DEFAULTS:
+        if key in data:
+            conn.execute(
+                """
+                INSERT INTO site_content_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, str(data.get(key) or LAYOUT_DEFAULTS[key])),
+            )
+    if any(key.startswith("beer_") for key in data):
+        beer_values = {
+            "beer_partners_title": str(data.get("beer_partners_title") or BEER_DEFAULTS["beer_partners_title"]),
+            "beer_partners_description": str(data.get("beer_partners_description") or ""),
+            "beer_partners_is_visible": "1" if str(data.get("beer_partners_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_partners_sort_order": str(data.get("beer_partners_sort_order") or BEER_DEFAULTS["beer_partners_sort_order"]),
+            "beer_section_gap_px": str(data.get("beer_section_gap_px") or BEER_DEFAULTS["beer_section_gap_px"]),
+            "beer_products_title": str(data.get("beer_products_title") or BEER_DEFAULTS["beer_products_title"]),
+            "beer_products_sort_order": str(data.get("beer_products_sort_order") or BEER_DEFAULTS["beer_products_sort_order"]),
+            "beer_new_title": str(data.get("beer_new_title") or BEER_DEFAULTS["beer_new_title"]),
+            "beer_core_title": str(data.get("beer_core_title") or BEER_DEFAULTS["beer_core_title"]),
+            "beer_seasonal_title": str(data.get("beer_seasonal_title") or BEER_DEFAULTS["beer_seasonal_title"]),
+            "beer_products_is_visible": "1" if str(data.get("beer_products_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_new_is_visible": "1" if str(data.get("beer_new_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_core_is_visible": "1" if str(data.get("beer_core_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_seasonal_is_visible": "1" if str(data.get("beer_seasonal_is_visible", "1")).lower() not in {"0", "false", "off", "no"} else "0",
+            "beer_untappd_logo_url": str(data.get("beer_untappd_logo_url") or ""),
+            "beer_popup_backdrop_color": str(data.get("beer_popup_backdrop_color") or BEER_DEFAULTS["beer_popup_backdrop_color"]),
+            "beer_popup_backdrop_opacity": str(data.get("beer_popup_backdrop_opacity") or BEER_DEFAULTS["beer_popup_backdrop_opacity"]),
+            "beer_popup_card_color": str(data.get("beer_popup_card_color") or BEER_DEFAULTS["beer_popup_card_color"]),
+            "beer_popup_card_opacity": str(data.get("beer_popup_card_opacity") or BEER_DEFAULTS["beer_popup_card_opacity"]),
+        }
+        partners = []
+        partner_indices = sorted({int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_partner_name_") and key.rsplit("_", 1)[1].isdigit()} | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_partner_logo_url_") and key.rsplit("_", 1)[1].isdigit()})
+        for index in partner_indices:
+            name = str(data.get(f"beer_partner_name_{index}") or "").strip()
+            logo = str(data.get(f"beer_partner_logo_url_{index}") or "").strip()
+            if name or logo:
+                partners.append({
+                    "name": name, "logo_url": logo, "url": str(data.get(f"beer_partner_url_{index}") or "").strip(),
+                    "size": str(data.get(f"beer_partner_size_{index}") or "medium"),
+                    "sort_order": int(data.get(f"beer_partner_sort_order_{index}") or ((index + 1) * 10)),
+                    "is_visible": str(data.get(f"beer_partner_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
+                })
+        products = []
+        product_indices = sorted({int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_product_name_") and key.rsplit("_", 1)[1].isdigit()} | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("beer_product_image_url_") and key.rsplit("_", 1)[1].isdigit()})
+        for index in product_indices:
+            if str(data.get(f"beer_product_delete_{index}") or "").strip() == "1":
+                continue
+            name = str(data.get(f"beer_product_name_{index}") or "").strip()
+            image = str(data.get(f"beer_product_image_url_{index}") or "").strip()
+            if name or image:
+                products.append({
+                    "name": name, "style": str(data.get(f"beer_product_style_{index}") or "").strip(),
+                    "abv": str(data.get(f"beer_product_abv_{index}") or "").strip(),
+                    "image_url": image, "untappd_url": str(data.get(f"beer_product_untappd_url_{index}") or "").strip(),
+                    "category": str(data.get(f"beer_product_category_{index}") or "seasonal"),
+                    "sort_order": int(data.get(f"beer_product_sort_order_{index}") or ((index + 1) * 10)),
+                    "is_visible": str(data.get(f"beer_product_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
+                })
+        beer_values["beer_partners_json"] = json.dumps(partners, ensure_ascii=False)
+        beer_values["beer_products_json"] = json.dumps(products, ensure_ascii=False)
+        for key, value in beer_values.items():
+            conn.execute(
+                """
+                INSERT INTO site_content_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, value),
+            )
+    if any(key.startswith("gallery_") for key in data):
+        gallery_values = {
+            "gallery_title": str(data.get("gallery_title") or GALLERY_DEFAULTS["gallery_title"]),
+            "gallery_description": str(data.get("gallery_description") or ""),
+        }
+
+        def gallery_item_from_data(prefix: str, index: int) -> dict[str, Any] | None:
+            if str(data.get(f"{prefix}_delete_{index}") or "").strip() == "1":
+                return None
+            image = str(data.get(f"{prefix}_image_url_{index}") or "").strip()
+            caption = str(data.get(f"{prefix}_caption_{index}") or "").strip()
+            if not image and not caption:
+                return None
+            return {
+                "caption": caption,
+                "image_url": image,
+                "size": str(data.get(f"{prefix}_size_{index}") or "medium"),
+                "sort_order": int(data.get(f"{prefix}_sort_order_{index}") or ((index + 1) * 10)),
+                "is_visible": str(data.get(f"{prefix}_visible_{index}", "1")).lower() not in {"0", "false", "off", "no"},
+            }
+
+        item_indices = sorted(
+            {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("gallery_item_caption_") and key.rsplit("_", 1)[1].isdigit()}
+            | {int(key.rsplit("_", 1)[1]) for key in data if key.startswith("gallery_item_image_url_") and key.rsplit("_", 1)[1].isdigit()}
+        )
+        items = [
+            item
+            for index in item_indices
+            if (item := gallery_item_from_data("gallery_item", index)) is not None
+        ]
+
+        section_indices = sorted(
+            int(match.group(1))
+            for key in data
+            if (match := re.match(r"gallery_section_(\d+)_title$", key))
+        )
+        sections = []
+        for section_index in section_indices:
+            if str(data.get(f"gallery_section_{section_index}_delete") or "").strip() == "1":
+                continue
+            title = str(data.get(f"gallery_section_{section_index}_title") or "").strip()
+            item_prefix = f"gallery_section_{section_index}_item"
+            section_item_indices = sorted(
+                int(match.group(1))
+                for key in data
+                if (match := re.match(rf"{re.escape(item_prefix)}_(?:caption|image_url)_(\d+)$", key))
+            )
+            section_items = [
+                item
+                for item_index in section_item_indices
+                if (item := gallery_item_from_data(item_prefix, item_index)) is not None
+            ]
+            if title or section_items:
+                sections.append({
+                    "title": title or "Раздел галереи",
+                    "sort_order": int(data.get(f"gallery_section_{section_index}_sort_order") or ((section_index + 1) * 10)),
+                    "is_visible": str(data.get(f"gallery_section_{section_index}_visible", "1")).lower() not in {"0", "false", "off", "no"},
+                    "items": section_items,
+                })
+        if not sections and items:
+            sections.append({
+                "title": gallery_values["gallery_title"],
+                "sort_order": 10,
+                "is_visible": True,
+                "items": items,
+            })
+        gallery_values["gallery_items_json"] = json.dumps(items, ensure_ascii=False)
+        gallery_values["gallery_sections_json"] = json.dumps(sections, ensure_ascii=False)
+        for key, value in gallery_values.items():
+            conn.execute(
+                """
+                INSERT INTO site_content_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, value),
+            )
     for item in MENU_DEFAULTS:
         key = item["key"]
         conn.execute(
             """
             UPDATE public_menu_items
-            SET label = ?, sort_order = ?, is_visible = ?, updated_at = CURRENT_TIMESTAMP
+            SET label = ?, href = ?, sort_order = ?, is_visible = ?, updated_at = CURRENT_TIMESTAMP
             WHERE key = ?
             """,
             (
                 str(data.get(f"menu_{key}_label") or item["label"]),
+                item["href"],
                 int(data.get(f"menu_{key}_sort_order") or item["sort_order"]),
                 1 if data.get(f"menu_{key}_visible") else 0,
                 key,
