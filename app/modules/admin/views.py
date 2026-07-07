@@ -992,6 +992,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <h3>Пиво / Где найти Stamm Brewing</h3>
               <label>Заголовок блока<input name="beer_partners_title" value="{escape(str(beer.get('beer_partners_title') or 'Где найти Stamm Brewing'))}"></label>
               <label>Описание блока<textarea name="beer_partners_description" rows="3">{escape(str(beer.get('beer_partners_description') or ''))}</textarea></label>
+              <label>Порядок блока на странице<input name="beer_partners_sort_order" type="number" min="1" max="99" step="1" value="{escape(str(beer.get('beer_partners_sort_order') or '10'))}"></label>
               <input type="hidden" name="beer_partners_is_visible" value="0"><label><input name="beer_partners_is_visible" type="checkbox" value="1" {'checked' if str(beer.get('beer_partners_is_visible') or '1') != '0' else ''}> Показывать блок</label>
               <h4>Партнёры</h4>
               <div data-dynamic-list="beer-partners">{beer_partner_rows}</div>
@@ -1011,6 +1012,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
             <div class="card">
               <h3>Пиво / Наша продукция</h3>
               <label>Заголовок блока<input name="beer_products_title" value="{escape(str(beer.get('beer_products_title') or 'Наша продукция'))}"></label>
+              <label>Порядок блока на странице<input name="beer_products_sort_order" type="number" min="1" max="99" step="1" value="{escape(str(beer.get('beer_products_sort_order') or '20'))}"></label>
               <label>Отступ между блоками «Партнёры» и «Наша продукция», px<input name="beer_section_gap_px" type="number" min="0" max="220" value="{escape(str(beer.get('beer_section_gap_px') or '72'))}"></label>
               <div class="grid">
                 <label>Заголовок новинок<input name="beer_new_title" value="{escape(str(beer.get('beer_new_title') or 'Новинки'))}"></label>

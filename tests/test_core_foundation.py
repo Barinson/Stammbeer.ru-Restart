@@ -787,6 +787,10 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("background:transparent; border:0; border-radius:0; padding:0; box-shadow:none", html)
         self.assertIn("gap:clamp(34px,4vw,64px)", html)
         self.assertIn(".nav-icon { width:32px; height:32px; border:0; border-radius:999px", html)
+        self.assertIn("@media (max-width:920px)", html)
+        self.assertIn("--mobile-menu-offset:112px", html)
+        self.assertIn(".top-nav { position:fixed; align-items:center; flex-direction:row; flex-wrap:wrap", html)
+        self.assertIn(".nav-icon { width:26px; height:26px; }", html)
         self.assertIn("background:var(--golden-malt); color:var(--ink)", html)
         self.assertIn(".nav-icon img { width:100%; height:100%; padding:0; object-fit:contain", html)
         self.assertNotIn("nav-icon--cart", html)
@@ -816,6 +820,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("--business-guest-font-size:28px", guest_html)
         self.assertIn("--business-guest-font-weight:700", guest_html)
         self.assertIn("--section-bg:url('/media/bg-business.jpg')", guest_html)
+        self.assertIn("font-size:min(var(--business-guest-font-size), 22px)", guest_html)
         maintenance_html = maintenance_page(content)
         self.assertIn("Технические работы", maintenance_html)
         self.assertIn("mailto:marketing@stammbeer.ru", maintenance_html)
@@ -836,6 +841,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("filter:brightness(1.08) saturate(1.02)", gallery_html)
         self.assertIn("rgba(0,0,0,.42)", gallery_html)
         self.assertIn("--section-bg:url('/media/bg-gallery.jpg')", gallery_html)
+        self.assertIn(".gallery-card { min-height:220px; border-radius:20px; }", gallery_html)
         self.assertNotIn("rgba(11,63,64,.78)", gallery_html)
         self.assertNotIn("/media/gallery-hidden.jpg", gallery_html)
 
@@ -876,6 +882,8 @@ class CoreFoundationTest(unittest.TestCase):
                 "beer_partners_description": "Партнёры\nи бары",
                 "home_content_bg_url": "/media/taproom-bg.jpg",
                 "beer_partners_is_visible": "1",
+                "beer_partners_sort_order": "20",
+                "beer_products_sort_order": "10",
                 "beer_partner_name_0": "Bottle Shop",
                 "beer_partner_logo_url_0": "/media/partner.svg",
                 "beer_partner_url_0": "https://partner.test",
@@ -923,7 +931,10 @@ class CoreFoundationTest(unittest.TestCase):
         )
         content = get_public_site_content(app.conn)
         self.assertEqual(content["beer"]["partners"][0]["name"], "Bottle Shop")
+        self.assertEqual(content["beer"]["beer_partners_sort_order"], "20")
+        self.assertEqual(content["beer"]["beer_products_sort_order"], "10")
         html = beer_page(content)
+        self.assertLess(html.index('data-beer-block="products"'), html.index('data-beer-block="partners"'))
         self.assertIn("Где найти Stamm Brewing", html)
         self.assertIn("Партнёры\nи бары", html)
         self.assertIn('target="_blank"', html)
@@ -934,6 +945,9 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("linear-gradient(180deg, rgba(16,88,89,.78)", html)
         self.assertIn("max-width:1440px", html)
         self.assertIn("gap:104px", html)
+        self.assertIn(".beer-shell { gap:clamp(34px,9vw,52px); }", html)
+        self.assertIn("max-height:58px", html)
+        self.assertIn("grid-template-columns:repeat(3,minmax(72px,1fr))", html)
         self.assertIn("width:min(1320px,100%)", html)
         self.assertIn("display:flex; flex-wrap:wrap; justify-content:center", html)
         self.assertIn("calc((100% - 128px) / 9)", html)
@@ -1087,6 +1101,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("beer_popup_card_color", admin_content_html)
         self.assertIn("beer_popup_card_opacity", admin_content_html)
         self.assertIn("beer_section_gap_px", admin_content_html)
+        self.assertIn("beer_partners_sort_order", admin_content_html)
+        self.assertIn("beer_products_sort_order", admin_content_html)
         self.assertIn('for="cms-tab-gallery"', admin_content_html)
         self.assertIn("gallery_title", admin_content_html)
         self.assertIn("gallery_section_0_title", admin_content_html)
@@ -1222,6 +1238,7 @@ class CoreFoundationTest(unittest.TestCase):
             file_field("beer_untappd_logo_file", "untappd.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'></svg>"),
             field("beer_popup_backdrop_color", "#224466"), field("beer_popup_backdrop_opacity", "35"),
             field("beer_popup_card_color", "#335577"), field("beer_popup_card_opacity", "80"),
+            field("beer_partners_sort_order", "30"), field("beer_products_sort_order", "5"),
             field("beer_section_gap_px", "96"),
             field("menu_beer_label", "Пиво"), field("menu_beer_sort_order", "10"), field("menu_beer_visible", "on"),
             field("menu_visit_label", "Посетить пивоварню"), field("menu_visit_sort_order", "20"), field("menu_visit_visible", "on"),
@@ -1274,7 +1291,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(content["contacts"]["emails"][0]["value"], "admin@stamm.test")
         self.assertTrue(content["contacts"]["emails"][0]["is_visible"])
         self.assertFalse(content["contacts"]["emails"][1]["is_visible"])
-        self.assertIn("Админский адрес завода", contacts_page(content))
+        self.assertNotIn("Админский адрес завода", contacts_page(content))
         self.assertNotIn("hidden-admin@stamm.test", contacts_page(content))
         self.assertIn("Админская точка Stamm", contacts_page(content))
         self.assertIn("--stamm-page-title-font-size:54px", contacts_page(content))
@@ -1286,6 +1303,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(content["beer"]["beer_popup_backdrop_opacity"], "35")
         self.assertEqual(content["beer"]["beer_popup_card_color"], "#335577")
         self.assertEqual(content["beer"]["beer_popup_card_opacity"], "80")
+        self.assertEqual(content["beer"]["beer_partners_sort_order"], "30")
+        self.assertEqual(content["beer"]["beer_products_sort_order"], "5")
         self.assertEqual(content["beer"]["beer_section_gap_px"], "96")
         self.assertEqual(content["gallery"]["gallery_title"], "Админская галерея")
         self.assertEqual(content["gallery"]["sections"][0]["title"], "Пивоварня")

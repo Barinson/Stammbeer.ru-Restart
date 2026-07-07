@@ -94,7 +94,29 @@ BASE_CSS = """
     .age-gate__actions { display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top:24px; }
     .age-gate__card button { border:0; border-radius:999px; padding:14px 22px; background:var(--golden-malt); color:var(--ink); font:inherit; font-weight:900; cursor:pointer; }
     .age-gate__card .age-gate__deny { background:transparent; color:var(--foam); border:1px solid rgba(199,177,102,.42); }
-    @media (max-width:920px) { .top-nav { align-items:flex-start; flex-direction:column; position:sticky; } .top-nav + main { padding-top:0; } .nav-links { justify-content:flex-start; } }
+    @media (max-width:920px) {
+      :root { --mobile-menu-offset:112px; --stamm-nav-font-size:12px; --stamm-body-font-size:15px; --stamm-lead-font-size:16px; --stamm-page-title-font-size:34px; --stamm-section-title-font-size:24px; }
+      .top-nav { position:fixed; align-items:center; flex-direction:row; flex-wrap:wrap; gap:8px 12px; padding:10px 16px; }
+      .brand { font-size:12px; letter-spacing:.08em; }
+      .nav-links { order:3; width:100%; justify-content:center; gap:10px 18px; font-size:var(--stamm-nav-font-size,12px); line-height:1.15; }
+      .nav-actions { margin-left:auto; gap:6px; }
+      .nav-icon { width:28px; height:28px; font-size:9px; }
+      .top-nav + main { padding-top:var(--mobile-menu-offset); }
+    }
+    @media (max-width:560px) {
+      :root { --mobile-menu-offset:104px; --stamm-nav-font-size:11px; --stamm-body-font-size:14px; --stamm-lead-font-size:15px; --stamm-page-title-font-size:30px; --stamm-section-title-font-size:22px; }
+      .top-nav { padding:8px 12px; gap:7px 10px; }
+      .brand { max-width:132px; overflow:hidden; text-overflow:ellipsis; font-size:11px; letter-spacing:.07em; }
+      .nav-links { gap:8px 12px; justify-content:flex-start; overflow-x:auto; flex-wrap:nowrap; padding-bottom:2px; scrollbar-width:none; }
+      .nav-links::-webkit-scrollbar { display:none; }
+      .nav-links a { white-space:nowrap; }
+      .nav-icon { width:26px; height:26px; }
+      .age-gate { padding:16px; }
+      .age-gate__card { border-radius:22px; padding:24px 18px; }
+      .age-gate__card h2 { font-size:clamp(30px,12vw,42px); }
+      .age-gate__card p { font-size:15px; }
+      .age-gate__card button { padding:11px 16px; font-size:14px; }
+    }
 """
 
 
@@ -417,7 +439,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
     .news-card__image--fallback {{ background:radial-gradient(circle at 50% 40%, rgba(199,177,102,.35), transparent 35%), linear-gradient(135deg, rgba(246,241,227,.08), rgba(16,88,89,.4)); }}
     .news-card h2 {{ margin:0 0 14px; color:var(--white); font-size:var(--stamm-section-title-font-size,26px); line-height:1.08; }}
     .news-card p {{ margin:0; color:rgba(246,241,227,.78); line-height:1.55; font-size:var(--stamm-body-font-size,16px); white-space:pre-line; }}
-    @media (max-width:760px) {{ .home-content {{ background-attachment:scroll; }} .news-card {{ grid-template-columns:1fr; padding:20px; }} .home-logo {{ max-width:130px; max-height:130px; }} }}
+    @media (max-width:760px) {{ body.home-body .top-nav + main {{ padding-top:0; }} .home-hero {{ min-height:88vh; padding:132px 18px 54px; }} .home-title {{ font-size:clamp(44px,16vw,66px); line-height:.82; }} .home-subtitle {{ font-size:clamp(32px,12vw,48px); }} .home-content {{ background-attachment:scroll; }} .home-news {{ min-height:auto; padding:56px 18px; }} .news-card {{ grid-template-columns:1fr; gap:20px; }} .home-logo {{ max-width:96px; max-height:96px; margin-bottom:18px; }} .news-card__image {{ border-radius:18px; }} }}
   </style>
 </head>
 <body class="home-body">
@@ -481,7 +503,7 @@ ACCOUNT_CSS = """
     .account-debug__rows { display:grid; gap:8px; margin:12px 0; }
     .account-debug__rows div { display:flex; justify-content:space-between; gap:16px; color:rgba(246,241,227,.72); }
     .account-debug pre { overflow:auto; max-height:260px; margin:0; color:rgba(246,241,227,.78); font-size:12px; white-space:pre-wrap; }
-    @media (max-width:680px) { .account-shell { padding:56px 18px; } .account-card { padding:24px; } .account-detail { display:grid; gap:4px; } .account-detail strong { text-align:left; } }
+    @media (max-width:680px) { .account-shell { padding:124px 14px 42px; } .account-card { padding:20px; border-radius:22px; } .account-card h1 { font-size:30px; } .account-card p { font-size:15px; } .account-section { margin-top:22px; padding-top:18px; } .account-section h2 { font-size:20px; } .account-detail { display:grid; gap:4px; padding:11px 0; } .account-detail strong { text-align:left; } .account-orders { max-height:340px; } }
 """
 
 
@@ -906,7 +928,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
     .contact-list a, .contact-list strong {{ color:var(--foam); text-decoration:none; font-size:var(--stamm-contact-text-font-size,18px); font-weight:500; white-space:pre-line; }}
     .map-card {{ width:min(100%, var(--contacts-map-width)); overflow:hidden; padding:0; display:block; line-height:0; align-self:start; justify-self:center; }}
     .map-card iframe {{ width:100%; height:var(--contacts-map-height); min-height:180px; max-height:420px; border:0; filter:saturate(.92); display:block; vertical-align:top; }}
-    @media (max-width:880px) {{ .contacts-info-card {{ justify-self:stretch; }} .map-card {{ width:100%; justify-self:stretch; }} }}
+    @media (max-width:880px) {{ .contacts-page {{ padding:128px 18px 46px; background-attachment:scroll; }} .contacts-hero {{ gap:20px; }} .contacts-info-card {{ justify-self:stretch; }} .contacts-card {{ border-radius:20px; padding:20px; }} .contacts-card p {{ font-size:15px; }} .contact-list {{ margin-top:16px; gap:8px; }} .contact-list li {{ padding:10px 0; }} .contact-list a, .contact-list strong {{ font-size:15px; }} .map-card {{ width:100%; justify-self:stretch; padding:0; }} .map-card iframe {{ min-height:220px; max-height:320px; }} }}
   </style>
 </head>
 <body>
@@ -921,6 +943,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
       </div>
       <div class="contacts-card map-card" style="--contacts-map-height:{map_height}; --contacts-map-width:{map_width}">
         <iframe title="Яндекс.Карта: {escape(title)}" src="{map_src}" loading="lazy" allowfullscreen></iframe>
+        <div class="map-compact-badge"><strong>{escape(title)}</strong><span>★ оценка на Яндекс Картах</span></div>
       </div>
     </section>
   </main>
@@ -960,7 +983,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     seasonal_cards = "".join(product_card(item, False) for item in [p for p in products if p.get("category") not in {"new", "core"}])
     partners_section = ""
     if is_enabled(beer.get("beer_partners_is_visible"), True):
-        partners_section = f'<section class="beer-section"><h1>{escape(str(beer.get("beer_partners_title") or "Где найти Stamm Brewing"))}</h1><p>{cms_text(beer.get("beer_partners_description") or "")}</p><div class="partners-grid">{"".join(partner_cards)}</div></section>'
+        partners_section = f'<section class="beer-section" data-beer-block="partners"><h1>{escape(str(beer.get("beer_partners_title") or "Где найти Stamm Brewing"))}</h1><p>{cms_text(beer.get("beer_partners_description") or "")}</p><div class="partners-grid">{"".join(partner_cards)}</div></section>'
     products_inner = ""
     if is_enabled(beer.get("beer_new_is_visible"), True):
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_new_title") or "Новинки"))}</h3><div class="new-grid">{new_cards}</div></div>'
@@ -968,7 +991,19 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_core_title") or "Постоянная линейка"))}</h3><div class="seasonal-grid">{core_cards}</div></div>'
     if is_enabled(beer.get("beer_seasonal_is_visible"), True):
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_seasonal_title") or "Сезонные сорта"))}</h3><div class="seasonal-grid">{seasonal_cards}</div></div>'
-    products_section = f'<section class="beer-section"><h2>{escape(str(beer.get("beer_products_title") or "Наша продукция"))}</h2>{products_inner}</section>' if is_enabled(beer.get("beer_products_is_visible"), True) else ""
+    products_section = f'<section class="beer-section" data-beer-block="products"><h2>{escape(str(beer.get("beer_products_title") or "Наша продукция"))}</h2>{products_inner}</section>' if is_enabled(beer.get("beer_products_is_visible"), True) else ""
+
+    def beer_block_order(key: str, default: int) -> int:
+        try:
+            return int(str(beer.get(key) or default))
+        except (TypeError, ValueError):
+            return default
+
+    beer_sections = sorted(
+        [("partners", beer_block_order("beer_partners_sort_order", 10), partners_section), ("products", beer_block_order("beer_products_sort_order", 20), products_section)],
+        key=lambda item: (item[1], 0 if item[0] == "partners" else 1),
+    )
+    beer_sections_html = "".join(section for _, _, section in beer_sections if section)
     beer_bg_url = str(site_content.get("home", {}).get("home_content_bg_url") or "")
     beer_style_values = [f"--menu-offset:{menu_offset_px(site_content, 'beer')}"]
     beer_section_gap = css_section_gap_px(beer.get("beer_section_gap_px"), 72)
@@ -1015,13 +1050,14 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .untappd-link {{ display:inline-grid; place-items:center; margin-top:12px; text-decoration:none; }}
     .untappd-link img {{ width:42px; height:42px; object-fit:contain; transition:transform .18s ease, filter .18s ease; }}
     .untappd-link:hover img {{ transform:scale(1.06); filter:brightness(1.12); }}
-    @media (max-width:1100px) {{ .seasonal-grid .beer-can {{ flex-basis:110px; }} }}
-    @media (max-width:760px) {{ .new-grid {{ grid-template-columns:1fr; }} .beer-page {{ padding:76px 20px 54px; background-attachment:scroll; }} }}
+    @media (max-width:1100px) {{ .seasonal-grid .beer-can {{ flex-basis:104px; }} }}
+    @media (max-width:760px) {{ .beer-page {{ padding:128px 16px 48px; background-attachment:scroll; }} .beer-shell {{ gap:clamp(34px,9vw,52px); }} .beer-section h1, .beer-section h2 {{ font-size:clamp(26px,8vw,32px); letter-spacing:.06em; }} .beer-section p {{ max-width:100%; margin-bottom:18px; font-size:15px; line-height:1.45; }} .partners-grid {{ width:100%; gap:12px 18px; }} .partner-card img {{ max-width:calc(var(--logo-size) * .72); max-height:58px; }} .partner-card__fallback {{ font-size:13px; }} .product-subsection {{ margin-top:22px; }} .product-subsection h3 {{ font-size:20px; margin-bottom:14px; }} .new-grid {{ grid-template-columns:repeat(3,minmax(72px,1fr)); gap:14px; }} .seasonal-grid {{ gap:12px; }} .seasonal-grid .beer-can {{ flex:0 1 74px; max-width:84px; min-width:62px; }} .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:178px; }} .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:92px; }} .beer-modal__card {{ padding:24px 18px; border-radius:22px; }} .beer-modal h3 {{ font-size:24px; }} }}
+    @media (max-width:420px) {{ .new-grid {{ gap:10px; }} .seasonal-grid .beer-can {{ flex-basis:64px; max-width:74px; }} .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:152px; }} .beer-can--seasonal img, .beer-can--seasonal .beer-can__fallback {{ max-height:78px; }} }}
   </style>
 </head>
 <body>
 {public_nav("beer", site_content)}
-  <main class="beer-page"{beer_page_style}><div class="beer-shell">{partners_section}{products_section}</div></main>
+  <main class="beer-page"{beer_page_style}><div class="beer-shell">{beer_sections_html}</div></main>
   <div class="beer-modal" id="beerModal"><div class="beer-modal__card"><button class="beer-modal__close" type="button" aria-label="Закрыть">×</button><h3 id="beerModalTitle"></h3><p id="beerModalStyle"></p><p id="beerModalAbv"></p><img class="beer-modal__mockup" id="beerModalImage" src="" alt=""><a class="untappd-link" id="beerModalUntappd" href="#" target="_blank" rel="noopener" aria-label="Untappd"></a></div></div>
   <script>
     (function () {{
@@ -1137,8 +1173,8 @@ def gallery_page(content: dict[str, Any] | None = None) -> str:
     .gallery-lightbox img {{ max-width:100%; max-height:78vh; object-fit:contain; border-radius:22px; box-shadow:0 30px 90px rgba(0,0,0,.42); }}
     .gallery-lightbox p {{ margin:0; color:var(--foam); font-weight:600; text-align:center; }}
     .gallery-lightbox button {{ border:0; border-radius:999px; padding:10px 16px; background:var(--golden-malt); color:var(--ink); font-weight:900; cursor:pointer; }}
-    @media (max-width:980px) {{ .gallery-grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} .gallery-card, .gallery-card--small, .gallery-card--medium, .gallery-card--large {{ grid-column:span 1; grid-row:span 1; min-height:260px; }} }}
-    @media (max-width:620px) {{ .gallery-page {{ padding-left:18px; padding-right:18px; }} .gallery-grid {{ grid-template-columns:1fr; }} .gallery-card {{ min-height:280px; border-radius:22px; }} }}
+    @media (max-width:980px) {{ .gallery-page {{ background-attachment:scroll, scroll, scroll; }} .gallery-grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} .gallery-card, .gallery-card--small, .gallery-card--medium, .gallery-card--large {{ grid-column:span 1; grid-row:span 1; min-height:240px; }} }}
+    @media (max-width:620px) {{ .gallery-page {{ padding:128px 16px 48px; }} .gallery-hero {{ margin-bottom:28px; }} .gallery-hero h1 {{ font-size:30px; }} .gallery-hero p {{ font-size:15px; }} .gallery-sections {{ gap:36px; }} .gallery-section h2 {{ font-size:22px; }} .gallery-grid {{ grid-template-columns:1fr; gap:12px; }} .gallery-card {{ min-height:220px; border-radius:20px; }} .gallery-card span {{ font-size:13px; }} }}
   </style>
 </head>
 <body>
@@ -1200,6 +1236,7 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
     .placeholder__card {{ max-width:760px; background:var(--card-hop); border:1px solid rgba(199,177,102,.2); border-radius:24px; padding:30px; }}
     .placeholder__card h1 {{ margin:0 0 10px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
     .placeholder__card p {{ margin:0; color:rgba(246,241,227,.76); }}
+    @media (max-width:620px) {{ .placeholder {{ padding:128px 16px 48px; }} .placeholder__card {{ padding:22px; border-radius:20px; }} .placeholder__card h1 {{ font-size:30px; }} }}
   </style>
 </head>
 <body>
@@ -1228,6 +1265,8 @@ def business_guest_page(content: dict[str, Any] | None = None) -> str:
     html, body {{ min-height:100%; background:var(--deep-hop); }}
     .business-guest {{ min-height:100vh; padding:var(--menu-offset,176px) min(6vw,72px) 72px; display:grid; place-items:center; background-image:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:auto, cover, cover; background-position:center; background-repeat:no-repeat; background-attachment:scroll, fixed, fixed; }}
     .business-guest__message {{ max-width:620px; margin:0 auto; text-align:center; color:var(--foam); font-size:var(--business-guest-font-size); line-height:1.38; font-weight:var(--business-guest-font-weight); letter-spacing:.01em; white-space:pre-line; }}
+    @media (max-width:720px) {{ .business-guest {{ padding:128px 18px 46px; background-attachment:scroll, scroll, scroll; }} .business-guest__message {{ max-width:28rem; font-size:min(var(--business-guest-font-size), 22px); line-height:1.34; }} }}
+    @media (max-width:420px) {{ .business-guest {{ padding-left:14px; padding-right:14px; }} .business-guest__message {{ font-size:min(var(--business-guest-font-size), 20px); }} }}
   </style>
 </head>
 <body>
@@ -1302,7 +1341,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     .state {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.18); border-radius:20px; padding:34px; text-align:center; color:rgba(246,241,227,.76); }}
     .state strong {{ display:block; color:var(--golden-malt); font-size:22px; margin-bottom:8px; }}
     @media (max-width:920px) {{ .shop-layout {{ grid-template-columns:1fr; }} .cart {{ position:static; }} }}
-    @media (max-width:720px) {{ .wrap {{ padding:16px min(5vw,28px) 36px; }} .product {{ grid-template-columns:60px minmax(0,1fr); gap:10px; min-height:86px; padding:9px; }} .product__image {{ width:56px; height:56px; border-radius:12px; }} .product__order {{ grid-column:2; justify-self:start; min-width:0; margin-top:2px; }} h2 {{ font-size:15px; }} .price {{ font-size:15px; }} .quantity {{ grid-template-columns:28px 36px 28px; }} .quantity__button {{ width:28px; height:28px; }} }}
+    @media (max-width:720px) {{ .wrap {{ padding:128px 14px 38px; background-attachment:scroll; }} .toolbar {{ gap:12px; margin-bottom:14px; }} .filters {{ gap:8px; }} .filter {{ padding:8px 12px; font-size:13px; }} .product {{ grid-template-columns:54px minmax(0,1fr); gap:9px; min-height:80px; padding:9px; border-radius:16px; }} .product__image {{ width:50px; height:50px; border-radius:12px; }} .product__order {{ grid-column:2; justify-self:start; min-width:0; margin-top:2px; }} .badge {{ font-size:10px; padding:3px 7px; }} h2 {{ font-size:14px; }} .price {{ font-size:15px; }} .quantity {{ grid-template-columns:28px 36px 28px; }} .quantity__button {{ width:28px; height:28px; }} .cart {{ border-radius:18px; }} .cart__header {{ padding:14px 15px; }} .cart__body, .cart__comment {{ padding-left:15px; padding-right:15px; }} }}
   </style>
 </head>
 <body>
