@@ -5,6 +5,7 @@ import json
 import secrets
 import smtplib
 import sqlite3
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -14,6 +15,7 @@ from typing import Any
 from urllib.parse import quote
 
 from app.config import Settings
+from app.timezone import format_moscow_datetime
 from app.integrations.moysklad.settings_service import decode_token, encode_token
 from app.modules.auth.security import hash_password
 from app.modules.account.service import normalize_email, utc_now_iso
@@ -24,12 +26,12 @@ PASSWORD_RESET_TTL_HOURS = 1
 
 
 EMAIL_TEMPLATE_DEFAULTS: dict[str, dict[str, str]] = {
-    "registration_confirmation": {"label": "Подтверждение регистрации", "subject": "Регистрация Stamm Brewing"},
-    "email_confirmation": {"label": "Подтверждение email", "subject": "Подтвердите e-mail · Stamm Brewing"},
-    "password_reset": {"label": "Восстановление пароля", "subject": "Восстановление пароля · Stamm Brewing"},
-    "order_created": {"label": "Заказ создан", "subject": "Заказ создан · Stamm Brewing"},
-    "order_status_changed": {"label": "Заказ изменён / статус изменён", "subject": "Статус заказа изменён · Stamm Brewing"},
-    "test": {"label": "Тестовое письмо", "subject": "Тест почты · Stamm Brewing"},
+    "registration_confirmation": {"label": "Подтверждение регистрации", "subject": "Регистрация Stamm Brewing", "heading": "Регистрация Stamm Brewing"},
+    "email_confirmation": {"label": "Подтверждение email", "subject": "Подтвердите e-mail · Stamm Brewing", "heading": "Подтверждение e-mail"},
+    "password_reset": {"label": "Восстановление пароля", "subject": "Восстановление пароля · Stamm Brewing", "heading": "Восстановление пароля"},
+    "order_created": {"label": "Заказ создан", "subject": "Заказ создан · Stamm Brewing", "heading": "Заказ создан"},
+    "order_status_changed": {"label": "Заказ изменён / статус изменён", "subject": "Статус заказа изменён · Stamm Brewing", "heading": "Статус заказа изменён"},
+    "test": {"label": "Тестовое письмо", "subject": "Тест почты · Stamm Brewing", "heading": "Тест почты"},
 }
 
 
@@ -170,6 +172,13 @@ def list_email_templates(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             "enabled": bool(row["is_enabled"]) if row else True,
             "subject": row["subject"] if row else defaults["subject"],
             "bodyText": row["body_text"] if row else "",
+            "heading": row["heading"] if row and "heading" in row.keys() else defaults.get("heading", defaults["label"]),
+            "preheaderText": row["preheader_text"] if row and "preheader_text" in row.keys() else "",
+            "footerText": row["footer_text"] if row and "footer_text" in row.keys() else "",
+            "imageUrl": row["image_url"] if row and "image_url" in row.keys() else "",
+            "backgroundColor": row["background_color"] if row and "background_color" in row.keys() else "#0b3f40",
+            "backgroundImageUrl": row["background_image_url"] if row and "background_image_url" in row.keys() else "",
+            "backgroundImageEnabled": bool(row["background_image_enabled"]) if row and "background_image_enabled" in row.keys() else False,
         })
     return templates
 
@@ -178,18 +187,35 @@ def save_email_templates(conn: sqlite3.Connection, form: dict[str, Any]) -> None
     for message_type, defaults in EMAIL_TEMPLATE_DEFAULTS.items():
         subject = str(form.get(f"subject_{message_type}") or defaults["subject"]).strip() or defaults["subject"]
         body_text = str(form.get(f"body_{message_type}") or "").strip()
+        heading = str(form.get(f"heading_{message_type}") or defaults.get("heading") or defaults["label"]).strip()
+        preheader_text = str(form.get(f"preheader_{message_type}") or "").strip()
+        footer_text = str(form.get(f"footer_{message_type}") or "").strip()
+        image_url = "" if form.get(f"image_remove_{message_type}") else str(form.get(f"image_url_{message_type}") or "").strip()
+        background_color = _safe_email_color(str(form.get(f"background_color_{message_type}") or ""), "#0b3f40")
+        background_image_url = "" if form.get(f"background_image_remove_{message_type}") else str(form.get(f"background_image_url_{message_type}") or "").strip()
+        background_image_enabled = 1 if form.get(f"background_image_enabled_{message_type}") else 0
         enabled = 1 if form.get(f"enabled_{message_type}") else 0
         conn.execute(
             """
-            INSERT INTO email_templates (message_type, is_enabled, subject, body_text, updated_at)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO email_templates (
+                message_type, is_enabled, subject, body_text, heading, preheader_text, footer_text,
+                image_url, background_color, background_image_url, background_image_enabled, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(message_type) DO UPDATE SET
                 is_enabled = excluded.is_enabled,
                 subject = excluded.subject,
                 body_text = excluded.body_text,
+                heading = excluded.heading,
+                preheader_text = excluded.preheader_text,
+                footer_text = excluded.footer_text,
+                image_url = excluded.image_url,
+                background_color = excluded.background_color,
+                background_image_url = excluded.background_image_url,
+                background_image_enabled = excluded.background_image_enabled,
                 updated_at = CURRENT_TIMESTAMP
             """,
-            (message_type, enabled, subject, body_text),
+            (message_type, enabled, subject, body_text, heading, preheader_text, footer_text, image_url, background_color, background_image_url, background_image_enabled),
         )
     conn.commit()
 
@@ -198,8 +224,25 @@ def _template_for(conn: sqlite3.Connection, message_type: str) -> dict[str, Any]
     defaults = EMAIL_TEMPLATE_DEFAULTS.get(message_type, {"label": message_type, "subject": message_type})
     row = conn.execute("SELECT * FROM email_templates WHERE message_type = ?", (message_type,)).fetchone()
     if row is None:
-        return {"enabled": True, "subject": defaults["subject"], "bodyText": ""}
-    return {"enabled": bool(row["is_enabled"]), "subject": row["subject"] or defaults["subject"], "bodyText": row["body_text"] or ""}
+        return _template_dict(defaults=defaults)
+    return _template_dict(row, defaults)
+
+
+def _template_dict(row: sqlite3.Row | None = None, defaults: dict[str, str] | None = None) -> dict[str, Any]:
+    defaults = defaults or {}
+    keys = set(row.keys()) if row is not None else set()
+    return {
+        "enabled": bool(row["is_enabled"]) if row is not None else True,
+        "subject": (row["subject"] if row is not None else "") or defaults.get("subject", ""),
+        "bodyText": (row["body_text"] if row is not None and "body_text" in keys else "") or "",
+        "heading": (row["heading"] if row is not None and "heading" in keys else "") or defaults.get("heading") or defaults.get("label") or "",
+        "preheaderText": (row["preheader_text"] if row is not None and "preheader_text" in keys else "") or "",
+        "footerText": (row["footer_text"] if row is not None and "footer_text" in keys else "") or "",
+        "imageUrl": (row["image_url"] if row is not None and "image_url" in keys else "") or "",
+        "backgroundColor": _safe_email_color((row["background_color"] if row is not None and "background_color" in keys else "") or "", "#0b3f40"),
+        "backgroundImageUrl": (row["background_image_url"] if row is not None and "background_image_url" in keys else "") or "",
+        "backgroundImageEnabled": bool(row["background_image_enabled"]) if row is not None and "background_image_enabled" in keys else False,
+    }
 
 
 def email_logs(conn: sqlite3.Connection, query: str = "", message_type: str = "", status: str = "", limit: int = 50) -> list[sqlite3.Row]:
@@ -297,9 +340,13 @@ def _send_via_yandex(config: EmailConfig, payload: EmailPayload, send_message: b
 def send_email(conn: sqlite3.Connection, settings: Settings, payload: EmailPayload) -> bool:
     config = resolve_email_config(conn, settings)
     template = _template_for(conn, payload.message_type)
-    effective_payload = payload
-    if template["subject"]:
-        effective_payload = EmailPayload(payload.message_type, payload.to_email, template["subject"], payload.text_body, payload.html_body)
+    effective_payload = EmailPayload(
+        payload.message_type,
+        payload.to_email,
+        template["subject"] or payload.subject,
+        _apply_text_template(payload.text_body, template),
+        _apply_html_template(payload.html_body, template),
+    )
     if not template["enabled"]:
         _log_email(conn, effective_payload, config.provider, "skipped", "email template disabled")
         return False
@@ -313,6 +360,80 @@ def send_email(conn: sqlite3.Connection, settings: Settings, payload: EmailPaylo
         return False
     _log_email(conn, effective_payload, config.provider, "sent")
     return True
+
+
+def _safe_email_color(value: str, fallback: str) -> str:
+    value = str(value or "").strip()
+    return value if re.fullmatch(r"#[0-9a-fA-F]{6}", value) else fallback
+
+
+def _safe_email_url(value: Any) -> str:
+    url = str(value or "").strip()
+    if url.startswith(("/media/", "https://", "http://")):
+        return url
+    return ""
+
+
+def _text_block(value: Any) -> str:
+    return escape(str(value or "").strip()).replace("\n", "<br>")
+
+
+def _extract_inner_email_body(html_body: str) -> str:
+    marker = '<div style="font-size:16px;line-height:1.55;">'
+    if marker in html_body:
+        tail = html_body.split(marker, 1)[1]
+        end = tail.rfind("</div>")
+        if end >= 0:
+            return tail[:end].strip()
+    match = re.search(r"<body[^>]*>(.*)</body>", html_body, flags=re.IGNORECASE | re.DOTALL)
+    return match.group(1).strip() if match else html_body
+
+
+def _apply_text_template(text_body: str, template: dict[str, Any]) -> str:
+    parts = []
+    if template.get("preheaderText"):
+        parts.append(str(template["preheaderText"]).strip())
+    if template.get("bodyText"):
+        parts.append(str(template["bodyText"]).strip())
+    parts.append(text_body)
+    if template.get("footerText"):
+        parts.append(str(template["footerText"]).strip())
+    return "\n\n".join(part for part in parts if part)
+
+
+def _apply_html_template(html_body: str, template: dict[str, Any]) -> str:
+    heading = str(template.get("heading") or "Stamm Brewing")
+    preheader = _text_block(template.get("preheaderText"))
+    body_text = _text_block(template.get("bodyText"))
+    footer = _text_block(template.get("footerText"))
+    image_url = _safe_email_url(template.get("imageUrl"))
+    background_color = _safe_email_color(str(template.get("backgroundColor") or ""), "#0b3f40")
+    background_image_url = _safe_email_url(template.get("backgroundImageUrl")) if template.get("backgroundImageEnabled") else ""
+    background_style = f"background:{background_color};"
+    if background_image_url:
+        background_style += f"background-image:url('{escape(background_image_url)}');background-size:cover;background-position:center top;"
+    image_html = (
+        f"<img src='{escape(image_url)}' alt='' style='display:block;width:100%;max-width:640px;border-radius:20px;margin:0 0 24px;'>"
+        if image_url
+        else ""
+    )
+    preheader_html = f"<p style='margin:0 0 18px;color:#f6f1e3;font-size:15px;line-height:1.5;'>{preheader}</p>" if preheader else ""
+    body_text_html = f"<p style='margin:0 0 18px;color:#f6f1e3;font-size:16px;line-height:1.55;'>{body_text}</p>" if body_text else ""
+    footer_html = f"<p style='margin:24px 0 0;color:rgba(246,241,227,.72);font-size:13px;line-height:1.5;'>{footer}</p>" if footer else ""
+    inner_body = _extract_inner_email_body(html_body)
+    return f"""<!doctype html>
+<html lang="ru">
+<body style="margin:0;{background_style}color:#f6f1e3;font-family:Jost,Arial,sans-serif;">
+  <div style="max-width:640px;margin:0 auto;padding:32px 20px;">
+    {image_html}
+    <h1 style="margin:0 0 18px;color:#c7b166;letter-spacing:.06em;text-transform:uppercase;">{escape(heading)}</h1>
+    {preheader_html}
+    {body_text_html}
+    <div style="font-size:16px;line-height:1.55;">{inner_body}</div>
+    {footer_html}
+  </div>
+</body>
+</html>"""
 
 
 def _render_shell(title: str, body: str) -> str:
@@ -335,30 +456,32 @@ def _button(url: str, label: str) -> str:
     )
 
 
-def create_email_verification_token(conn: sqlite3.Connection, account_id: int) -> str:
+def create_email_verification_token(conn: sqlite3.Connection, account_id: int) -> tuple[str, datetime]:
     token = secrets.token_urlsafe(32)
+    expires_at = _now() + timedelta(hours=EMAIL_CONFIRMATION_TTL_HOURS)
     conn.execute(
         """
         INSERT INTO customer_email_verification_tokens (customer_account_id, token_hash, expires_at)
         VALUES (?, ?, ?)
         """,
-        (account_id, _token_hash(token), _iso(_now() + timedelta(hours=EMAIL_CONFIRMATION_TTL_HOURS))),
+        (account_id, _token_hash(token), _iso(expires_at)),
     )
     conn.commit()
-    return token
+    return token, expires_at
 
 
 def send_email_confirmation(conn: sqlite3.Connection, settings: Settings, account: sqlite3.Row) -> bool:
-    token = create_email_verification_token(conn, int(account["id"]))
+    token, expires_at = create_email_verification_token(conn, int(account["id"]))
+    expires_at_msk = format_moscow_datetime(expires_at)
     link = f"{_base_url(settings)}/account/verify-email?token={quote(token)}"
     text = (
         "Подтвердите e-mail для личного кабинета Stamm Brewing.\n\n"
-        f"Ссылка действует {EMAIL_CONFIRMATION_TTL_HOURS} часов и используется один раз:\n{link}"
+        f"Ссылка действует {EMAIL_CONFIRMATION_TTL_HOURS} часов и используется один раз. Действует до {expires_at_msk}:\n{link}"
     )
     html = _render_shell(
         "Подтверждение e-mail",
         f"<p>Подтвердите e-mail для личного кабинета Stamm Brewing.</p>{_button(link, 'Подтвердить e-mail')}"
-        f"<p>Ссылка действует {EMAIL_CONFIRMATION_TTL_HOURS} часов и используется один раз.</p>",
+        f"<p>Ссылка действует {EMAIL_CONFIRMATION_TTL_HOURS} часов и используется один раз. Действует до {escape(expires_at_msk)}.</p>",
     )
     return send_email(conn, settings, EmailPayload("email_confirmation", account["email"], "Подтвердите e-mail · Stamm Brewing", text, html))
 
@@ -392,24 +515,26 @@ def send_password_reset(conn: sqlite3.Connection, settings: Settings, email: str
     if account is None or account["status"] != "active":
         return False
     token = secrets.token_urlsafe(32)
+    expires_at = _now() + timedelta(hours=PASSWORD_RESET_TTL_HOURS)
+    expires_at_msk = format_moscow_datetime(expires_at)
     conn.execute(
         """
         INSERT INTO customer_password_reset_tokens (customer_account_id, token_hash, expires_at)
         VALUES (?, ?, ?)
         """,
-        (account["id"], _token_hash(token), _iso(_now() + timedelta(hours=PASSWORD_RESET_TTL_HOURS))),
+        (account["id"], _token_hash(token), _iso(expires_at)),
     )
     conn.commit()
     link = f"{_base_url(settings)}/account/password-reset/confirm?token={quote(token)}"
     text = (
         "Вы запросили восстановление пароля Stamm Brewing.\n\n"
-        f"Ссылка действует {PASSWORD_RESET_TTL_HOURS} час и используется один раз:\n{link}\n\n"
+        f"Ссылка действует {PASSWORD_RESET_TTL_HOURS} час и используется один раз. Действует до {expires_at_msk}:\n{link}\n\n"
         "Если вы не запрашивали сброс пароля, просто игнорируйте письмо."
     )
     html = _render_shell(
         "Восстановление пароля",
         f"<p>Вы запросили восстановление пароля Stamm Brewing.</p>{_button(link, 'Сбросить пароль')}"
-        f"<p>Ссылка действует {PASSWORD_RESET_TTL_HOURS} час и используется один раз.</p>"
+        f"<p>Ссылка действует {PASSWORD_RESET_TTL_HOURS} час и используется один раз. Действует до {escape(expires_at_msk)}.</p>"
         "<p>Если вы не запрашивали сброс пароля, просто игнорируйте письмо.</p>",
     )
     return send_email(conn, settings, EmailPayload("password_reset", account["email"], "Восстановление пароля · Stamm Brewing", text, html))
@@ -445,6 +570,7 @@ def send_order_created(
     moysklad_order_name: str | None = None,
 ) -> bool:
     display_number = moysklad_order_name or order_number
+    order_date = format_moscow_datetime(order_date)
     item_lines = []
     item_rows = []
     for entry in items:
