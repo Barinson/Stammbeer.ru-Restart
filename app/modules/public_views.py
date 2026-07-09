@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from html import escape
+
+from app.timezone import format_moscow_datetime
 from urllib.parse import quote
 from typing import Any
 
@@ -831,11 +833,7 @@ def account_money(value: object, currency: object = "RUB") -> str:
 
 
 def account_date(value: object) -> str:
-    raw = str(value or "")
-    try:
-        return raw[:10].split("T", 1)[0]
-    except Exception:
-        return raw or "—"
+    return format_moscow_datetime(value)
 
 
 def account_dashboard_page(

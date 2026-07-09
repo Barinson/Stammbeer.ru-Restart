@@ -35,6 +35,7 @@ from app.modules.admin.views import admin_catalog_page, b2b_orders_page
 from app.modules import public_views as public_views_module
 from app.modules.public_views import account_dashboard_page, beer_page, business_guest_page, business_storefront_page, contacts_page, gallery_page, home_page, maintenance_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
+from app.timezone import format_moscow_datetime
 
 
 class FakeMoyskladResponse:
@@ -172,6 +173,11 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(settings.admin_password, "1")
 
 
+    def test_moscow_timezone_formatter_handles_utc_and_sqlite_timestamps(self) -> None:
+        self.assertEqual(format_moscow_datetime("2026-07-04T10:00:00Z"), "04.07.2026 13:00 МСК")
+        self.assertEqual(format_moscow_datetime("2026-07-04 10:00:00"), "04.07.2026 13:00 МСК")
+
+
     def test_admin_b2b_orders_page_lists_all_orders_with_numbers_comments_and_items(self) -> None:
         app = self.make_app()
         orders = [
@@ -206,6 +212,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Всего B2B-заказов: 4", html)
         self.assertIn("B2B-001", html)
         self.assertIn("B2B-004", html)
+        self.assertIn("04.07.2026 13:00 МСК", html)
         self.assertIn("Комментарий первого", html)
         self.assertIn("Комментарий не указан", html)
         self.assertIn("order-ms-4", html)
@@ -223,6 +230,7 @@ class CoreFoundationTest(unittest.TestCase):
         response_html = urllib.request.urlopen(request, timeout=5).read().decode("utf-8")
         self.assertIn("B2B-заказы", response_html)
         self.assertIn("B2B-002", response_html)
+        self.assertIn("02.07.2026 13:00 МСК", response_html)
         self.assertIn("Нужна доставка утром", response_html)
         self.assertIn("Состав заказа", response_html)
 
@@ -2943,6 +2951,45 @@ class CoreFoundationTest(unittest.TestCase):
 
         account = app.conn.execute("SELECT discount_percent FROM customer_accounts WHERE email = 'stale@example.com'").fetchone()
         self.assertEqual(account["discount_percent"], 7)
+
+    def test_email_payloads_render_moscow_time(self) -> None:
+        app = self.make_app()
+        from app.modules.auth.security import hash_password
+
+        app.conn.execute(
+            """
+            INSERT INTO customer_accounts (
+                email, password_hash, inn, counterparty_id, counterparty_href, counterparty_name, counterparty_meta_json,
+                discount_percent, discount_source_json
+            ) VALUES ('time@example.com', ?, '7701234567', 'counterparty-1',
+                'https://api.moysklad.ru/api/remap/1.2/entity/counterparty/counterparty-1', 'ООО Время', '{}', 0, '{}')
+            """,
+            (hash_password("secret123"),),
+        )
+        app.conn.commit()
+        customer = app.conn.execute("SELECT * FROM customer_accounts WHERE email = 'time@example.com'").fetchone()
+        captured = []
+        original_send_email = email_service.send_email
+        email_service.send_email = lambda conn, settings, payload: captured.append(payload) or True
+        try:
+            email_service.send_order_created(
+                app.conn,
+                app.settings,
+                customer,
+                "B2B-TIME",
+                "2026-07-04T10:00:00Z",
+                [{"item": {"name": "Stamm Time", "price": {"amountMinor": 100000}}, "quantity": 1, "lineTotalMinor": 100000}],
+                100000,
+                "",
+            )
+            email_service.send_password_reset(app.conn, app.settings, "time@example.com")
+        finally:
+            email_service.send_email = original_send_email
+        self.assertIn("04.07.2026 13:00 МСК", captured[0].text_body)
+        self.assertIn("04.07.2026 13:00 МСК", captured[0].html_body)
+        self.assertIn("МСК", captured[1].text_body)
+        self.assertIn("МСК", captured[1].html_body)
+
 
     def test_email_confirmation_and_password_reset_tokens_are_hashed_and_one_time(self) -> None:
         app = self.make_app()
