@@ -417,20 +417,36 @@ def _apply_html_template(html_body: str, template: dict[str, Any]) -> str:
         if image_url
         else ""
     )
-    preheader_html = f"<p style='margin:0 0 18px;color:#f6f1e3;font-size:15px;line-height:1.5;'>{preheader}</p>" if preheader else ""
-    body_text_html = f"<p style='margin:0 0 18px;color:#f6f1e3;font-size:16px;line-height:1.55;'>{body_text}</p>" if body_text else ""
-    footer_html = f"<p style='margin:24px 0 0;color:rgba(246,241,227,.72);font-size:13px;line-height:1.5;'>{footer}</p>" if footer else ""
+    preheader_html = f"<p style='margin:0 0 16px;color:#172625;font-size:14px;line-height:1.45;'>{preheader}</p>" if preheader else ""
+    body_text_html = f"<p style='margin:0 0 16px;color:#172625;font-size:15px;line-height:1.5;'>{body_text}</p>" if body_text else ""
+    footer_html = f"<p style='margin:22px 0 0;color:#243938;font-size:12px;line-height:1.45;'>{footer}</p>" if footer else ""
     inner_body = _extract_inner_email_body(html_body)
     return f"""<!doctype html>
 <html lang="ru">
-<body style="margin:0;{background_style}color:#f6f1e3;font-family:Jost,Arial,sans-serif;">
-  <div style="max-width:640px;margin:0 auto;padding:32px 20px;">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    @media screen and (max-width:520px) {{
+      .email-outer {{ padding:14px 8px !important; }}
+      .email-shell {{ padding:18px 14px !important; border-radius:14px !important; }}
+      .email-title {{ font-size:20px !important; line-height:1.15 !important; letter-spacing:.04em !important; }}
+      .email-body {{ font-size:14px !important; line-height:1.45 !important; overflow-x:auto !important; }}
+      .email-body p {{ margin:0 0 12px !important; }}
+      .email-body table {{ font-size:12px !important; min-width:0 !important; }}
+      .email-body th, .email-body td {{ padding:6px 4px !important; }}
+    }}
+  </style>
+</head>
+<body style="margin:0;{background_style}color:#172625;font-family:Jost,Arial,sans-serif;">
+  <div class="email-outer" style="padding:24px 12px;">
+  <div class="email-shell" style="max-width:600px;margin:0 auto;padding:26px 22px;background:#ffffff;border-radius:20px;color:#172625;">
     {image_html}
-    <h1 style="margin:0 0 18px;color:#c7b166;letter-spacing:.06em;text-transform:uppercase;">{escape(heading)}</h1>
+    <h1 class="email-title" style="margin:0 0 16px;color:#c7b166;letter-spacing:.06em;text-transform:uppercase;font-size:26px;line-height:1.12;">{escape(heading)}</h1>
     {preheader_html}
     {body_text_html}
-    <div style="font-size:16px;line-height:1.55;">{inner_body}</div>
+    <div class="email-body" style="font-size:15px;line-height:1.5;color:#172625;">{inner_body}</div>
     {footer_html}
+  </div>
   </div>
 </body>
 </html>"""
@@ -439,10 +455,15 @@ def _apply_html_template(html_body: str, template: dict[str, Any]) -> str:
 def _render_shell(title: str, body: str) -> str:
     return f"""<!doctype html>
 <html lang="ru">
-<body style="margin:0;background:#0b3f40;color:#f6f1e3;font-family:Jost,Arial,sans-serif;">
-  <div style="max-width:640px;margin:0 auto;padding:32px 20px;">
-    <h1 style="margin:0 0 18px;color:#c7b166;letter-spacing:.06em;text-transform:uppercase;">{escape(title)}</h1>
-    <div style="font-size:16px;line-height:1.55;">{body}</div>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0;background:#0b3f40;color:#172625;font-family:Jost,Arial,sans-serif;">
+  <div style="padding:24px 12px;">
+  <div style="max-width:600px;margin:0 auto;padding:26px 22px;background:#ffffff;border-radius:20px;color:#172625;">
+    <h1 style="margin:0 0 16px;color:#c7b166;letter-spacing:.06em;text-transform:uppercase;font-size:26px;line-height:1.12;">{escape(title)}</h1>
+    <div style="font-size:15px;line-height:1.5;color:#172625;">{body}</div>
+  </div>
   </div>
 </body>
 </html>"""
@@ -583,10 +604,10 @@ def send_order_created(
         item_lines.append(f"- {item['name']} × {qty}: {line_total_text}")
         item_rows.append(
             "<tr>"
-            f"<td style='padding:8px;border-bottom:1px solid rgba(199,177,102,.25);'>{escape(str(item['name']))}</td>"
-            f"<td style='padding:8px;border-bottom:1px solid rgba(199,177,102,.25);text-align:right;'>{qty}</td>"
-            f"<td style='padding:8px;border-bottom:1px solid rgba(199,177,102,.25);text-align:right;'>{price_text}</td>"
-            f"<td style='padding:8px;border-bottom:1px solid rgba(199,177,102,.25);text-align:right;'>{line_total_text}</td>"
+            f"<td style='padding:7px 6px;border-bottom:1px solid rgba(23,38,37,.16);color:#172625;'>{escape(str(item['name']))}</td>"
+            f"<td style='padding:7px 6px;border-bottom:1px solid rgba(23,38,37,.16);text-align:right;color:#172625;'>{qty}</td>"
+            f"<td style='padding:7px 6px;border-bottom:1px solid rgba(23,38,37,.16);text-align:right;color:#172625;'>{price_text}</td>"
+            f"<td style='padding:7px 6px;border-bottom:1px solid rgba(23,38,37,.16);text-align:right;color:#172625;'>{line_total_text}</td>"
             "</tr>"
         )
     total = f"{total_minor / 100:,.2f} ₽".replace(",", " ")
@@ -601,8 +622,8 @@ def send_order_created(
         "Заказ создан",
         f"<p>Заказ <strong>{escape(str(display_number))}</strong> создан.</p>"
         f"<p>Дата: {escape(order_date)}</p>"
-        "<table style='width:100%;border-collapse:collapse;'>"
-        "<thead><tr><th align='left'>Позиция</th><th align='right'>Кол-во</th><th align='right'>Цена</th><th align='right'>Сумма</th></tr></thead>"
+        "<table style='width:100%;border-collapse:collapse;color:#172625;font-size:14px;'>"
+        "<thead><tr><th align='left' style='padding:7px 6px;color:#172625;'>Позиция</th><th align='right' style='padding:7px 6px;color:#172625;'>Кол-во</th><th align='right' style='padding:7px 6px;color:#172625;'>Цена</th><th align='right' style='padding:7px 6px;color:#172625;'>Сумма</th></tr></thead>"
         f"<tbody>{''.join(item_rows)}</tbody></table>"
         f"<p><strong>Итого: {escape(total)}</strong></p>"
         + (f"<p>Комментарий: {escape(comment.strip())}</p>" if comment.strip() else ""),
