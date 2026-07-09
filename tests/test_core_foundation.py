@@ -597,6 +597,11 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Reset managed body", reset_html)
         self.assertIn("/media/reset-banner.jpg", reset_html)
         self.assertIn("/media/reset-bg.jpg", reset_html)
+        self.assertIn('class="email-shell"', reset_html)
+        self.assertIn("color:#172625", reset_html)
+        self.assertIn("font-size:15px;line-height:1.5", reset_html)
+        self.assertIn("@media screen and (max-width:520px)", reset_html)
+        self.assertIn(".email-body table { font-size:12px", reset_html)
         reset_text = reset_message.get_payload()[0].get_content()
         self.assertIn("Reset footer", reset_text)
         confirm = urllib.request.Request(
@@ -613,6 +618,9 @@ class CoreFoundationTest(unittest.TestCase):
             method="POST",
         )
         self.assertEqual(open_without_redirects(order_mail).status, 303)
+        order_html = sent_messages[-1].get_payload()[1].get_content()
+        self.assertIn("<table style='width:100%;border-collapse:collapse;color:#172625;font-size:14px;'>", order_html)
+        self.assertIn("padding:7px 6px", order_html)
         message_types = [row["message_type"] for row in app.conn.execute("SELECT message_type FROM email_send_logs ORDER BY id")]
         self.assertIn("password_reset", message_types)
         self.assertIn("email_confirmation", message_types)
