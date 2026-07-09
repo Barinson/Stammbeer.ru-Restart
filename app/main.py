@@ -867,8 +867,20 @@ class StammApp:
                     user = self.require_admin()
                     if user is None:
                         return
-                    form = self.read_form()
                     try:
+                        if path == "/admin/email/templates":
+                            form, files = self.read_multipart_form()
+                            for field, upload in files.items():
+                                if field.startswith("image_file_"):
+                                    message_type = field.removeprefix("image_file_")
+                                    form[f"image_url_{message_type}"] = self.save_uploaded_media(upload, f"email-{message_type.replace('_', '-')}")
+                                if field.startswith("background_image_file_"):
+                                    message_type = field.removeprefix("background_image_file_")
+                                    form[f"background_image_url_{message_type}"] = self.save_uploaded_media(upload, f"email-bg-{message_type.replace('_', '-')}")
+                            save_email_templates(app.conn, form)
+                            self.redirect("/admin/email?result=" + urllib.parse.quote("Типы писем сохранены."))
+                            return
+                        form = self.read_form()
                         if path == "/admin/email/settings":
                             save_email_settings(app.conn, form)
                             self.redirect("/admin/email?result=" + urllib.parse.quote("Настройки почты сохранены."))
@@ -883,10 +895,6 @@ class StammApp:
                             result = send_test_email(app.conn, app.settings, form.get("to_email", ""), form.get("message_type", "test"))
                             target = "result" if result.ok else "error"
                             self.redirect(f"/admin/email?{target}=" + urllib.parse.quote(result.message))
-                            return
-                        if path == "/admin/email/templates":
-                            save_email_templates(app.conn, form)
-                            self.redirect("/admin/email?result=" + urllib.parse.quote("Типы писем сохранены."))
                             return
                         if path == "/admin/email/manual-confirmation":
                             result = send_email_confirmation_for_customer(app.conn, app.settings, form.get("customer_ref", ""))
