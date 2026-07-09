@@ -26,6 +26,15 @@ SEO_DEFAULTS = {
     "maintenance": ("Технические работы · Stamm Brewing", "Сайт Stamm Brewing временно находится на технических работах."),
 }
 
+BREADCRUMB_NAMES = {
+    "home": "Главная",
+    "beer": "Пиво",
+    "business": "Бизнес",
+    "contacts": "Контакты",
+    "visit": "Stammhaus",
+    "gallery": "Галерея",
+}
+
 
 def _absolute_url(base_url: str, path_or_url: object) -> str:
     value = str(path_or_url or "").strip()
@@ -62,6 +71,7 @@ def seo_head(content: dict[str, Any] | None, page_key: str, path: str, title: st
     favicon = str(site.get("site_favicon_url") or SITE_DEFAULTS.get("site_favicon_url") or "").strip()
     favicon_link = f'\n  <link rel="icon" href="{escape(favicon)}">' if favicon else ""
     image_meta = f'\n  <meta property="og:image" content="{escape(og_image)}">' if og_image else ""
+    breadcrumbs = breadcrumb_json_ld(site_content, page_key, path)
     return f"""{PUBLIC_HEAD}
   <title>{escape(title_value)}</title>
   <meta name="description" content="{escape(description_value)}">
@@ -70,7 +80,32 @@ def seo_head(content: dict[str, Any] | None, page_key: str, path: str, title: st
   <meta property="og:title" content="{escape(title_value)}">
   <meta property="og:description" content="{escape(description_value)}">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="{escape(canonical)}">{image_meta}"""
+  <meta property="og:url" content="{escape(canonical)}">{image_meta}
+  {breadcrumbs}"""
+
+
+def breadcrumb_json_ld(content: dict[str, Any] | None, page_key: str, path: str) -> str:
+    site_content = public_content_or_defaults(content)
+    site = site_content.get("site") or {}
+    base_url = str(site.get("site_public_base_url") or _site_default("site_public_base_url", "https://stammbeer.ru")).rstrip("/")
+    items = [{"name": BREADCRUMB_NAMES["home"], "item": _absolute_url(base_url, "/")}]
+    if page_key != "home":
+        items.append({"name": BREADCRUMB_NAMES.get(page_key, page_key.title()), "item": _absolute_url(base_url, path)})
+    payload = {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {
+                "@type": "ListItem",
+                "position": index,
+                "name": item["name"],
+                "item": item["item"],
+            }
+            for index, item in enumerate(items, start=1)
+        ],
+    }
+    json_payload = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    return f'<script type="application/ld+json">{json_payload}</script>'
 
 
 BASE_CSS = """
