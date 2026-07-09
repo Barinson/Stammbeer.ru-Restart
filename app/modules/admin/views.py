@@ -1422,17 +1422,7 @@ def email_management_page(
     ssl_checked = "checked" if settings.get("useSsl") else ""
     tls_checked = "checked" if settings.get("useTls") else ""
     password_hint = "Пароль сохранён — оставьте пустым, чтобы не менять" if settings.get("hasPassword") else "Введите пароль приложения Яндекс"
-    template_rows = "".join(
-        f"""
-        <tr>
-          <td><strong>{escape(str(template['label']))}</strong><br><small>{escape(str(template['messageType']))}</small></td>
-          <td><input type='checkbox' name='enabled_{escape(str(template['messageType']))}' {'checked' if template.get('enabled') else ''}></td>
-          <td><input name='subject_{escape(str(template['messageType']))}' value='{escape(str(template['subject'] or ''))}'></td>
-          <td><textarea name='body_{escape(str(template['messageType']))}' rows='2'>{escape(str(template.get('bodyText') or ''))}</textarea></td>
-        </tr>
-        """
-        for template in templates
-    )
+    template_rows = "".join(_email_template_card(template) for template in templates)
     message_type_options = "".join(
         f"<option value='{escape(str(template['messageType']))}'>{escape(str(template['label']))}</option>"
         for template in templates
@@ -1488,12 +1478,9 @@ def email_management_page(
       </div>
       <div class='card'>
         <h3>Почта / Типы писем</h3>
-        <p class='muted'>Базовое управление сценариями: включение/выключение, тема и короткий текстовый блок для дальнейшего развития шаблонов.</p>
-        <form method='post' action='/admin/email/templates'>
-          <table style='width:100%; border-collapse:collapse;'>
-            <thead><tr><th>Сценарий</th><th>Вкл.</th><th>Тема</th><th>Текстовый блок</th></tr></thead>
-            <tbody>{template_rows}</tbody>
-          </table>
+        <p class='muted'>Безопасные управляемые шаблоны: тема, заголовок, текстовые блоки, изображение и фон. HTML письма остаётся фиксированным, чтобы случайно не сломать адаптивную вёрстку.</p>
+        <form method='post' action='/admin/email/templates' enctype='multipart/form-data'>
+          <div class='grid'>{template_rows}</div>
           <p><button type='submit'>Сохранить типы писем</button></p>
         </form>
       </div>
@@ -1533,3 +1520,49 @@ def email_management_page(
       </div>
     """
     return page("Почта", body, user_email)
+
+
+def _email_template_card(template: dict[str, object]) -> str:
+    message_type = str(template["messageType"])
+    image_url = str(template.get("imageUrl") or "")
+    background_image_url = str(template.get("backgroundImageUrl") or "")
+    preview_image = (
+        f"<div class='muted'>Текущее изображение:<br><img src='{escape(image_url)}' alt='' style='max-width:160px;border-radius:12px;margin-top:6px;'></div>"
+        if image_url
+        else "<p class='muted'>Изображение не задано — письмо будет без баннера.</p>"
+    )
+    preview_bg = (
+        f"<div class='muted'>Фон письма:<br><img src='{escape(background_image_url)}' alt='' style='max-width:160px;border-radius:12px;margin-top:6px;'></div>"
+        if background_image_url
+        else "<p class='muted'>Фоновая картинка не задана.</p>"
+    )
+    return f"""
+      <fieldset class='card' style='margin:0;'>
+        <legend><strong>{escape(str(template['label']))}</strong></legend>
+        <p class='muted'>{escape(message_type)}</p>
+        <p><label><input type='checkbox' name='enabled_{escape(message_type)}' {'checked' if template.get('enabled') else ''}> Включить отправку этого письма</label></p>
+        <label>Тема письма<input name='subject_{escape(message_type)}' value='{escape(str(template.get('subject') or ''))}'></label>
+        <label>Заголовок внутри письма<input name='heading_{escape(message_type)}' value='{escape(str(template.get('heading') or ''))}'></label>
+        <label>Подзаголовок / preheader<textarea name='preheader_{escape(message_type)}' rows='2'>{escape(str(template.get('preheaderText') or ''))}</textarea></label>
+        <label>Основной дополнительный текст<textarea name='body_{escape(message_type)}' rows='3'>{escape(str(template.get('bodyText') or ''))}</textarea></label>
+        <label>Подпись / дополнительный нижний текст<textarea name='footer_{escape(message_type)}' rows='2'>{escape(str(template.get('footerText') or ''))}</textarea></label>
+        <div class='grid'>
+          <div>
+            <h4>Изображение письма</h4>
+            {preview_image}
+            <input type='hidden' name='image_url_{escape(message_type)}' value='{escape(image_url)}'>
+            <label>Загрузить / заменить<input type='file' name='image_file_{escape(message_type)}' accept='image/*'></label>
+            <label><input type='checkbox' name='image_remove_{escape(message_type)}'> Убрать изображение</label>
+          </div>
+          <div>
+            <h4>Фон письма</h4>
+            <label>Цвет фона<input type='color' name='background_color_{escape(message_type)}' value='{escape(str(template.get('backgroundColor') or '#0b3f40'))}'></label>
+            {preview_bg}
+            <input type='hidden' name='background_image_url_{escape(message_type)}' value='{escape(background_image_url)}'>
+            <label>Фоновая картинка<input type='file' name='background_image_file_{escape(message_type)}' accept='image/*'></label>
+            <label><input type='checkbox' name='background_image_enabled_{escape(message_type)}' {'checked' if template.get('backgroundImageEnabled') else ''}> Использовать фоновое изображение</label>
+            <label><input type='checkbox' name='background_image_remove_{escape(message_type)}'> Убрать фоновое изображение</label>
+          </div>
+        </div>
+      </fieldset>
+    """

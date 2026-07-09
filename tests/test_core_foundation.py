@@ -500,6 +500,9 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Почта / Подключение", email_html)
         self.assertIn("Почта / Логи", email_html)
         self.assertIn("Почта / Ручные действия", email_html)
+        self.assertIn("heading_order_created", email_html)
+        self.assertIn("image_file_order_created", email_html)
+        self.assertIn("background_image_enabled_order_created", email_html)
 
         save = urllib.request.Request(
             base + "/admin/email/settings",
@@ -545,10 +548,22 @@ class CoreFoundationTest(unittest.TestCase):
             data=urllib.parse.urlencode({
                 "enabled_email_confirmation": "on",
                 "subject_email_confirmation": "Confirm custom",
+                "heading_email_confirmation": "Confirm heading",
                 "enabled_password_reset": "on",
                 "subject_password_reset": "Reset custom",
+                "heading_password_reset": "Reset heading",
+                "preheader_password_reset": "Reset preheader",
+                "body_password_reset": "Reset managed body",
+                "footer_password_reset": "Reset footer",
+                "image_url_password_reset": "/media/reset-banner.jpg",
+                "background_color_password_reset": "#123456",
+                "background_image_url_password_reset": "/media/reset-bg.jpg",
+                "background_image_enabled_password_reset": "on",
+                "enabled_registration_confirmation": "on",
+                "subject_registration_confirmation": "Registration custom",
                 "enabled_order_created": "on",
                 "subject_order_created": "Order custom",
+                "heading_order_created": "Order heading",
                 "enabled_order_status_changed": "on",
                 "subject_order_status_changed": "Status custom",
                 "enabled_test": "on",
@@ -560,6 +575,14 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(open_without_redirects(templates).status, 303)
         subject = app.conn.execute("SELECT subject FROM email_templates WHERE message_type = 'password_reset'").fetchone()["subject"]
         self.assertEqual(subject, "Reset custom")
+        reset_template = app.conn.execute("SELECT heading, preheader_text, footer_text, image_url, background_color, background_image_url, background_image_enabled FROM email_templates WHERE message_type = 'password_reset'").fetchone()
+        self.assertEqual(reset_template["heading"], "Reset heading")
+        self.assertEqual(reset_template["preheader_text"], "Reset preheader")
+        self.assertEqual(reset_template["footer_text"], "Reset footer")
+        self.assertEqual(reset_template["image_url"], "/media/reset-banner.jpg")
+        self.assertEqual(reset_template["background_color"], "#123456")
+        self.assertEqual(reset_template["background_image_url"], "/media/reset-bg.jpg")
+        self.assertEqual(reset_template["background_image_enabled"], 1)
 
         reset = urllib.request.Request(
             base + "/admin/email/manual-reset",
@@ -568,6 +591,14 @@ class CoreFoundationTest(unittest.TestCase):
             method="POST",
         )
         self.assertEqual(open_without_redirects(reset).status, 303)
+        reset_message = sent_messages[-1]
+        reset_html = reset_message.get_payload()[1].get_content()
+        self.assertIn("Reset heading", reset_html)
+        self.assertIn("Reset managed body", reset_html)
+        self.assertIn("/media/reset-banner.jpg", reset_html)
+        self.assertIn("/media/reset-bg.jpg", reset_html)
+        reset_text = reset_message.get_payload()[0].get_content()
+        self.assertIn("Reset footer", reset_text)
         confirm = urllib.request.Request(
             base + "/admin/email/manual-confirmation",
             data=urllib.parse.urlencode({"customer_ref": str(customer_id)}).encode("utf-8"),
