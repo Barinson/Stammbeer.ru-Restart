@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from html import escape
+
+from app.timezone import format_moscow_datetime
 NAV_ITEMS = [
     ("/admin", "Dashboard"),
     ("/admin/catalog", "Каталог"),
@@ -166,8 +168,8 @@ def b2b_orders_page(user_email: str, orders: list[dict[str, object]]) -> str:
                 {external_html}
               </td>
               <td>
-                <div>{escape(str(order.get('created_at') or '—'))}</div>
-                <small class='muted'>обновлён: {escape(str(order.get('updated_at') or '—'))}</small>
+                <div>{escape(format_moscow_datetime(order.get('created_at')))}</div>
+                <small class='muted'>обновлён: {escape(format_moscow_datetime(order.get('updated_at')))}</small>
               </td>
               <td>
                 <strong>{escape(str(order.get('company_name') or '—'))}</strong>
@@ -237,7 +239,7 @@ def customer_accounts_page(user_email: str, accounts: list[object], query: str =
               <td>{escape(str(account['counterparty_name'] or '—'))}<small>{escape(str(account['counterparty_id'] or '—'))}</small></td>
               <td><span class='status users-status'>{escape(status_label(account['status']))}</span></td>
               <td>{escape(str(account['price_type_name'] or '—'))}</td>
-              <td>{escape(str(account['created_at'] or '—'))}</td>
+              <td>{escape(format_moscow_datetime(account['created_at']))}</td>
               <td>
                 <div class='users-actions'>
                   <form method='post' action='/admin/users/status'>
@@ -442,7 +444,7 @@ def moysklad_settings_page(user_email: str, settings: dict[str, object], result:
     token_help = "Токен сохранён" if settings.get("hasToken") else "Токен ещё не сохранён"
     auto_history = auto_history or []
     def compact_sync_time(value: object) -> str:
-        return str(value or "—").replace("T", " ").replace("Z", "")[:16]
+        return format_moscow_datetime(value)
     history_rows = "".join(
         f"<li><strong>{escape(compact_sync_time(item.get('startedAt')))}</strong> — "
         f"{('успешно' if item.get('status') == 'success' else 'неуспешно' if item.get('status') == 'failed' else escape(str(item.get('status') or '—')))}"
@@ -1438,7 +1440,7 @@ def email_management_page(
     log_rows = "".join(
         f"""
         <tr>
-          <td>{escape(str(log['created_at'] or '—'))}</td>
+          <td>{escape(format_moscow_datetime(log['created_at']))}</td>
           <td>{escape(str(log['message_type'] or '—'))}</td>
           <td>{escape(str(log['recipient_email'] or '—'))}</td>
           <td><span class='status'>{escape(str(log['status'] or '—'))}</span></td>

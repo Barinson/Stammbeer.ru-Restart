@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import quote
 
 from app.config import Settings
+from app.timezone import format_moscow_datetime
 from app.integrations.moysklad.settings_service import decode_token, encode_token
 from app.modules.auth.security import hash_password
 from app.modules.account.service import normalize_email, utc_now_iso
@@ -335,30 +336,32 @@ def _button(url: str, label: str) -> str:
     )
 
 
-def create_email_verification_token(conn: sqlite3.Connection, account_id: int) -> str:
+def create_email_verification_token(conn: sqlite3.Connection, account_id: int) -> tuple[str, datetime]:
     token = secrets.token_urlsafe(32)
+    expires_at = _now() + timedelta(hours=EMAIL_CONFIRMATION_TTL_HOURS)
     conn.execute(
         """
         INSERT INTO customer_email_verification_tokens (customer_account_id, token_hash, expires_at)
         VALUES (?, ?, ?)
         """,
-        (account_id, _token_hash(token), _iso(_now() + timedelta(hours=EMAIL_CONFIRMATION_TTL_HOURS))),
+        (account_id, _token_hash(token), _iso(expires_at)),
     )
     conn.commit()
-    return token
+    return token, expires_at
 
 
 def send_email_confirmation(conn: sqlite3.Connection, settings: Settings, account: sqlite3.Row) -> bool:
-    token = create_email_verification_token(conn, int(account["id"]))
+    token, expires_at = create_email_verification_token(conn, int(account["id"]))
+    expires_at_msk = format_moscow_datetime(expires_at)
     link = f"{_base_url(settings)}/account/verify-email?token={quote(token)}"
     text = (
         "Подтвердите e-mail для личного кабинета Stamm Brewing.\n\n"
-        f"Ссылка действует {EMAIL_CONFIRMATION_TTL_HOURS} часов и используется один раз:\n{link}"
+        f"Ссылка действует {EMAIL_CONFIRMATION_TTL_HOURS} часов и используется один раз. Действует до {expires_at_msk}:\n{link}"
     )
     html = _render_shell(
         "Подтверждение e-mail",
         f"<p>Подтвердите e-mail для личного кабинета Stamm Brewing.</p>{_button(link, 'Подтвердить e-mail')}"
-        f"<p>Ссылка действует {EMAIL_CONFIRMATION_TTL_HOURS} часов и используется один раз.</p>",
+        f"<p>Ссылка действует {EMAIL_CONFIRMATION_TTL_HOURS} часов и используется один раз. Действует до {escape(expires_at_msk)}.</p>",
     )
     return send_email(conn, settings, EmailPayload("email_confirmation", account["email"], "Подтвердите e-mail · Stamm Brewing", text, html))
 
@@ -392,24 +395,26 @@ def send_password_reset(conn: sqlite3.Connection, settings: Settings, email: str
     if account is None or account["status"] != "active":
         return False
     token = secrets.token_urlsafe(32)
+    expires_at = _now() + timedelta(hours=PASSWORD_RESET_TTL_HOURS)
+    expires_at_msk = format_moscow_datetime(expires_at)
     conn.execute(
         """
         INSERT INTO customer_password_reset_tokens (customer_account_id, token_hash, expires_at)
         VALUES (?, ?, ?)
         """,
-        (account["id"], _token_hash(token), _iso(_now() + timedelta(hours=PASSWORD_RESET_TTL_HOURS))),
+        (account["id"], _token_hash(token), _iso(expires_at)),
     )
     conn.commit()
     link = f"{_base_url(settings)}/account/password-reset/confirm?token={quote(token)}"
     text = (
         "Вы запросили восстановление пароля Stamm Brewing.\n\n"
-        f"Ссылка действует {PASSWORD_RESET_TTL_HOURS} час и используется один раз:\n{link}\n\n"
+        f"Ссылка действует {PASSWORD_RESET_TTL_HOURS} час и используется один раз. Действует до {expires_at_msk}:\n{link}\n\n"
         "Если вы не запрашивали сброс пароля, просто игнорируйте письмо."
     )
     html = _render_shell(
         "Восстановление пароля",
         f"<p>Вы запросили восстановление пароля Stamm Brewing.</p>{_button(link, 'Сбросить пароль')}"
-        f"<p>Ссылка действует {PASSWORD_RESET_TTL_HOURS} час и используется один раз.</p>"
+        f"<p>Ссылка действует {PASSWORD_RESET_TTL_HOURS} час и используется один раз. Действует до {escape(expires_at_msk)}.</p>"
         "<p>Если вы не запрашивали сброс пароля, просто игнорируйте письмо.</p>",
     )
     return send_email(conn, settings, EmailPayload("password_reset", account["email"], "Восстановление пароля · Stamm Brewing", text, html))
@@ -445,6 +450,7 @@ def send_order_created(
     moysklad_order_name: str | None = None,
 ) -> bool:
     display_number = moysklad_order_name or order_number
+    order_date = format_moscow_datetime(order_date)
     item_lines = []
     item_rows = []
     for entry in items:
