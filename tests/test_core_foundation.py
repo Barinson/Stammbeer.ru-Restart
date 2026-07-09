@@ -28,10 +28,10 @@ from app.modules.account.service import (
 )
 from app.integrations.moysklad.settings_service import get_settings, refresh_integration_references, save_settings, serialize_settings
 from app.modules.email import service as email_service
-from app.main import StammApp, admin_stats
+from app.main import StammApp, admin_b2b_orders, admin_stats
 from app.modules.catalog.service import admin_catalog_items, public_catalog, publish_product
 from app.modules.content.service import get_public_site_content, save_public_content
-from app.modules.admin.views import admin_catalog_page
+from app.modules.admin.views import admin_catalog_page, b2b_orders_page
 from app.modules import public_views as public_views_module
 from app.modules.public_views import account_dashboard_page, beer_page, business_guest_page, business_storefront_page, contacts_page, gallery_page, home_page, maintenance_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
@@ -170,6 +170,61 @@ class CoreFoundationTest(unittest.TestCase):
         settings = load_settings()
         self.assertEqual(settings.admin_email, "admin")
         self.assertEqual(settings.admin_password, "1")
+
+
+    def test_admin_b2b_orders_page_lists_all_orders_with_numbers_comments_and_items(self) -> None:
+        app = self.make_app()
+        orders = [
+            ("B2B-001", "sent_to_moysklad", "ООО Первый", "first@example.com", "Комментарий первого", 1200000, "order-ms-1", "https://example.test/order-ms-1", "2026-07-01T10:00:00Z"),
+            ("B2B-002", "pending_moysklad", "ООО Второй", "second@example.com", "", 2400000, "", "", "2026-07-02T10:00:00Z"),
+            ("B2B-003", "moysklad_error", "ООО Третий", "third@example.com", "Нужна доставка утром", 3600000, "", "", "2026-07-03T10:00:00Z"),
+            ("B2B-004", "sent_to_moysklad", "ООО Четвёртый", "fourth@example.com", "Оставить у охраны", 4800000, "order-ms-4", "https://example.test/order-ms-4", "2026-07-04T10:00:00Z"),
+        ]
+        for index, order in enumerate(orders, start=1):
+            order_id = app.conn.execute(
+                """
+                INSERT INTO b2b_orders (
+                    number, status, contact_name, company_name, inn, email, phone, city, comment, total_minor,
+                    currency, source_json, external_order_id, external_order_href, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, '—', '—', ?, ?, 'RUB', '{}', ?, ?, ?, ?)
+                """,
+                (order[0], order[1], order[3], order[2], f"770000000{index}", order[3], order[4], order[5], order[6], order[7], order[8], order[8]),
+            ).lastrowid
+            app.conn.execute(
+                """
+                INSERT INTO b2b_order_items (order_id, product_id, quantity, price_minor, line_total_minor, product_snapshot_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (order_id, None, 12, 100000, 1200000, json.dumps({"name": f"Stamm позиция {index}"}, ensure_ascii=False)),
+            )
+        app.conn.commit()
+
+        loaded_orders = admin_b2b_orders(app.conn)
+        self.assertEqual(len(loaded_orders), 4)
+        self.assertEqual(loaded_orders[0]["number"], "B2B-004")
+        html = b2b_orders_page("admin@example.com", loaded_orders)
+        self.assertIn("Всего B2B-заказов: 4", html)
+        self.assertIn("B2B-001", html)
+        self.assertIn("B2B-004", html)
+        self.assertIn("Комментарий первого", html)
+        self.assertIn("Комментарий не указан", html)
+        self.assertIn("order-ms-4", html)
+        self.assertIn("Stamm позиция 3", html)
+        self.assertNotIn("Каркас раздела готов", html)
+
+        admin = authenticate(app.conn, "admin", "1")
+        admin_cookie = cookie_header(create_session(app.conn, admin["id"]))
+        server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        request = urllib.request.Request(f"http://127.0.0.1:{server.server_port}/admin/b2b-orders", headers={"Cookie": admin_cookie})
+        response_html = urllib.request.urlopen(request, timeout=5).read().decode("utf-8")
+        self.assertIn("B2B-заказы", response_html)
+        self.assertIn("B2B-002", response_html)
+        self.assertIn("Нужна доставка утром", response_html)
+        self.assertIn("Состав заказа", response_html)
 
 
     def test_admin_customer_users_page_search_status_delete_and_password_reset(self) -> None:

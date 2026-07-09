@@ -26,7 +26,7 @@ from app.integrations.moysklad.settings_service import (
     serialize_settings,
     test_saved_connection,
 )
-from app.modules.admin.views import admin_catalog_page, content_management_page, customer_accounts_page, dashboard, email_management_page, login_page, moysklad_settings_page, page, placeholder, profile_page
+from app.modules.admin.views import admin_catalog_page, b2b_orders_page, content_management_page, customer_accounts_page, dashboard, email_management_page, login_page, moysklad_settings_page, page, placeholder, profile_page
 from app.modules.b2b.service import send_order_to_moysklad
 from app.modules.catalog.service import admin_catalog_items, business_min_order_amount_minor, public_catalog, publish_product
 from app.modules.account.service import (
@@ -456,7 +456,7 @@ class StammApp:
                         self.send_html(moysklad_settings_page(user["email"], settings, result=query.get("result", [None])[0], error=query.get("error", [None])[0], auto_history=compact_auto_sync_history(app.conn)))
                         return
                     if path == "/admin/b2b-orders":
-                        self.send_html(placeholder("B2B-заявки", "Здесь будет список заявок, статусы, детали и заметки менеджера.", user["email"]))
+                        self.send_html(b2b_orders_page(user["email"], admin_b2b_orders(app.conn)))
                         return
                     if path == "/admin/content":
                         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -1034,12 +1034,54 @@ class StammApp:
         return Handler
 
 
+def admin_b2b_orders(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT id, number, status, contact_name, company_name, inn, email, phone, city, comment,
+               total_minor, currency, created_at, updated_at, customer_account_id, counterparty_href,
+               external_order_id, external_order_href, external_status, error_message
+        FROM b2b_orders
+        ORDER BY datetime(created_at) DESC, id DESC
+        """
+    ).fetchall()
+    orders: list[dict[str, Any]] = []
+    for row in rows:
+        order = dict(row)
+        item_rows = conn.execute(
+            """
+            SELECT product_id, quantity, price_minor, line_total_minor, product_snapshot_json
+            FROM b2b_order_items
+            WHERE order_id = ?
+            ORDER BY id ASC
+            """,
+            (row["id"],),
+        ).fetchall()
+        items: list[dict[str, Any]] = []
+        for item in item_rows:
+            try:
+                snapshot = json.loads(item["product_snapshot_json"] or "{}")
+            except (TypeError, json.JSONDecodeError):
+                snapshot = {}
+            item_name = snapshot.get("name") or (f"SKU #{item['product_id']}" if item["product_id"] else "Позиция заказа")
+            items.append(
+                {
+                    "name": item_name,
+                    "quantity": item["quantity"],
+                    "price_minor": item["price_minor"],
+                    "line_total_minor": item["line_total_minor"],
+                }
+            )
+        order["items"] = items
+        orders.append(order)
+    return orders
+
+
 def admin_stats(conn: sqlite3.Connection) -> dict[str, object]:
     return {
         "Опубликованные SKU": conn.execute("SELECT COUNT(*) FROM product_overrides WHERE is_published = 1").fetchone()[0],
         "Скрытые SKU": conn.execute("SELECT COUNT(*) FROM product_overrides WHERE is_published = 0").fetchone()[0],
         "Sync jobs": conn.execute("SELECT COUNT(*) FROM moysklad_sync_jobs").fetchone()[0],
-        "B2B-заявки": conn.execute("SELECT COUNT(*) FROM b2b_orders").fetchone()[0],
+        "B2B-заказы": conn.execute("SELECT COUNT(*) FROM b2b_orders").fetchone()[0],
         "Статус sync": "foundation ready",
     }
 

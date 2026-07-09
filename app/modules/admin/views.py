@@ -6,7 +6,7 @@ NAV_ITEMS = [
     ("/admin", "Dashboard"),
     ("/admin/catalog", "Каталог"),
     ("/admin/moysklad", "МойСклад"),
-    ("/admin/b2b-orders", "B2B-заявки"),
+    ("/admin/b2b-orders", "B2B-заказы"),
     ("/admin/content", "Контент"),
     ("/admin/users", "Пользователи и роли"),
     ("/admin/email", "Почта"),
@@ -115,6 +115,101 @@ def dashboard(user_email: str, stats: dict[str, object]) -> str:
 def placeholder(title: str, description: str, user_email: str) -> str:
     return page(title, f"<div class='card'><p>{escape(description)}</p><p class='muted'>Каркас раздела готов для следующего этапа реализации.</p></div>", user_email)
 
+
+def b2b_orders_page(user_email: str, orders: list[dict[str, object]]) -> str:
+    if not orders:
+        return page(
+            "B2B-заказы",
+            "<div class='card'><p>Заказов пока нет.</p><p class='muted'>После оформления B2B-заказа он появится здесь вместе с номером, клиентом, комментарием и составом.</p></div>",
+            user_email,
+        )
+
+    rows = []
+    for order in orders:
+        comment = str(order.get("comment") or "").strip()
+        comment_html = f"<div class='order-comment'>{escape(comment)}</div>" if comment else "<span class='muted'>Комментарий не указан</span>"
+        external_id = str(order.get("external_order_id") or "").strip()
+        external_href = str(order.get("external_order_href") or "").strip()
+        external_html = ""
+        if external_id and external_href:
+            external_html = f"<div><span class='muted'>МойСклад:</span> <a href='{escape(external_href)}' target='_blank' rel='noreferrer'>{escape(external_id)}</a></div>"
+        elif external_id:
+            external_html = f"<div><span class='muted'>МойСклад:</span> {escape(external_id)}</div>"
+        else:
+            external_html = "<div><span class='muted'>МойСклад:</span> —</div>"
+
+        items = order.get("items") or []
+        if items:
+            item_rows = "".join(
+                "<tr>"
+                f"<td>{escape(str(item.get('name') or 'Позиция заказа'))}</td>"
+                f"<td>{escape(format_quantity(item.get('quantity')))}</td>"
+                f"<td>{escape(format_price_minor(item.get('price_minor'), order.get('currency') or 'RUB'))}</td>"
+                f"<td>{escape(format_price_minor(item.get('line_total_minor'), order.get('currency') or 'RUB'))}</td>"
+                "</tr>"
+                for item in items
+            )
+            items_html = f"""
+              <details class='order-items'>
+                <summary>Состав заказа · {len(items)}</summary>
+                <table><thead><tr><th>Позиция</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>{item_rows}</tbody></table>
+              </details>
+            """
+        else:
+            items_html = "<span class='muted'>Состав заказа не сохранён.</span>"
+
+        rows.append(
+            f"""
+            <tr>
+              <td class='order-number'>
+                <strong>{escape(str(order.get('number') or '—'))}</strong>
+                {external_html}
+              </td>
+              <td>
+                <div>{escape(str(order.get('created_at') or '—'))}</div>
+                <small class='muted'>обновлён: {escape(str(order.get('updated_at') or '—'))}</small>
+              </td>
+              <td>
+                <strong>{escape(str(order.get('company_name') or '—'))}</strong>
+                <div>{escape(str(order.get('email') or '—'))}</div>
+                <small class='muted'>ИНН: {escape(str(order.get('inn') or '—'))}</small>
+              </td>
+              <td>{escape(format_price_minor(order.get('total_minor'), order.get('currency') or 'RUB'))}</td>
+              <td><span class='status'>{escape(str(order.get('status') or '—'))}</span></td>
+              <td>{comment_html}</td>
+              <td>{items_html}</td>
+            </tr>
+            """
+        )
+
+    body = f"""
+      <style>
+        .orders-admin {{ display:grid; gap:14px; }}
+        .orders-admin__summary {{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }}
+        .orders-table {{ width:100%; border-collapse:collapse; font-size:12px; line-height:1.35; }}
+        .orders-table th {{ color:#52615f; font-size:11px; text-transform:uppercase; letter-spacing:.04em; text-align:left; padding:8px; border-bottom:1px solid rgba(16,88,89,.16); }}
+        .orders-table td {{ padding:10px 8px; border-bottom:1px solid rgba(16,88,89,.1); vertical-align:top; }}
+        .order-number strong {{ display:block; margin-bottom:5px; color:var(--noble-hop); }}
+        .order-comment {{ max-width:280px; white-space:pre-wrap; }}
+        .order-items summary {{ cursor:pointer; color:var(--noble-hop); font-weight:800; }}
+        .order-items table {{ width:100%; margin-top:8px; border-collapse:collapse; font-size:11px; }}
+        .order-items th, .order-items td {{ padding:5px 6px; border-bottom:1px solid rgba(16,88,89,.08); }}
+        @media (max-width:980px) {{ .orders-table {{ display:block; overflow-x:auto; }} }}
+      </style>
+      <div class='orders-admin'>
+        <div class='card orders-admin__summary'>
+          <strong>Всего B2B-заказов: {len(orders)}</strong>
+          <span class='muted'>Список отсортирован от новых к старым и включает все сохранённые заказы.</span>
+        </div>
+        <div class='card'>
+          <table class='orders-table'>
+            <thead><tr><th>Номер</th><th>Дата</th><th>Клиент</th><th>Сумма</th><th>Статус</th><th>Комментарий</th><th>Состав</th></tr></thead>
+            <tbody>{''.join(rows)}</tbody>
+          </table>
+        </div>
+      </div>
+    """
+    return page("B2B-заказы", body, user_email)
 
 def customer_accounts_page(user_email: str, accounts: list[object], query: str = "", result: str | None = None, error: str | None = None) -> str:
     notice = ""
