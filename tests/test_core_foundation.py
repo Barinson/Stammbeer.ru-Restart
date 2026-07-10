@@ -33,7 +33,7 @@ from app.modules.catalog.service import admin_catalog_items, public_catalog, pub
 from app.modules.content.service import get_public_site_content, save_public_content
 from app.modules.admin.views import admin_catalog_page, b2b_orders_page
 from app.modules import public_views as public_views_module
-from app.modules.public_views import account_dashboard_page, beer_page, business_guest_page, business_storefront_page, contacts_page, gallery_page, home_page, maintenance_page
+from app.modules.public_views import account_dashboard_page, account_login_page, beer_page, business_guest_page, business_storefront_page, contacts_page, gallery_page, home_page, maintenance_page
 from app.modules.auth.service import authenticate, change_password, cookie_header, create_session, current_user
 from app.timezone import format_moscow_datetime
 
@@ -935,6 +935,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('/business#cart', html_for_customer)
         self.assertNotIn("ageGate", html_for_customer)
         guest_html = business_guest_page(content)
+        self.assertIn('<link rel="icon" href="/favicon.ico">', guest_html)
         self.assertIn('"name":"Бизнес","item":"https://example.test/business"', guest_html)
         self.assertIn("Партнёрам — напишите на marketing@stammbeer.ru", guest_html)
         self.assertIn("min-height:100vh", guest_html)
@@ -952,6 +953,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("--maintenance-font-weight:700", maintenance_html)
         self.assertEqual(content["gallery"]["gallery_title"], "Галерея Stamm")
         gallery_html = gallery_page(content)
+        self.assertIn('<link rel="icon" href="/favicon.ico">', gallery_html)
         self.assertIn('"name":"Галерея","item":"https://example.test/gallery"', gallery_html)
         self.assertIn("Галерея Stamm", gallery_html)
         self.assertIn("Производство\nи события", gallery_html)
@@ -961,6 +963,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("gallery-section", gallery_html)
         self.assertIn("gallery-card--large", gallery_html)
         self.assertIn('"name":"Контакты","item":"https://example.test/contacts"', contacts_html)
+        self.assertIn('<link rel="icon" href="/favicon.ico">', contacts_html)
+        self.assertIn('<link rel="icon" href="/favicon.ico">', account_login_page(content))
         self.assertIn("data-gallery-open", gallery_html)
         self.assertIn("galleryLightbox", gallery_html)
         self.assertIn("filter:brightness(1.08) saturate(1.02)", gallery_html)
@@ -1679,6 +1683,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Корзина", auth_body)
         self.assertIn('/business#cart', auth_body)
         self.assertIn("/api/public/business/catalog", auth_body)
+        self.assertIn('<link rel="icon" href="/favicon.ico">', auth_body)
 
         redirects = {"/business/": "/business", "/business/catalog/": "/business/catalog"}
         for path, expected_location in redirects.items():
