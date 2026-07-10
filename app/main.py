@@ -333,7 +333,7 @@ class StammApp:
                 if path == "/sitemap.xml":
                     self.send_bytes(sitemap_xml(get_public_site_content(app.conn), app.settings).encode("utf-8"), "application/xml; charset=utf-8")
                     return
-                if path in {"/favicon.ico", "/favicon.png"}:
+                if path in {"/favicon.ico", "/favicon.png", "/favicon.svg"}:
                     favicon_path = self.favicon_media_path()
                     if favicon_path is not None:
                         self.send_media_file(favicon_path)
