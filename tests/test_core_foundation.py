@@ -859,7 +859,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('<meta name="description" content="Stamm Brewing: крафтовая пивоварня, новости, партнёры и контакты.">', html)
         self.assertIn('<meta name="robots" content="index,follow">', html)
         self.assertIn('<link rel="canonical" href="https://example.test/">', html)
-        self.assertIn('<link rel="icon" href="/media/favicon.svg">', html)
+        self.assertIn('<link rel="icon" href="/favicon.ico">', html)
         self.assertIn('<meta property="og:title" content="Stamm Brewing — крафтовая пивоварня">', html)
         self.assertIn('<meta property="og:image" content="https://example.test/media/og.jpg">', html)
         self.assertIn('"@type":"BreadcrumbList"', html)
@@ -1254,6 +1254,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("site_title", admin_content_html)
         self.assertIn("site_description", admin_content_html)
         self.assertIn("site_favicon_file", admin_content_html)
+        self.assertIn("Рекомендуемый размер — 120×120 px", admin_content_html)
         self.assertIn("site_og_image_file", admin_content_html)
         self.assertIn("mobile_menu_icon_file", admin_content_html)
         self.assertIn("age_gate_text_font_size_px", admin_content_html)
@@ -1692,6 +1693,7 @@ class CoreFoundationTest(unittest.TestCase):
         media_path = media_dir / "cache-test.svg"
         media_path.write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'></svg>")
         self.addCleanup(lambda: media_path.unlink(missing_ok=True))
+        save_public_content(app.conn, {"site_favicon_url": "/media/cache-test.svg"})
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler_class())
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -1706,6 +1708,11 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("image/svg", response.headers["Content-Type"])
         self.assertTrue(response.headers["ETag"])
         self.assertTrue(response.headers["Last-Modified"])
+
+        favicon_response = urllib.request.urlopen(base + "/favicon.ico", timeout=5)
+        self.assertEqual(favicon_response.status, 200)
+        self.assertIn("image/svg", favicon_response.headers["Content-Type"])
+        self.assertEqual(favicon_response.headers["Cache-Control"], "public, max-age=31536000, immutable")
 
         request = urllib.request.Request(base + "/media/cache-test.svg", headers={"If-None-Match": response.headers["ETag"]})
         with self.assertRaises(urllib.error.HTTPError) as raised:

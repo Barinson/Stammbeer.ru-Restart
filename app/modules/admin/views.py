@@ -979,6 +979,7 @@ def content_management_page(user_email: str, content: dict[str, object], result:
               <label>Базовый title<input name="site_title" value="{escape(site_title)}"></label>
               <label>Базовое description<textarea name="site_description" rows="3">{escape(site_description)}</textarea></label>
               <label>Favicon</label>
+              <p class="muted">Favicon будет доступен из корня сайта как /favicon.ico. Рекомендуемый размер — 120×120 px, лучше использовать квадратное изображение.</p>
               {f"<p><img src='{escape(site_favicon_url)}' alt='Favicon' style='width:48px; height:48px; object-fit:contain; border-radius:8px;'></p>" if site_favicon_url else "<p class='muted'>Favicon ещё не загружен.</p>"}
               <input type="hidden" name="site_favicon_url" value="{escape(site_favicon_url)}">
               <input name="site_favicon_file" type="file" accept="image/*,.ico">
