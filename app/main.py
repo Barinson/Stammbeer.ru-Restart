@@ -232,6 +232,17 @@ class StammApp:
                     headers=cache_headers,
                 )
 
+            def favicon_media_path(self) -> Path | None:
+                site = (get_public_site_content(app.conn).get("site") or {})
+                favicon_url = str(site.get("site_favicon_url") or "").strip()
+                if not favicon_url.startswith("/media/"):
+                    return None
+                media_root = Path("var/media").resolve()
+                media_path = (Path("var/media") / favicon_url.removeprefix("/media/")).resolve()
+                if media_path.exists() and media_path.is_file() and media_path.is_relative_to(media_root):
+                    return media_path
+                return None
+
             def redirect(self, location: str, headers: dict[str, str] | None = None) -> None:
                 self.send_response(HTTPStatus.SEE_OTHER)
                 self.send_header("Location", location)
@@ -321,6 +332,13 @@ class StammApp:
                     return
                 if path == "/sitemap.xml":
                     self.send_bytes(sitemap_xml(get_public_site_content(app.conn), app.settings).encode("utf-8"), "application/xml; charset=utf-8")
+                    return
+                if path in {"/favicon.ico", "/favicon.png"}:
+                    favicon_path = self.favicon_media_path()
+                    if favicon_path is not None:
+                        self.send_media_file(favicon_path)
+                    else:
+                        self.send_html(page("404", "<main class='login'><div class='card'>Favicon не найден.</div></main>"), HTTPStatus.NOT_FOUND)
                     return
                 if path.startswith("/media/"):
                     media_path = Path("var/media") / path.removeprefix("/media/")

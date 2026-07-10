@@ -69,7 +69,7 @@ def seo_head(content: dict[str, Any] | None, page_key: str, path: str, title: st
     canonical = _absolute_url(base_url, path)
     og_image = _absolute_url(base_url, site.get("site_og_image_url") or site.get("site_favicon_url") or "")
     favicon = str(site.get("site_favicon_url") or SITE_DEFAULTS.get("site_favicon_url") or "").strip()
-    favicon_link = f'\n  <link rel="icon" href="{escape(favicon)}">' if favicon else ""
+    favicon_link = '\n  <link rel="icon" href="/favicon.ico">' if favicon else ""
     image_meta = f'\n  <meta property="og:image" content="{escape(og_image)}">' if og_image else ""
     breadcrumbs = breadcrumb_json_ld(site_content, page_key, path)
     return f"""{PUBLIC_HEAD}
