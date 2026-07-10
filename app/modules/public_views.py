@@ -12,6 +12,7 @@ from app.modules.content.service import ACTION_DEFAULTS, BUSINESS_DEFAULTS, CONT
 
 PUBLIC_HEAD = """<meta charset=\"utf-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <link rel=\"icon\" href=\"/favicon.ico\">
   <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">
   <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>
   <link href=\"https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700;800;900&display=swap\" rel=\"stylesheet\">"""
@@ -68,15 +69,13 @@ def seo_head(content: dict[str, Any] | None, page_key: str, path: str, title: st
     base_url = str(site.get("site_public_base_url") or _site_default("site_public_base_url", "https://stammbeer.ru")).rstrip("/")
     canonical = _absolute_url(base_url, path)
     og_image = _absolute_url(base_url, site.get("site_og_image_url") or site.get("site_favicon_url") or "")
-    favicon = str(site.get("site_favicon_url") or SITE_DEFAULTS.get("site_favicon_url") or "").strip()
-    favicon_link = '\n  <link rel="icon" href="/favicon.ico">' if favicon else ""
     image_meta = f'\n  <meta property="og:image" content="{escape(og_image)}">' if og_image else ""
     breadcrumbs = breadcrumb_json_ld(site_content, page_key, path)
     return f"""{PUBLIC_HEAD}
   <title>{escape(title_value)}</title>
   <meta name="description" content="{escape(description_value)}">
   <meta name="robots" content="{escape(robots)}">
-  <link rel="canonical" href="{escape(canonical)}">{favicon_link}
+  <link rel="canonical" href="{escape(canonical)}">
   <meta property="og:title" content="{escape(title_value)}">
   <meta property="og:description" content="{escape(description_value)}">
   <meta property="og:type" content="website">
