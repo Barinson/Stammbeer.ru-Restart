@@ -60,6 +60,22 @@ def _site_default_int(key: str, fallback: int) -> int:
         return fallback
 
 
+def favicon_root_href(content: dict[str, Any] | None) -> tuple[str, str]:
+    site_content = public_content_or_defaults(content)
+    site = site_content.get("site") or {}
+    favicon_url = str(site.get("site_favicon_url") or SITE_DEFAULTS.get("site_favicon_url") or "").strip().lower()
+    if favicon_url.endswith(".svg"):
+        return "/favicon.svg", "image/svg+xml"
+    if favicon_url.endswith(".png"):
+        return "/favicon.png", "image/png"
+    return "/favicon.ico", "image/x-icon"
+
+
+def public_head(content: dict[str, Any] | None = None) -> str:
+    href, mime_type = favicon_root_href(content)
+    return f'{PUBLIC_HEAD}\n  <link rel="icon" type="{escape(mime_type)}" href="{escape(href)}">'
+
+
 def seo_head(content: dict[str, Any] | None, page_key: str, path: str, title: str | None = None, description: str | None = None, robots: str = "index,follow") -> str:
     site_content = public_content_or_defaults(content)
     site = site_content.get("site") or {}
@@ -71,7 +87,7 @@ def seo_head(content: dict[str, Any] | None, page_key: str, path: str, title: st
     og_image = _absolute_url(base_url, site.get("site_og_image_url") or site.get("site_favicon_url") or "")
     image_meta = f'\n  <meta property="og:image" content="{escape(og_image)}">' if og_image else ""
     breadcrumbs = breadcrumb_json_ld(site_content, page_key, path)
-    return f"""{PUBLIC_HEAD}
+    return f"""{public_head(site_content)}
   <title>{escape(title_value)}</title>
   <meta name="description" content="{escape(description_value)}">
   <meta name="robots" content="{escape(robots)}">
@@ -621,7 +637,7 @@ def account_register_page(content: dict[str, Any] | None = None, error: str | No
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
+  {public_head(site_content)}
   <title>Регистрация · Stamm Brewing</title>
   <style>
 {BASE_CSS}
@@ -668,7 +684,7 @@ def account_login_page(content: dict[str, Any] | None = None, error: str | None 
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
+  {public_head(site_content)}
   <title>Вход · Stamm Brewing</title>
   <style>
 {BASE_CSS}
@@ -709,7 +725,7 @@ def account_message_page(title: str, message: str, content: dict[str, Any] | Non
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
+  {public_head(site_content)}
   <title>{escape(title)} · Stamm Brewing</title>
   <style>
 {BASE_CSS}
@@ -745,7 +761,7 @@ def password_reset_request_page(content: dict[str, Any] | None = None, message: 
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
+  {public_head(site_content)}
   <title>Восстановление пароля · Stamm Brewing</title>
   <style>
 {BASE_CSS}
@@ -782,7 +798,7 @@ def password_reset_confirm_page(token: str, content: dict[str, Any] | None = Non
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
+  {public_head(site_content)}
   <title>Новый пароль · Stamm Brewing</title>
   <style>
 {BASE_CSS}
@@ -908,7 +924,7 @@ def account_dashboard_page(
     return f"""<!doctype html>
 <html lang="ru">
 <head>
-  {PUBLIC_HEAD}
+  {public_head(site_content)}
   <title>Личный кабинет · Stamm Brewing</title>
   <style>
 {BASE_CSS}

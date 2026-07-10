@@ -859,7 +859,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('<meta name="description" content="Stamm Brewing: крафтовая пивоварня, новости, партнёры и контакты.">', html)
         self.assertIn('<meta name="robots" content="index,follow">', html)
         self.assertIn('<link rel="canonical" href="https://example.test/">', html)
-        self.assertIn('<link rel="icon" href="/favicon.ico">', html)
+        self.assertIn('<link rel="icon" type="image/svg+xml" href="/favicon.svg">', html)
         self.assertIn('<meta property="og:title" content="Stamm Brewing — крафтовая пивоварня">', html)
         self.assertIn('<meta property="og:image" content="https://example.test/media/og.jpg">', html)
         self.assertIn('"@type":"BreadcrumbList"', html)
@@ -937,7 +937,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('/business#cart', html_for_customer)
         self.assertNotIn("ageGate", html_for_customer)
         guest_html = business_guest_page(content)
-        self.assertIn('<link rel="icon" href="/favicon.ico">', guest_html)
+        self.assertIn('<link rel="icon" type="image/svg+xml" href="/favicon.svg">', guest_html)
         self.assertIn('"name":"Бизнес","item":"https://example.test/business"', guest_html)
         self.assertIn("Партнёрам — напишите на marketing@stammbeer.ru", guest_html)
         self.assertIn("min-height:100vh", guest_html)
@@ -955,7 +955,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("--maintenance-font-weight:700", maintenance_html)
         self.assertEqual(content["gallery"]["gallery_title"], "Галерея Stamm")
         gallery_html = gallery_page(content)
-        self.assertIn('<link rel="icon" href="/favicon.ico">', gallery_html)
+        self.assertIn('<link rel="icon" type="image/svg+xml" href="/favicon.svg">', gallery_html)
         self.assertIn('"name":"Галерея","item":"https://example.test/gallery"', gallery_html)
         self.assertIn("Галерея Stamm", gallery_html)
         self.assertIn("Производство\nи события", gallery_html)
@@ -965,8 +965,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("gallery-section", gallery_html)
         self.assertIn("gallery-card--large", gallery_html)
         self.assertIn('"name":"Контакты","item":"https://example.test/contacts"', contacts_html)
-        self.assertIn('<link rel="icon" href="/favicon.ico">', contacts_html)
-        self.assertIn('<link rel="icon" href="/favicon.ico">', account_login_page(content))
+        self.assertIn('<link rel="icon" type="image/svg+xml" href="/favicon.svg">', contacts_html)
+        self.assertIn('<link rel="icon" type="image/svg+xml" href="/favicon.svg">', account_login_page(content))
         self.assertIn("data-gallery-open", gallery_html)
         self.assertIn("galleryLightbox", gallery_html)
         self.assertIn("filter:brightness(1.08) saturate(1.02)", gallery_html)
@@ -1686,7 +1686,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Корзина", auth_body)
         self.assertIn('/business#cart', auth_body)
         self.assertIn("/api/public/business/catalog", auth_body)
-        self.assertIn('<link rel="icon" href="/favicon.ico">', auth_body)
+        self.assertIn('<link rel="icon" type="image/x-icon" href="/favicon.ico">', auth_body)
 
         redirects = {"/business/": "/business", "/business/catalog/": "/business/catalog"}
         for path, expected_location in redirects.items():
@@ -1717,10 +1717,13 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertTrue(response.headers["ETag"])
         self.assertTrue(response.headers["Last-Modified"])
 
-        favicon_response = urllib.request.urlopen(base + "/favicon.ico", timeout=5)
+        favicon_response = urllib.request.urlopen(base + "/favicon.svg", timeout=5)
         self.assertEqual(favicon_response.status, 200)
         self.assertIn("image/svg", favicon_response.headers["Content-Type"])
         self.assertEqual(favicon_response.headers["Cache-Control"], "public, max-age=31536000, immutable")
+        favicon_ico_response = urllib.request.urlopen(base + "/favicon.ico", timeout=5)
+        self.assertEqual(favicon_ico_response.status, 200)
+        self.assertIn("image/svg", favicon_ico_response.headers["Content-Type"])
 
         request = urllib.request.Request(base + "/media/cache-test.svg", headers={"If-None-Match": response.headers["ETag"]})
         with self.assertRaises(urllib.error.HTTPError) as raised:
