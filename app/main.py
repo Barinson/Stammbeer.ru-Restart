@@ -28,7 +28,7 @@ from app.integrations.moysklad.settings_service import (
 )
 from app.modules.admin.views import admin_catalog_page, b2b_orders_page, content_management_page, customer_accounts_page, dashboard, email_management_page, login_page, moysklad_settings_page, page, placeholder, profile_page
 from app.modules.b2b.service import send_order_to_moysklad
-from app.modules.catalog.service import admin_catalog_items, business_min_order_amount_minor, public_catalog, publish_product
+from app.modules.catalog.service import admin_catalog_items, assign_product_beer_style, beer_styles, business_min_order_amount_minor, public_catalog, publish_product, save_beer_style
 from app.modules.account.service import (
     DiscountRefreshError,
     authenticate_customer,
@@ -463,7 +463,7 @@ class StammApp:
                         return
                     if path == "/admin/catalog":
                         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-                        self.send_html(admin_catalog_page(user["email"], admin_catalog_items(app.conn), result=query.get("result", [None])[0], error=query.get("error", [None])[0]))
+                        self.send_html(admin_catalog_page(user["email"], admin_catalog_items(app.conn), beer_styles(app.conn), result=query.get("result", [None])[0], error=query.get("error", [None])[0]))
                         return
                     if path == "/admin/moysklad":
                         if not require_permission(app.conn, user, "moysklad.read"):
@@ -1040,6 +1040,28 @@ class StammApp:
                     form = self.read_form()
                     publish_product(app.conn, int(form.get("product_id", "0")), form.get("publish") == "1")
                     self.redirect("/admin/catalog?result=" + urllib.parse.quote("Статус публикации обновлён"))
+                    return
+                if path == "/admin/catalog/styles":
+                    user = self.require_admin()
+                    if user is None:
+                        return
+                    form = self.read_form()
+                    try:
+                        save_beer_style(app.conn, form.get("name", ""), form.get("sort_order", "100"), form.get("is_visible") == "1", form.get("style_id"))
+                        self.redirect("/admin/catalog?result=" + urllib.parse.quote("Стиль пива сохранён"))
+                    except Exception as exc:
+                        self.redirect("/admin/catalog?error=" + urllib.parse.quote(str(exc)))
+                    return
+                if path == "/admin/catalog/style-assignment":
+                    user = self.require_admin()
+                    if user is None:
+                        return
+                    form = self.read_form()
+                    try:
+                        assign_product_beer_style(app.conn, int(form.get("product_id", "0")), form.get("beer_style_id"))
+                        self.redirect("/admin/catalog?result=" + urllib.parse.quote("Стиль SKU обновлён"))
+                    except Exception as exc:
+                        self.redirect("/admin/catalog?error=" + urllib.parse.quote(str(exc)))
                     return
                 if path == "/admin/profile/password":
                     user = self.require_admin()

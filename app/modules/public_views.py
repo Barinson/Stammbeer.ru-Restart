@@ -1418,7 +1418,10 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     .filter {{ border:1px solid rgba(199,177,102,.34); background:rgba(11,63,64,.55); color:var(--foam); padding:9px 15px; border-radius:999px; font-weight:600; cursor:pointer; }}
     .filter.is-active {{ background:var(--golden-malt); color:var(--ink); border-color:var(--golden-malt); }}
     .shop-layout {{ display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:18px; align-items:start; }}
-    .grid {{ display:grid; grid-template-columns:1fr; gap:10px; }}
+    .grid {{ display:grid; grid-template-columns:1fr; gap:18px; }}
+    .catalog-style-group {{ display:grid; gap:10px; }}
+    .catalog-style-title {{ margin:4px 0 0; color:var(--golden-malt); font-size:var(--stamm-section-title-font-size,18px); text-transform:uppercase; letter-spacing:.08em; }}
+    .catalog-style-products {{ display:grid; grid-template-columns:1fr; gap:10px; }}
     .product {{ overflow:hidden; background:var(--card-hop); border:1px solid rgba(199,177,102,.18); border-radius:18px; box-shadow:0 14px 30px rgba(0,0,0,.14); display:grid; grid-template-columns:82px minmax(0,1fr) auto; align-items:center; gap:12px; min-height:98px; padding:9px 12px; }}
     .product__image {{ width:70px; height:70px; border-radius:14px; background:radial-gradient(circle at 34% 28%, rgba(199,177,102,.74), transparent 34%), linear-gradient(135deg, rgba(246,241,227,.92), rgba(199,177,102,.28)); display:block; overflow:hidden; flex-shrink:0; }}
     .product__image img {{ width:100%; height:100%; object-fit:cover; display:block; }}
@@ -1464,7 +1467,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
     .state {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.18); border-radius:20px; padding:34px; text-align:center; color:rgba(246,241,227,.76); }}
     .state strong {{ display:block; color:var(--golden-malt); font-size:22px; margin-bottom:8px; }}
     @media (max-width:920px) {{ .shop-layout {{ grid-template-columns:1fr; }} .cart {{ position:static; }} }}
-    @media (max-width:720px) {{ .wrap {{ padding:128px 14px 38px; background-size:cover, cover; background-position:center, center; background-attachment:scroll, fixed; }} .toolbar {{ gap:12px; margin-bottom:14px; }} .filters {{ gap:8px; }} .filter {{ padding:8px 12px; font-size:13px; }} .product {{ grid-template-columns:54px minmax(0,1fr); gap:9px; min-height:80px; padding:9px; border-radius:16px; }} .product__image {{ width:50px; height:50px; border-radius:12px; }} .product__order {{ grid-column:2; justify-self:start; min-width:0; margin-top:2px; }} .badge {{ font-size:10px; padding:3px 7px; }} h2 {{ font-size:14px; }} .price {{ font-size:15px; }} .quantity {{ grid-template-columns:28px 36px 28px; }} .quantity__button {{ width:28px; height:28px; }} .cart {{ border-radius:18px; }} .cart__header {{ padding:14px 15px; }} .cart__body, .cart__comment {{ padding-left:15px; padding-right:15px; }} }}
+    @media (max-width:720px) {{ .wrap {{ padding:128px 14px 38px; background-size:cover, cover; background-position:center, center; background-attachment:scroll, fixed; }} .toolbar {{ gap:12px; margin-bottom:14px; }} .grid {{ gap:16px; }} .catalog-style-title {{ font-size:15px; letter-spacing:.07em; }} .catalog-style-products {{ gap:9px; }} .filters {{ gap:8px; }} .filter {{ padding:8px 12px; font-size:13px; }} .product {{ grid-template-columns:54px minmax(0,1fr); gap:9px; min-height:80px; padding:9px; border-radius:16px; }} .product__image {{ width:50px; height:50px; border-radius:12px; }} .product__order {{ grid-column:2; justify-self:start; min-width:0; margin-top:2px; }} .badge {{ font-size:10px; padding:3px 7px; }} h2 {{ font-size:14px; }} .price {{ font-size:15px; }} .quantity {{ grid-template-columns:28px 36px 28px; }} .quantity__button {{ width:28px; height:28px; }} .cart {{ border-radius:18px; }} .cart__header {{ padding:14px 15px; }} .cart__body, .cart__comment {{ padding-left:15px; padding-right:15px; }} }}
   </style>
 </head>
 <body>
@@ -1535,6 +1538,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       const price = item.price && typeof item.price === 'object' ? item.price : {{}};
       const availability = item.availability && typeof item.availability === 'object' ? item.availability : {{}};
       const rules = item.orderRules && typeof item.orderRules === 'object' ? item.orderRules : {{}};
+      const style = item.style && typeof item.style === 'object' ? item.style : {{}};
       const fallbackId = item.slug || item.externalId || item.sku || item.name || '';
       const productId = item.productId !== undefined && item.productId !== null ? item.productId : fallbackId;
       const containerType = item.containerType || 'keg';
@@ -1570,6 +1574,11 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
           quantity: numberOrDefault(availability.quantity, 0),
         }},
         imageUrl: item.imageUrl || '',
+        style: {{
+          id: style.id || null,
+          name: style.name || 'Другие сорта',
+          sortOrder: numberOrDefault(style.sortOrder, 100000),
+        }},
         ctaLabel: item.ctaLabel || 'В заявку',
         orderRules: {{
           allowPreorder: Boolean(rules.allowPreorder),
@@ -1614,56 +1623,84 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
       return Math.min(stepped, max);
     }}
 
+    function renderProductCard(item, index) {{
+      try {{
+        const price = item && item.price ? item.price : {{}};
+        const safeName = escapeHtml(item && item.name ? item.name : 'Позиция каталога');
+        const safeContainer = escapeHtml(item && item.containerLabel ? item.containerLabel : 'Кеги');
+        const safePrice = escapeHtml(price.label || 'Цена по запросу');
+        const basePrice = price.showBasePrice ? `<span class="price-base">${{escapeHtml(price.baseLabel || '')}}</span>` : '';
+        const abvBadge = item && item.alcoholLabel ? `<span class="badge">${{escapeHtml(item.alcoholLabel)}}</span>` : '';
+        const fallback = `<div class="product__image-fallback" aria-label="Фото скоро появится"></div>`;
+        const imageUrl = item && item.imageUrl ? item.imageUrl : '';
+        const productId = item && item.productId !== undefined && item.productId !== null ? item.productId : `invalid-${{index}}`;
+        const imageMarkup = imageUrl
+          ? `<img src="${{escapeHtml(imageUrl)}}" alt="${{safeName}}" loading="lazy" onerror="this.hidden=true; this.nextElementSibling.hidden=false"><div class="product__image-fallback" aria-label="Фото скоро появится" hidden></div>`
+          : fallback;
+        const quantity = cartQuantity(productId);
+        const step = itemStep(item);
+        const maxQuantity = maxOrderQuantity(item);
+        const stepHint = item && item.containerType === 'can' ? '<span class="badge">ящик ×12</span>' : '';
+        return `
+        <article class="product">
+          <div class="product__image">${{imageMarkup}}</div>
+          <div class="product__body">
+            <div class="badges"><span class="badge">${{safeContainer}}</span>${{stepHint}}${{abvBadge}}</div>
+            <h2>${{safeName}}</h2>
+            <div class="meta"><span class="price">${{safePrice}}</span>${{basePrice}}</div>
+          </div>
+          <div class="product__order" aria-label="Количество для ${{safeName}}">
+            <div class="quantity" data-product-id="${{escapeHtml(productId)}}">
+              <button class="quantity__button" type="button" data-action="decrease" aria-label="Уменьшить">−</button>
+              <input class="quantity__value" data-quantity-for="${{escapeHtml(productId)}}" data-quantity-input data-product-id="${{escapeHtml(productId)}}" type="number" min="0" max="${{escapeHtml(maxQuantity)}}" step="${{escapeHtml(step)}}" value="${{escapeHtml(quantity)}}" aria-label="Количество">
+              <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить" ${{quantity >= maxQuantity ? 'disabled' : ''}}>+</button>
+            </div>
+          </div>
+        </article>
+      `;
+      }} catch (error) {{
+        console.error('[BusinessCatalog] Failed to render item card', {{
+          error,
+          message: error && error.message ? error.message : 'unknown error',
+          stack: error && error.stack ? error.stack : null,
+          index,
+          item,
+        }});
+        return '';
+      }}
+    }}
+
+    function catalogStyleKey(item) {{
+      const style = item && item.style ? item.style : {{}};
+      return `${{style.id || 'ungrouped'}}:${{style.name || 'Другие сорта'}}`;
+    }}
+
     function renderCards(items) {{
-      currentItems = items;
-      const cards = items.map((item, index) => {{
-        try {{
-          const price = item && item.price ? item.price : {{}};
-          const safeName = escapeHtml(item && item.name ? item.name : 'Позиция каталога');
-          const safeContainer = escapeHtml(item && item.containerLabel ? item.containerLabel : 'Кеги');
-          const safePrice = escapeHtml(price.label || 'Цена по запросу');
-          const basePrice = price.showBasePrice ? `<span class="price-base">${{escapeHtml(price.baseLabel || '')}}</span>` : '';
-          const abvBadge = item && item.alcoholLabel ? `<span class="badge">${{escapeHtml(item.alcoholLabel)}}</span>` : '';
-          const fallback = `<div class="product__image-fallback" aria-label="Фото скоро появится"></div>`;
-          const imageUrl = item && item.imageUrl ? item.imageUrl : '';
-          const productId = item && item.productId !== undefined && item.productId !== null ? item.productId : `invalid-${{index}}`;
-          const imageMarkup = imageUrl
-            ? `<img src="${{escapeHtml(imageUrl)}}" alt="${{safeName}}" loading="lazy" onerror="this.hidden=true; this.nextElementSibling.hidden=false"><div class="product__image-fallback" aria-label="Фото скоро появится" hidden></div>`
-            : fallback;
-          const quantity = cartQuantity(productId);
-          const step = itemStep(item);
-          const maxQuantity = maxOrderQuantity(item);
-          const stepHint = item && item.containerType === 'can' ? '<span class="badge">ящик ×12</span>' : '';
-          return `
-          <article class="product">
-            <div class="product__image">${{imageMarkup}}</div>
-            <div class="product__body">
-              <div class="badges"><span class="badge">${{safeContainer}}</span>${{stepHint}}${{abvBadge}}</div>
-              <h2>${{safeName}}</h2>
-              <div class="meta"><span class="price">${{safePrice}}</span>${{basePrice}}</div>
-            </div>
-            <div class="product__order" aria-label="Количество для ${{safeName}}">
-              <div class="quantity" data-product-id="${{escapeHtml(productId)}}">
-                <button class="quantity__button" type="button" data-action="decrease" aria-label="Уменьшить">−</button>
-                <input class="quantity__value" data-quantity-for="${{escapeHtml(productId)}}" data-quantity-input data-product-id="${{escapeHtml(productId)}}" type="number" min="0" max="${{escapeHtml(maxQuantity)}}" step="${{escapeHtml(step)}}" value="${{escapeHtml(quantity)}}" aria-label="Количество">
-                <button class="quantity__button" type="button" data-action="increase" aria-label="Увеличить" ${{quantity >= maxQuantity ? 'disabled' : ''}}>+</button>
-              </div>
-            </div>
-          </article>
-        `;
-        }} catch (error) {{
-          console.error('[BusinessCatalog] Failed to render item card', {{
-            error,
-            message: error && error.message ? error.message : 'unknown error',
-            stack: error && error.stack ? error.stack : null,
-            index,
-            item,
-          }});
-          return '';
-        }}
-      }}).filter(Boolean);
       currentItems = items.filter((item) => item && item.productId && item.name);
-      gridEl.innerHTML = cards.join('');
+      const groups = [];
+      const groupMap = new Map();
+      currentItems.forEach((item) => {{
+        const style = item.style || {{}};
+        const key = catalogStyleKey(item);
+        if (!groupMap.has(key)) {{
+          const group = {{
+            key,
+            name: style.name || 'Другие сорта',
+            sortOrder: numberOrDefault(style.sortOrder, 100000),
+            items: [],
+          }};
+          groupMap.set(key, group);
+          groups.push(group);
+        }}
+        groupMap.get(key).items.push(item);
+      }});
+      groups.sort((left, right) => (left.sortOrder - right.sortOrder) || left.name.localeCompare(right.name, 'ru'));
+      const sections = groups.map((group) => {{
+        const cards = group.items.map((item, index) => renderProductCard(item, index)).filter(Boolean).join('');
+        if (!cards) return '';
+        return `<section class="catalog-style-group" data-style-name="${{escapeHtml(group.name)}}"><h3 class="catalog-style-title">${{escapeHtml(group.name)}}</h3><div class="catalog-style-products">${{cards}}</div></section>`;
+      }}).filter(Boolean);
+      gridEl.innerHTML = sections.join('');
       stateEl.hidden = true;
       gridEl.hidden = false;
     }}

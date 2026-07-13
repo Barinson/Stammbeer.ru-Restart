@@ -13,8 +13,8 @@ from pathlib import Path
 
 from app.config import Settings, load_settings
 from app.db.migrations import ensure_compatibility_columns
-from app.integrations.moysklad.auto_sync import auto_sync_status, compact_auto_sync_history, run_auto_catalog_sync_if_due
-from app.integrations.moysklad.catalog_sync import extract_alcohol_percent, infer_container_type, latest_sync_diagnostics, run_manual_catalog_sync
+from app.integrations.moysklad.auto_sync import auto_sync_status, compact_auto_sync_history, recover_stale_auto_sync_jobs, run_auto_catalog_sync_if_due
+from app.integrations.moysklad.catalog_sync import extract_alcohol_percent, infer_container_type, latest_sync_diagnostics, run_manual_catalog_sync, utc_now_iso
 from app.integrations.moysklad.client import MoyskladClient, normalize_counterparty
 from app.modules.account.service import (
     DiscountRefreshError,
@@ -29,7 +29,7 @@ from app.modules.account.service import (
 from app.integrations.moysklad.settings_service import get_settings, refresh_integration_references, save_settings, serialize_settings
 from app.modules.email import service as email_service
 from app.main import StammApp, admin_b2b_orders, admin_stats
-from app.modules.catalog.service import admin_catalog_items, public_catalog, publish_product
+from app.modules.catalog.service import admin_catalog_items, assign_product_beer_style, beer_styles, public_catalog, publish_product, save_beer_style
 from app.modules.content.service import get_public_site_content, save_public_content
 from app.modules.admin.views import admin_catalog_page, b2b_orders_page
 from app.modules import public_views as public_views_module
@@ -122,6 +122,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("moysklad_sync_settings", tables)
         self.assertIn("products", tables)
         self.assertIn("business_catalog_items", tables)
+        self.assertIn("beer_styles", tables)
         self.assertIn("b2b_orders", tables)
         self.assertIn("customer_email_verification_tokens", tables)
         self.assertIn("customer_password_reset_tokens", tables)
@@ -1129,7 +1130,10 @@ class CoreFoundationTest(unittest.TestCase):
                 "sync_state": "synced",
                 "is_published": True,
                 "last_synced_at": "2026-06-29",
+                "beer_style_id": 7,
+                "beer_style_name": "IPA",
             }],
+            [{"id": 7, "name": "IPA", "sort_order": 2, "is_visible": 1}],
         )
         self.assertIn("admin-catalog-card", html)
         self.assertIn("admin-catalog-table", html)
@@ -1138,6 +1142,28 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("font-weight:600", html)
         self.assertIn("stamm_admin_catalog_scroll", html)
         self.assertIn("admin-catalog-publication-form", html)
+        self.assertIn("Стили пива", html)
+        self.assertIn("/admin/catalog/styles", html)
+        self.assertIn("/admin/catalog/style-assignment", html)
+        self.assertIn("IPA · #2", html)
+        self.assertIn("value='7' selected", html)
+
+    def test_business_catalog_groups_products_by_admin_beer_styles(self) -> None:
+        app = self.make_app()
+        ipa_id = self.add_catalog_item(app, "Stamm Exact IPA", "keg", "stamm-exact-ipa")
+        lager_id = self.add_catalog_item(app, "Stamm Helles Lager", "keg", "stamm-helles-lager")
+
+        save_beer_style(app.conn, "IPA", 2, True)
+        save_beer_style(app.conn, "Lager", 1, True)
+        style_map = {style["name"]: style["id"] for style in beer_styles(app.conn)}
+        assign_product_beer_style(app.conn, ipa_id, style_map["IPA"])
+        assign_product_beer_style(app.conn, lager_id, style_map["Lager"])
+
+        catalog = public_catalog(app.conn)
+        self.assertEqual([item["productId"] for item in catalog["items"]], [lager_id, ipa_id])
+        self.assertEqual([item["style"]["name"] for item in catalog["items"]], ["Lager", "IPA"])
+        self.assertEqual([style["name"] for style in catalog["meta"]["styles"]], ["Lager", "IPA"])
+        self.assertEqual(catalog["meta"]["styles"][0]["itemsCount"], 1)
 
     def test_business_catalog_exactly_follows_admin_publication_flags(self) -> None:
         app = self.make_app()
@@ -1534,6 +1560,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(all_items["meta"]["source"], "local_read_model")
         self.assertEqual(all_items["meta"]["totalLocalItems"], 2)
         self.assertEqual(len(all_items["items"]), 2)
+        self.assertEqual(all_items["items"][0]["style"]["name"], "Другие сорта")
+        self.assertEqual(all_items["meta"]["styles"][0]["name"], "Другие сорта")
 
         kegs = public_catalog(app.conn, "keg")
         self.assertEqual(len(kegs["items"]), 1)
@@ -1589,6 +1617,9 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("normalizeQuantity", html)
         self.assertIn("maxOrderQuantity", html)
         self.assertIn("data-quantity-input", html)
+        self.assertIn("catalog-style-group", html)
+        self.assertIn("catalog-style-title", html)
+        self.assertIn("style.name || 'Другие сорта'", html)
         self.assertNotIn("Доступно:", html)
         self.assertNotIn("максимум в заказ", html)
         self.assertIn("submitOrder", html)
@@ -2317,6 +2348,54 @@ class CoreFoundationTest(unittest.TestCase):
         skipped = run_auto_catalog_sync_if_due(app.conn)
         self.assertEqual(skipped["status"], "skipped")
         self.assertEqual(skipped["reason"], "not_due")
+
+
+    def test_moysklad_auto_sync_recovers_interrupted_running_jobs(self) -> None:
+        app = self.make_app()
+        save_settings(
+            app.conn,
+            {
+                "api_base_url": "https://api.moysklad.ru/api/remap/1.2",
+                "token": "token",
+                "store_href": "https://api.moysklad.ru/api/remap/1.2/entity/store/store-1",
+                "source_product_folder_href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1",
+                "include_child_folders": True,
+                "full_sync_interval_minutes": "60",
+                "stock_sync_interval_minutes": "30",
+                "is_enabled": True,
+            },
+            None,
+        )
+        old_running_id = app.conn.execute(
+            """
+            INSERT INTO moysklad_sync_jobs (type, status, trigger_source, started_at, stats_json)
+            VALUES ('auto_catalog', 'running', 'auto', '2000-01-01T00:00:00Z', '{}')
+            """
+        ).lastrowid
+        recent_running_id = app.conn.execute(
+            """
+            INSERT INTO moysklad_sync_jobs (type, status, trigger_source, started_at, stats_json)
+            VALUES ('auto_catalog', 'running', 'auto', ?, '{}')
+            """,
+            (utc_now_iso(),),
+        ).lastrowid
+        app.conn.commit()
+
+        self.assertEqual(recover_stale_auto_sync_jobs(app.conn, stale_after_minutes=60), 1)
+        old_job = app.conn.execute("SELECT status, finished_at, error_summary FROM moysklad_sync_jobs WHERE id = ?", (old_running_id,)).fetchone()
+        recent_job = app.conn.execute("SELECT status FROM moysklad_sync_jobs WHERE id = ?", (recent_running_id,)).fetchone()
+        self.assertEqual(old_job["status"], "failed")
+        self.assertIsNotNone(old_job["finished_at"])
+        self.assertIn("прервана", old_job["error_summary"])
+        self.assertEqual(recent_job["status"], "running")
+        self.assertEqual(
+            app.conn.execute("SELECT error_code FROM moysklad_sync_logs WHERE job_id = ?", (old_running_id,)).fetchone()["error_code"],
+            "AUTO_SYNC_INTERRUPTED",
+        )
+
+        status = auto_sync_status(app.conn)
+        self.assertTrue(status["running"])
+        self.assertFalse(status["due"])
 
     def test_moysklad_reference_refresh_and_selection_persist_api_entities(self) -> None:
         app = self.make_app()

@@ -19,6 +19,7 @@ AVAILABILITY_LABELS = {
 
 PUBLIC_FILTERS = {"all", "keg", "can"}
 DEFAULT_MIN_ORDER_AMOUNT_MINOR = 1_500_000
+UNGROUPED_STYLE = {"id": None, "name": "Другие сорта", "sortOrder": 100000, "isVisible": True}
 
 
 def normalize_container_filter(value: str | None) -> str:
@@ -287,12 +288,16 @@ def public_catalog(
             overrides.order_step,
             products.stock_quantity,
             products.article,
-            products.code
+            products.code,
+            styles.id AS beer_style_id,
+            styles.name AS beer_style_name,
+            styles.sort_order AS beer_style_sort_order
         FROM business_catalog_items AS items
         LEFT JOIN product_overrides AS overrides ON overrides.product_id = items.product_id
+        LEFT JOIN beer_styles AS styles ON styles.id = overrides.beer_style_id AND styles.is_visible = 1
         JOIN products ON products.id = items.product_id
         {where}
-        ORDER BY items.sort_order ASC, items.public_name ASC
+        ORDER BY coalesce(styles.sort_order, 100000) ASC, coalesce(styles.name, 'zzz') ASC, items.sort_order ASC, items.public_name ASC
         """,
         params,
     ).fetchall()
@@ -387,6 +392,11 @@ def public_catalog(
                     "quantity": available_quantity,
                 },
                 "imageUrl": row["image_url"],
+                "style": {
+                    "id": row["beer_style_id"],
+                    "name": row["beer_style_name"] or UNGROUPED_STYLE["name"],
+                    "sortOrder": row["beer_style_sort_order"] if row["beer_style_sort_order"] is not None else UNGROUPED_STYLE["sortOrder"],
+                },
                 "ctaLabel": "В заявку" if availability != "unavailable" or row["allow_preorder"] else "Недоступно",
                 "orderRules": {
                     "allowPreorder": bool(row["allow_preorder"]),
@@ -396,6 +406,15 @@ def public_catalog(
                 },
             }
         )
+    style_groups: dict[str, dict[str, Any]] = {}
+    for item in items:
+        style = item["style"]
+        key = str(style.get("id") or "ungrouped")
+        if key not in style_groups:
+            style_groups[key] = {"id": style.get("id"), "name": style.get("name"), "sortOrder": style.get("sortOrder"), "count": 0, "itemsCount": 0}
+        style_groups[key]["count"] += 1
+        style_groups[key]["itemsCount"] += 1
+    styles = sorted(style_groups.values(), key=lambda style: (int(style.get("sortOrder") or 100000), str(style.get("name") or "")))
     return {
         "items": items,
         "filters": [
@@ -409,6 +428,7 @@ def public_catalog(
             "selectedFilter": selected_filter,
             "totalLocalItems": total_local,
             "returnedItems": len(items),
+            "styles": styles,
             "lastCatalogSyncAt": last_catalog_sync_at,
             "status": "empty" if total_local == 0 else "ready",
             "pricingMode": "personal" if customer_discount_percent or customer_price_type_href or customer_price_type_id or customer_price_type_name else "base",
@@ -452,9 +472,12 @@ def admin_catalog_items(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             products.last_synced_at,
             product_overrides.is_published,
             product_overrides.public_name,
-            product_overrides.slug
+            product_overrides.slug,
+            product_overrides.beer_style_id,
+            beer_styles.name AS beer_style_name
         FROM products
         LEFT JOIN product_overrides ON product_overrides.product_id = products.id
+        LEFT JOIN beer_styles ON beer_styles.id = product_overrides.beer_style_id
         LEFT JOIN inventory_snapshots AS latest_inventory
           ON latest_inventory.id = (
               SELECT id FROM inventory_snapshots
@@ -469,6 +492,62 @@ def admin_catalog_items(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         """
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def beer_styles(conn: sqlite3.Connection, include_hidden: bool = True) -> list[dict[str, Any]]:
+    where = "" if include_hidden else "WHERE is_visible = 1"
+    rows = conn.execute(
+        f"SELECT id, name, sort_order, is_visible FROM beer_styles {where} ORDER BY sort_order ASC, name ASC"
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def save_beer_style(conn: sqlite3.Connection, name: str, sort_order: object = 100, is_visible: bool = True, style_id: object | None = None) -> None:
+    clean_name = str(name or "").strip()
+    if not clean_name:
+        raise ValueError("Укажите название стиля пива.")
+    try:
+        order = int(str(sort_order or 100))
+    except (TypeError, ValueError):
+        order = 100
+    if style_id:
+        conn.execute(
+            """
+            UPDATE beer_styles
+            SET name = ?, sort_order = ?, is_visible = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (clean_name, order, 1 if is_visible else 0, int(style_id)),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO beer_styles (name, sort_order, is_visible) VALUES (?, ?, ?)",
+            (clean_name, order, 1 if is_visible else 0),
+        )
+    conn.commit()
+
+
+def assign_product_beer_style(conn: sqlite3.Connection, product_id: int, style_id: object | None) -> None:
+    product = conn.execute("SELECT id, accounting_name FROM products WHERE id = ?", (product_id,)).fetchone()
+    if product is None:
+        raise ValueError("Product not found")
+    normalized_style_id = int(style_id) if str(style_id or "").strip().isdigit() else None
+    existing = conn.execute("SELECT * FROM product_overrides WHERE product_id = ?", (product_id,)).fetchone()
+    public_name = existing["public_name"] if existing and existing["public_name"] else product["accounting_name"]
+    slug = existing["slug"] if existing and existing["slug"] else f"product-{product_id}"
+    is_published = int(existing["is_published"]) if existing else 0
+    conn.execute(
+        """
+        INSERT INTO product_overrides (product_id, public_name, slug, is_published, beer_style_id)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(product_id) DO UPDATE SET
+            beer_style_id = excluded.beer_style_id,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (product_id, public_name, slug, is_published, normalized_style_id),
+    )
+    sync_business_catalog_read_model(conn)
+    conn.commit()
 
 
 def publish_product(conn: sqlite3.Connection, product_id: int, publish: bool) -> None:
