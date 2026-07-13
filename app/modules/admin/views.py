@@ -331,17 +331,40 @@ def customer_accounts_page(user_email: str, accounts: list[object], query: str =
     return page("Пользователи", body, user_email)
 
 
-def admin_catalog_page(user_email: str, items: list[dict[str, object]], result: str | None = None, error: str | None = None) -> str:
+def admin_catalog_page(user_email: str, items: list[dict[str, object]], beer_styles: list[dict[str, object]] | None = None, result: str | None = None, error: str | None = None) -> str:
+    beer_styles = beer_styles or []
     notice = ""
     if result:
         notice = f"<div class='success'>{escape(result)}</div>"
     if error:
         notice = f"<div class='error'>{escape(error)}</div>"
+    def style_options(selected_id: object | None) -> str:
+        selected = "" if selected_id in (None, "") else str(selected_id)
+        options = [f"<option value='' {'selected' if not selected else ''}>Без стиля</option>"]
+        for style in beer_styles:
+            style_id = str(style.get('id'))
+            options.append(
+                f"<option value='{escape(style_id)}' {'selected' if selected == style_id else ''}>"
+                f"{escape(str(style.get('name') or ''))} · #{escape(str(style.get('sort_order') or 100))}"
+                f"{' · скрыт' if not style.get('is_visible') else ''}</option>"
+            )
+        return "".join(options)
+
     if items:
         rows = "".join(
             f"""
             <tr>
               <td>{escape(str(item.get('public_name') or item.get('accounting_name') or ''))}</td>
+              <td>
+                <form class="admin-catalog-style-form" method="post" action="/admin/catalog/style-assignment">
+                  <input type="hidden" name="product_id" value="{escape(str(item.get('id')))}">
+                  <select name="beer_style_id">
+                    {style_options(item.get('beer_style_id'))}
+                  </select>
+                  <button type="submit">OK</button>
+                </form>
+                <small>{escape(str(item.get('beer_style_name') or 'Не задан'))}</small>
+              </td>
               <td>{escape(str(item.get('container_type') or '—'))}</td>
               <td>{escape(format_price_minor(item.get('price_minor'), item.get('currency')))}</td>
               <td>{escape(format_quantity(item.get('available_quantity') if item.get('available_quantity') is not None else item.get('stock_quantity')))} · {escape(str(item.get('availability_status') or ''))}<br><small>остаток {escape(format_quantity(item.get('latest_stock') if item.get('latest_stock') is not None else item.get('stock_quantity')))}, резерв {escape(format_quantity(item.get('latest_reserve')))}</small></td>
@@ -368,11 +391,12 @@ def admin_catalog_page(user_email: str, items: list[dict[str, object]], result: 
               .admin-catalog-table strong {{ font-size:12px; font-weight:600; color:#172625; }}
               .admin-catalog-table small {{ font-size:10px; color:#64706f; }}
               .admin-catalog-table form {{ display:flex; gap:6px; align-items:center; margin:0; }}
+              .admin-catalog-table select {{ min-width:118px; max-width:160px; padding:6px 8px; border:1px solid rgba(16,88,89,.18); border-radius:9px; background:#fff; }}
               .admin-catalog-table button {{ padding:7px 9px; border-radius:9px; font-size:11px; font-weight:700; }}
               .admin-catalog-table input[type=checkbox] {{ margin:0; }}
             </style>
             <table class="admin-catalog-table">
-                <thead><tr><th>Название</th><th>Тара</th><th>Цена продажи / 1 SKU</th><th>Доступно</th><th>Источник</th><th>Публикация</th><th>Sync</th><th></th></tr></thead>
+                <thead><tr><th>Название</th><th>Стиль</th><th>Тара</th><th>Цена продажи / 1 SKU</th><th>Доступно</th><th>Источник</th><th>Публикация</th><th>Sync</th><th></th></tr></thead>
                 <tbody>{rows}</tbody>
               </table>
               <script>
@@ -391,7 +415,32 @@ def admin_catalog_page(user_email: str, items: list[dict[str, object]], result: 
             """
     else:
         table = "<div class='card'><p>Локальный каталог пока пуст. Запустите ручную синхронизацию в разделе МойСклад.</p></div>"
-    return page("Каталог", f"{notice}<div class='card admin-catalog-card'><h3>Локальный каталог админки</h3><p class='muted'>SKU из МойСклад сначала попадают сюда. В публичный магазин попадают только опубликованные позиции.</p>{table}</div>", user_email)
+    style_rows = "".join(
+        f"""
+        <form method="post" action="/admin/catalog/styles" style="display:grid; grid-template-columns:1fr 90px 110px auto; gap:8px; align-items:end; margin:0 0 8px;">
+          <input type="hidden" name="style_id" value="{escape(str(style.get('id')))}">
+          <label>Название<input name="name" value="{escape(str(style.get('name') or ''))}" required></label>
+          <label>Порядок<input name="sort_order" type="number" value="{escape(str(style.get('sort_order') or 100))}"></label>
+          <label>Видимость<select name="is_visible"><option value="1" {'selected' if style.get('is_visible') else ''}>Показывать</option><option value="0" {'selected' if not style.get('is_visible') else ''}>Скрыть</option></select></label>
+          <button type="submit">Сохранить</button>
+        </form>
+        """
+        for style in beer_styles
+    ) or "<p class='muted'>Стили ещё не созданы.</p>"
+    styles_panel = f"""
+      <div class='card admin-catalog-card'>
+        <h3>Стили пива</h3>
+        <p class='muted'>Создайте управляемые группы каталога, задайте порядок и привяжите SKU ниже в таблице. В разделе Бизнес товары будут сгруппированы по видимым стилям.</p>
+        {style_rows}
+        <form method="post" action="/admin/catalog/styles" style="display:grid; grid-template-columns:1fr 90px 110px auto; gap:8px; align-items:end; margin-top:12px;">
+          <label>Новый стиль<input name="name" placeholder="IPA / Lager / Stout" required></label>
+          <label>Порядок<input name="sort_order" type="number" value="100"></label>
+          <label>Видимость<select name="is_visible"><option value="1" selected>Показывать</option><option value="0">Скрыть</option></select></label>
+          <button type="submit">Добавить стиль</button>
+        </form>
+      </div>
+    """
+    return page("Каталог", f"{notice}{styles_panel}<div class='card admin-catalog-card'><h3>Локальный каталог админки</h3><p class='muted'>SKU из МойСклад сначала попадают сюда. В публичный магазин попадают только опубликованные позиции.</p>{table}</div>", user_email)
 
 
 def moysklad_reference_select(name: str, label: str, options: list[dict[str, object]], selected_href: str | None) -> str:
