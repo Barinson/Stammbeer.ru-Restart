@@ -692,6 +692,7 @@ class CoreFoundationTest(unittest.TestCase):
                 "site_description": "Тестовое описание Stamm для поиска.",
                 "site_favicon_url": "/media/favicon.svg",
                 "site_og_image_url": "/media/og.jpg",
+                "site_yandex_metrika_id": "110732851",
                 "mobile_menu_icon_url": "/media/mobile-menu.svg",
                 "business_min_order_amount_minor": "2500000",
                 "business_guest_text": "Партнёрам — напишите на marketing@stammbeer.ru",
@@ -861,6 +862,10 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn('<meta name="robots" content="index,follow">', html)
         self.assertIn('<link rel="canonical" href="https://example.test/">', html)
         self.assertIn('<link rel="icon" type="image/svg+xml" href="/favicon.svg">', html)
+        self.assertEqual(html.count("mc.yandex.ru/metrika/tag.js?id=110732851"), 1)
+        self.assertIn("ym(110732851, 'init'", html)
+        self.assertIn('ecommerce:"dataLayer"', html)
+        self.assertIn("window.dataLayer = window.dataLayer || [];", html)
         self.assertIn('<meta property="og:title" content="Stamm Brewing — крафтовая пивоварня">', html)
         self.assertIn('<meta property="og:image" content="https://example.test/media/og.jpg">', html)
         self.assertIn('"@type":"BreadcrumbList"', html)
@@ -939,6 +944,12 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertNotIn("ageGate", html_for_customer)
         guest_html = business_guest_page(content)
         self.assertIn('<link rel="icon" type="image/svg+xml" href="/favicon.svg">', guest_html)
+        self.assertEqual(guest_html.count("mc.yandex.ru/metrika/tag.js?id=110732851"), 1)
+        self.assertEqual(business_storefront_page({**content, "viewer": {"is_customer": True}}).count("mc.yandex.ru/metrika/tag.js?id=110732851"), 1)
+        self.assertEqual(beer_page(content).count("mc.yandex.ru/metrika/tag.js?id=110732851"), 1)
+        self.assertEqual(gallery_page(content).count("mc.yandex.ru/metrika/tag.js?id=110732851"), 1)
+        self.assertEqual(contacts_page(content).count("mc.yandex.ru/metrika/tag.js?id=110732851"), 1)
+        self.assertNotIn("mc.yandex.ru/metrika/tag.js", home_page({**content, "site": {**content["site"], "site_yandex_metrika_id": ""}}))
         self.assertIn('"name":"Бизнес","item":"https://example.test/business"', guest_html)
         self.assertIn("Партнёрам — напишите на marketing@stammbeer.ru", guest_html)
         self.assertIn("min-height:100vh", guest_html)
@@ -1285,6 +1296,8 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("site_public_base_url", admin_content_html)
         self.assertIn("site_title", admin_content_html)
         self.assertIn("site_description", admin_content_html)
+        self.assertIn("site_yandex_metrika_id", admin_content_html)
+        self.assertIn("Yandex Metrika ID", admin_content_html)
         self.assertIn("site_favicon_file", admin_content_html)
         self.assertIn("Рекомендуемый размер — 120×120 px", admin_content_html)
         self.assertIn("site_og_image_file", admin_content_html)
@@ -1349,6 +1362,7 @@ class CoreFoundationTest(unittest.TestCase):
             field("site_public_base_url", "https://admin.example"),
             field("site_title", "Admin Stamm"),
             field("site_description", "Admin SEO description"),
+            field("site_yandex_metrika_id", "110732851"),
             field("site_favicon_url", ""),
             file_field("site_favicon_file", "favicon.svg", b"<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'></svg>"),
             field("site_og_image_url", ""),
@@ -1454,6 +1468,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertTrue(content["site"]["mobile_menu_icon_url"].startswith("/media/mobile-menu-"))
         self.assertEqual(content["site"]["site_public_base_url"], "https://admin.example")
         self.assertEqual(content["site"]["site_title"], "Admin Stamm")
+        self.assertEqual(content["site"]["site_yandex_metrika_id"], "110732851")
         self.assertTrue(content["site"]["maintenance_image_url"].startswith("/media/maintenance-"))
         self.assertEqual(content["site"]["maintenance_font_size_px"], "32")
         self.assertEqual(content["site"]["age_gate_text_font_weight"], "550")
