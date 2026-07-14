@@ -178,10 +178,8 @@ BASE_CSS = """
     body.mobile-nav-open .mobile-drawer__backdrop { opacity:1; }
     body.mobile-nav-open .mobile-drawer__panel { transform:translateX(0); }
     body > main { padding-top:var(--menu-offset,176px) !important; }
-    @media (max-width:920px) {
-      .home-content, .contacts-page, .beer-page, .gallery-page, .placeholder, .business-guest, .wrap { position:relative; isolation:isolate; background-image:none !important; background-color:var(--deep-hop); }
-      .home-content::before, .contacts-page::before, .beer-page::before, .gallery-page::before, .placeholder::before, .business-guest::before, .wrap::before { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; background-image:var(--mobile-fixed-bg, var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop)))); background-size:var(--mobile-fixed-bg-size, cover); background-position:var(--mobile-fixed-bg-position, center); background-repeat:no-repeat; transform:translateZ(0); }
-    }
+    .home-content, .contacts-page, .beer-page, .gallery-page, .placeholder, .business-guest, .wrap { position:relative; isolation:isolate; background-image:none !important; background-color:var(--deep-hop); }
+    .home-content::after, .contacts-page::after, .beer-page::after, .gallery-page::after, .placeholder::after, .business-guest::after, .wrap::after { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; background-image:var(--fixed-bg, var(--mobile-fixed-bg, var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))))); background-size:var(--fixed-bg-size, var(--mobile-fixed-bg-size, cover)); background-position:var(--fixed-bg-position, var(--mobile-fixed-bg-position, center)); background-repeat:no-repeat; transform:translateZ(0); }
     body.age-gate-pending { overflow:hidden; }
     .age-gate { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at 50% 25%, rgba(199,177,102,.16), transparent 30%), rgba(11,63,64,.96); backdrop-filter:blur(14px); }
     .age-gate.is-hidden { display:none; }

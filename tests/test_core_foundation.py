@@ -906,7 +906,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("padding-top:var(--menu-mobile-offset,var(--mobile-menu-offset)) !important", html)
         self.assertIn(".top-nav { position:fixed; align-items:center; flex-direction:row; flex-wrap:wrap", html)
         self.assertIn("backdrop-filter:blur(6px)", html)
-        self.assertIn(".home-content::before, .contacts-page::before, .beer-page::before", html)
+        self.assertIn(".home-content::after, .contacts-page::after, .beer-page::after", html)
         self.assertIn("position:fixed; inset:0; z-index:-1", html)
         self.assertIn("background-image:none !important", html)
         self.assertIn(".nav-links a { flex:1 1 max-content; min-width:max-content; text-align:center; }", html)
