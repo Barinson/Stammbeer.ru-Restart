@@ -71,9 +71,33 @@ def favicon_root_href(content: dict[str, Any] | None) -> tuple[str, str]:
     return "/favicon.ico", "image/x-icon"
 
 
+
+def yandex_metrika_counter(content: dict[str, Any] | None = None) -> str:
+    site_content = public_content_or_defaults(content)
+    site = site_content.get("site") or {}
+    counter_id = str(site.get("site_yandex_metrika_id", "")).strip()
+    if not counter_id.isdigit():
+        return ""
+    escaped_id = escape(counter_id)
+    return f"""
+  <!-- Yandex.Metrika counter -->
+  <script type="text/javascript">
+      window.dataLayer = window.dataLayer || [];
+      (function(m,e,t,r,i,k,a){{
+          m[i]=m[i]||function(){{(m[i].a=m[i].a||[]).push(arguments)}};
+          m[i].l=1*new Date();
+          for (var j = 0; j < document.scripts.length; j++) {{if (document.scripts[j].src === r) {{ return; }}}}
+          k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+      }})(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id={escaped_id}', 'ym');
+
+      ym({escaped_id}, 'init', {{ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true}});
+  </script>
+  <noscript><div><img src="https://mc.yandex.ru/watch/{escaped_id}" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+  <!-- /Yandex.Metrika counter -->"""
+
 def public_head(content: dict[str, Any] | None = None) -> str:
     href, mime_type = favicon_root_href(content)
-    return f'{PUBLIC_HEAD}\n  <link rel="icon" type="{escape(mime_type)}" href="{escape(href)}">'
+    return f'{PUBLIC_HEAD}\n  <link rel="icon" type="{escape(mime_type)}" href="{escape(href)}">{yandex_metrika_counter(content)}'
 
 
 def seo_head(content: dict[str, Any] | None, page_key: str, path: str, title: str | None = None, description: str | None = None, robots: str = "index,follow") -> str:
