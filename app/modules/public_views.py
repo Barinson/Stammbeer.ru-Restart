@@ -178,6 +178,10 @@ BASE_CSS = """
     body.mobile-nav-open .mobile-drawer__backdrop { opacity:1; }
     body.mobile-nav-open .mobile-drawer__panel { transform:translateX(0); }
     body > main { padding-top:var(--menu-offset,176px) !important; }
+    @media (max-width:920px) {
+      .home-content, .contacts-page, .beer-page, .gallery-page, .placeholder, .business-guest, .wrap { position:relative; isolation:isolate; background-image:none !important; background-color:var(--deep-hop); }
+      .home-content::before, .contacts-page::before, .beer-page::before, .gallery-page::before, .placeholder::before, .business-guest::before, .wrap::before { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; background-image:var(--mobile-fixed-bg, var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop)))); background-size:var(--mobile-fixed-bg-size, cover); background-position:var(--mobile-fixed-bg-position, center); background-repeat:no-repeat; transform:translateZ(0); }
+    }
     body.age-gate-pending { overflow:hidden; }
     .age-gate { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at 50% 25%, rgba(199,177,102,.16), transparent 30%), rgba(11,63,64,.96); backdrop-filter:blur(14px); }
     .age-gate.is-hidden { display:none; }
@@ -575,7 +579,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
     .home-logo-mark {{ width:94px; height:94px; border:2px solid rgba(199,177,102,.5); border-radius:999px; margin-bottom:28px; background:radial-gradient(circle, rgba(199,177,102,.28), transparent 58%); }}
     .home-title {{ margin:0; font-size:clamp(58px,13vw,var(--home-title-size)); line-height:.78; letter-spacing:.08em; color:var(--foam); font-weight:var(--home-title-weight); }}
     .home-subtitle {{ margin:var(--home-line-gap) 0 0; font-size:clamp(42px,10vw,var(--home-subtitle-size)); line-height:.8; letter-spacing:.08em; color:var(--golden-malt); font-weight:var(--home-subtitle-weight); }}
-    .home-content {{ position:relative; min-height:100vh; background-image:linear-gradient(180deg, rgba(16,88,89,.84), rgba(11,63,64,.9)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
+    .home-content {{ position:relative; min-height:100vh; --mobile-fixed-bg:linear-gradient(180deg, rgba(16,88,89,.84), rgba(11,63,64,.9)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); --mobile-fixed-bg-size:cover, cover; --mobile-fixed-bg-position:center, center; background-image:linear-gradient(180deg, rgba(16,88,89,.84), rgba(11,63,64,.9)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .home-content::before {{ content:""; position:absolute; inset:0; background:radial-gradient(circle at 20% 12%, rgba(199,177,102,.18), transparent 32%); pointer-events:none; }}
     .home-content > * {{ position:relative; z-index:1; }}
     .home-news {{ min-height:100vh; display:grid; place-items:center; padding:96px min(6vw,72px); background:transparent; }}
@@ -1060,7 +1064,7 @@ def contacts_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .contacts-page {{ min-height:calc(100vh - 88px); padding:104px min(6vw,72px) 64px; display:grid; place-items:start center; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
+    .contacts-page {{ min-height:calc(100vh - 88px); padding:104px min(6vw,72px) 64px; display:grid; place-items:start center; --mobile-fixed-bg:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); --mobile-fixed-bg-size:cover, cover; --mobile-fixed-bg-position:center, center; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .contacts-hero {{ width:min(100%,1040px); margin:0 auto; display:grid; grid-template-columns:1fr; gap:28px; align-items:start; justify-items:center; text-align:center; }}
     .contacts-card {{ background:var(--card-hop); border:1px solid rgba(199,177,102,.22); border-radius:24px; padding:28px; box-shadow:0 18px 44px rgba(0,0,0,.18); }}
     .contacts-info-card {{ width:min(760px,100%); border:0; background:transparent; box-shadow:none; padding:10px 0; justify-self:center; }}
@@ -1165,7 +1169,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .beer-page {{ min-height:calc(100vh - 88px); padding:120px min(6vw,72px) 72px; background-image:linear-gradient(180deg, rgba(16,88,89,.78), rgba(11,63,64,.86)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
+    .beer-page {{ min-height:calc(100vh - 88px); padding:120px min(6vw,72px) 72px; --mobile-fixed-bg:linear-gradient(180deg, rgba(16,88,89,.78), rgba(11,63,64,.86)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); --mobile-fixed-bg-size:cover, cover; --mobile-fixed-bg-position:center, center; background-image:linear-gradient(180deg, rgba(16,88,89,.78), rgba(11,63,64,.86)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .beer-shell {{ width:100%; max-width:1440px; margin:0 auto; display:grid; gap:{beer_section_gap}; justify-items:center; text-align:center; }}
     .beer-section {{ width:100%; display:grid; justify-items:center; }}
     .beer-section h1, .beer-section h2 {{ margin:0 0 12px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
@@ -1296,7 +1300,7 @@ def gallery_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .gallery-page {{ min-height:100vh; padding:calc(var(--menu-offset,176px) + 22px) min(5vw,64px) 84px; background-image:radial-gradient(circle at 18% 12%, rgba(199,177,102,.16), transparent 30%), linear-gradient(180deg, rgba(16,88,89,.9), rgba(11,63,64,.96)), var(--section-bg, linear-gradient(180deg, rgba(16,88,89,.96), rgba(11,63,64,.98))); background-size:auto, cover, cover; background-position:center; background-repeat:no-repeat; background-attachment:scroll, fixed, fixed; }}
+    .gallery-page {{ min-height:100vh; padding:calc(var(--menu-offset,176px) + 22px) min(5vw,64px) 84px; --mobile-fixed-bg:radial-gradient(circle at 18% 12%, rgba(199,177,102,.16), transparent 30%), linear-gradient(180deg, rgba(16,88,89,.9), rgba(11,63,64,.96)), var(--section-bg, linear-gradient(180deg, rgba(16,88,89,.96), rgba(11,63,64,.98))); --mobile-fixed-bg-size:auto, cover, cover; --mobile-fixed-bg-position:center, center, center; background-image:radial-gradient(circle at 18% 12%, rgba(199,177,102,.16), transparent 30%), linear-gradient(180deg, rgba(16,88,89,.9), rgba(11,63,64,.96)), var(--section-bg, linear-gradient(180deg, rgba(16,88,89,.96), rgba(11,63,64,.98))); background-size:auto, cover, cover; background-position:center; background-repeat:no-repeat; background-attachment:scroll, fixed, fixed; }}
     .gallery-shell {{ width:min(1440px,100%); margin:0 auto; }}
     .gallery-hero {{ max-width:820px; margin:0 auto 42px; text-align:center; }}
     .gallery-hero h1 {{ margin:0; color:var(--golden-malt); font-size:var(--stamm-page-title-font-size,42px); line-height:.95; text-transform:uppercase; letter-spacing:.08em; }}
@@ -1379,7 +1383,7 @@ def public_placeholder_page(title: str, active: str, content: dict[str, Any] | N
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .placeholder {{ min-height:54vh; display:grid; place-items:center; padding:96px min(6vw,72px) 72px; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
+    .placeholder {{ min-height:54vh; display:grid; place-items:center; padding:96px min(6vw,72px) 72px; --mobile-fixed-bg:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); --mobile-fixed-bg-size:cover, cover; --mobile-fixed-bg-position:center, center; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .placeholder__card {{ max-width:760px; background:var(--card-hop); border:1px solid rgba(199,177,102,.2); border-radius:24px; padding:30px; }}
     .placeholder__card h1 {{ margin:0 0 10px; color:var(--golden-malt); text-transform:uppercase; letter-spacing:.08em; font-size:var(--stamm-page-title-font-size,42px); }}
     .placeholder__card p {{ margin:0; color:rgba(246,241,227,.76); }}
@@ -1410,7 +1414,7 @@ def business_guest_page(content: dict[str, Any] | None = None) -> str:
 {BASE_CSS}
 {typography_style(site_content)}
     html, body {{ min-height:100%; background:var(--deep-hop); }}
-    .business-guest {{ min-height:100vh; padding:var(--menu-offset,176px) min(6vw,72px) 72px; display:grid; place-items:center; background-image:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:auto, cover, cover; background-position:center; background-repeat:no-repeat; background-attachment:scroll, fixed, fixed; }}
+    .business-guest {{ min-height:100vh; padding:var(--menu-offset,176px) min(6vw,72px) 72px; display:grid; place-items:center; --mobile-fixed-bg:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); --mobile-fixed-bg-size:auto, cover, cover; --mobile-fixed-bg-position:center, center, center; background-image:radial-gradient(circle at 24% 18%, rgba(199,177,102,.16), transparent 32%), linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:auto, cover, cover; background-position:center; background-repeat:no-repeat; background-attachment:scroll, fixed, fixed; }}
     .business-guest__message {{ max-width:620px; margin:0 auto; text-align:center; color:var(--foam); font-size:var(--business-guest-font-size); line-height:1.38; font-weight:var(--business-guest-font-weight); letter-spacing:.01em; white-space:pre-line; }}
     @media (max-width:720px) {{ .business-guest {{ padding:128px 18px 46px; background-size:auto, cover, cover; background-position:center, center, center; background-attachment:scroll, scroll, fixed; }} .business-guest__message {{ max-width:28rem; font-size:min(var(--business-guest-font-size), 22px); line-height:1.34; }} }}
     @media (max-width:420px) {{ .business-guest {{ padding-left:14px; padding-right:14px; }} .business-guest__message {{ font-size:min(var(--business-guest-font-size), 20px); }} }}
@@ -1436,7 +1440,7 @@ def business_storefront_page(content: dict[str, Any] | None = None) -> str:
   <style>
 {BASE_CSS}
 {typography_style(site_content)}
-    .wrap {{ min-height:100vh; padding:58px min(6vw,72px) 56px; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
+    .wrap {{ min-height:100vh; padding:58px min(6vw,72px) 56px; --mobile-fixed-bg:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); --mobile-fixed-bg-size:cover, cover; --mobile-fixed-bg-position:center, center; background-image:linear-gradient(135deg, rgba(16,88,89,.9), rgba(11,63,64,.94)), var(--section-bg, linear-gradient(135deg, var(--noble-hop), var(--deep-hop))); background-size:cover; background-position:center; background-repeat:no-repeat; background-attachment:fixed; }}
     .toolbar {{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:16px; align-items:center; margin-bottom:18px; }}
     .filters {{ display:flex; gap:10px; flex-wrap:wrap; }}
     .filter {{ border:1px solid rgba(199,177,102,.34); background:rgba(11,63,64,.55); color:var(--foam); padding:9px 15px; border-radius:999px; font-weight:600; cursor:pointer; }}
