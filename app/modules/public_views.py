@@ -1134,7 +1134,8 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_new_title") or "Новинки"))}</h3><div class="new-grid">{new_cards}</div></div>'
     core_gap_number = beer_can_gap_number(beer.get("beer_core_can_gap_px"), 16)
     seasonal_gap_number = beer_can_gap_number(beer.get("beer_seasonal_can_gap_px"), 16)
-    core_gap_style = f"--beer-can-gap:{core_gap_number}px;--beer-can-row-gap-total:{core_gap_number * 7}px;"
+    core_can_width = 100 + min(core_gap_number, 16) * 2
+    core_gap_style = f"--beer-can-gap:{core_gap_number}px;--beer-can-row-gap-total:{core_gap_number * 7}px;--beer-core-can-width:{core_can_width}px;"
     seasonal_gap_style = f"--beer-can-gap:{seasonal_gap_number}px;--beer-can-row-gap-total:{seasonal_gap_number * 7}px;"
     if is_enabled(beer.get("beer_core_is_visible"), True):
         products_inner += f'<div class="product-subsection"><h3>{escape(str(beer.get("beer_core_title") or "Постоянная линейка"))}</h3><div class="seasonal-grid beer-can-grid beer-can-grid--core" style="{core_gap_style}">{core_cards}</div></div>'
@@ -1184,6 +1185,7 @@ def beer_page(content: dict[str, Any] | None = None) -> str:
     .seasonal-grid {{ width:min(1180px,100%); display:flex; flex-wrap:wrap; justify-content:center; align-items:flex-end; gap:var(--beer-can-gap,16px); margin:0 auto; }}
     .beer-can {{ border:0; background:transparent; color:var(--foam); cursor:pointer; display:grid; justify-items:center; gap:10px; font:inherit; font-weight:800; transition:transform .18s ease; }}
     .seasonal-grid .beer-can {{ flex:0 0 calc((100% - var(--beer-can-row-gap-total,112px)) / 8); width:auto; max-width:132px; min-width:0; }}
+    .beer-can-grid--core .beer-can {{ flex-basis:var(--beer-core-can-width,128px); max-width:var(--beer-core-can-width,128px); }}
     .beer-can:hover {{ transform:scale(1.045); }}
     .beer-can img {{ width:100%; object-fit:contain; filter:drop-shadow(0 22px 28px rgba(0,0,0,.28)); }}
     .beer-can--featured img, .beer-can--featured .beer-can__fallback {{ max-height:360px; }}

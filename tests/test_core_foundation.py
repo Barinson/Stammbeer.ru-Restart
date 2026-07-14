@@ -1106,7 +1106,11 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("display:flex; flex-wrap:wrap; justify-content:center", html)
         self.assertIn("gap:var(--beer-can-gap,16px)", html)
         self.assertIn("flex:0 0 calc((100% - var(--beer-can-row-gap-total,112px)) / 8); width:auto; max-width:132px; min-width:0;", html)
-        self.assertIn('beer-can-grid--core" style="--beer-can-gap:22px;--beer-can-row-gap-total:154px;', html)
+        self.assertIn('beer-can-grid--core" style="--beer-can-gap:22px;--beer-can-row-gap-total:154px;--beer-core-can-width:132px;', html)
+        self.assertIn(".beer-can-grid--core .beer-can { flex-basis:var(--beer-core-can-width,128px); max-width:var(--beer-core-can-width,128px); }", html)
+        content["beer"]["beer_core_can_gap_px"] = "0"
+        zero_core_gap_html = beer_page(content)
+        self.assertIn('beer-can-grid--core" style="--beer-can-gap:0px;--beer-can-row-gap-total:0px;--beer-core-can-width:100px;', zero_core_gap_html)
         self.assertIn('beer-can-grid--seasonal" style="--beer-can-gap:28px;--beer-can-row-gap-total:196px;', html)
         self.assertIn(".seasonal-grid { width:min(100%,360px); display:flex; flex-wrap:wrap; justify-content:center; gap:8px 6px; }", html)
         self.assertIn(".seasonal-grid .beer-can { flex:0 0 calc((100% - 24px) / 5); width:auto; max-width:54px; min-width:0; }", html)
