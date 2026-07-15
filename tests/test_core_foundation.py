@@ -2668,10 +2668,10 @@ class CoreFoundationTest(unittest.TestCase):
             """
             INSERT INTO b2b_orders (
                 number, status, contact_name, company_name, inn, email, phone, city,
-                total_minor, currency, source_json, customer_account_id, counterparty_href
+                total_minor, currency, comment, source_json, customer_account_id, counterparty_href
             ) VALUES (
                 'B2B-LK-1', 'sent_to_moysklad', 'partner@example.com', 'ООО Штамм Партнёр',
-                '7701234567', 'partner@example.com', '—', '—', 1250000, 'RUB', '{}', ?, ?
+                '7701234567', 'partner@example.com', '—', '—', 1250000, 'RUB', 'Позвонить перед доставкой', '{}', ?, ?
             )
             """,
             (customer["id"], customer["counterparty_href"]),
@@ -2698,11 +2698,17 @@ class CoreFoundationTest(unittest.TestCase):
         page_html = urllib.request.urlopen(request, timeout=5).read().decode("utf-8")
         self.assertIn("ООО Штамм Партнёр", page_html)
         self.assertIn("История заказов", page_html)
-        self.assertIn("Заказ 1", page_html)
-        self.assertIn("max-height:420px; overflow-y:auto", page_html)
+        self.assertNotIn("Заказ 1", page_html)
+        self.assertIn('<details class="account-order">', page_html)
+        self.assertIn('class="account-order__summary"', page_html)
+        self.assertIn('class="account-order__chevron"', page_html)
+        self.assertIn("max-height:360px; overflow-y:auto", page_html)
         self.assertIn("overscroll-behavior:contain", page_html)
-        self.assertNotIn("B2B-LK-1", page_html)
+        self.assertIn("B2B-LK-1", page_html)
+        self.assertIn("Позвонить перед доставкой", page_html)
         self.assertIn("Stamm IPA банка", page_html)
+        self.assertIn("12 000 ₽", page_html)
+        self.assertIn("24 шт.", page_html)
         self.assertIn("Смена пароля", page_html)
         self.assertIn("Забыл пароль", page_html)
         self.assertIn("Выйти", page_html)
