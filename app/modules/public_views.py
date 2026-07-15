@@ -571,7 +571,7 @@ def home_page(content: dict[str, Any] | None = None) -> str:
 {BASE_CSS}
 {typography_style(site_content)}
     body.home-body > main {{ padding-top:var(--menu-offset,176px) !important; }}
-    .home-hero {{ min-height:100vh; display:grid; place-items:center; text-align:center; padding:104px min(6vw,72px) 72px; background:radial-gradient(circle at 50% 16%, rgba(199,177,102,.18), transparent 28%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
+    .home-hero {{ position:relative; z-index:2; min-height:100vh; display:grid; place-items:center; text-align:center; padding:104px min(6vw,72px) 72px; background:radial-gradient(circle at 50% 16%, rgba(199,177,102,.18), transparent 28%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }}
     .home-hero__inner {{ display:grid; justify-items:center; gap:0; }}
     .home-logo {{ max-width:154px; max-height:154px; object-fit:contain; margin-bottom:28px; }}
     .home-logo-mark {{ width:94px; height:94px; border:2px solid rgba(199,177,102,.5); border-radius:999px; margin-bottom:28px; background:radial-gradient(circle, rgba(199,177,102,.28), transparent 58%); }}

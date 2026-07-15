@@ -886,6 +886,7 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("min-height:100vh", html)
         self.assertIn("position:fixed", html)
         self.assertIn("max-width:154px", html)
+        self.assertIn(".home-hero { position:relative; z-index:2;", html)
         self.assertIn("--home-title-size:144px", html)
         self.assertIn("--home-title-weight:800", html)
         self.assertIn("--home-subtitle-size:96px", html)
