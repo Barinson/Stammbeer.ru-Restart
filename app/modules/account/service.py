@@ -369,7 +369,7 @@ def change_customer_password(conn: sqlite3.Connection, account_id: int, current_
 def list_customer_orders(conn: sqlite3.Connection, account_id: int, limit: int = 20) -> list[dict[str, Any]]:
     orders = conn.execute(
         """
-        SELECT id, number, status, total_minor, currency, created_at, external_order_href
+        SELECT id, number, status, comment, total_minor, currency, created_at, external_order_href
         FROM b2b_orders
         WHERE customer_account_id = ?
         ORDER BY created_at DESC, id DESC
@@ -403,6 +403,7 @@ def list_customer_orders(conn: sqlite3.Connection, account_id: int, limit: int =
             "id": order["id"],
             "number": order["number"],
             "status": order["status"],
+            "comment": order["comment"],
             "total_minor": order["total_minor"],
             "currency": order["currency"] or "RUB",
             "created_at": order["created_at"],

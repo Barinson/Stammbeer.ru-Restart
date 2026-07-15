@@ -618,10 +618,10 @@ def home_page(content: dict[str, Any] | None = None) -> str:
 </html>"""
 
 ACCOUNT_CSS = """
-    .account-shell { min-height:calc(100vh - 88px); padding:112px min(6vw,72px) 72px; background:radial-gradient(circle at 20% 20%, rgba(199,177,102,.14), transparent 30%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }
-    .account-card { width:min(760px,100%); margin:0 auto; padding:34px; border-radius:28px; background:rgba(13,75,76,.94); box-shadow:0 30px 90px rgba(0,0,0,.24); }
-    .account-card h1 { margin:0 0 10px; color:var(--golden-malt); font-size:var(--stamm-page-title-font-size,42px); line-height:.95; letter-spacing:.08em; text-transform:uppercase; }
-    .account-card p { color:rgba(246,241,227,.78); font-size:var(--stamm-lead-font-size,18px); line-height:1.5; }
+    .account-shell { min-height:calc(100vh - 88px); padding:96px min(5vw,56px) 56px; background:radial-gradient(circle at 20% 20%, rgba(199,177,102,.14), transparent 30%), linear-gradient(135deg, var(--noble-hop), var(--deep-hop)); }
+    .account-card { width:min(720px,100%); margin:0 auto; padding:26px; border-radius:24px; background:rgba(13,75,76,.94); box-shadow:0 24px 70px rgba(0,0,0,.22); }
+    .account-card h1 { margin:0 0 8px; color:var(--golden-malt); font-size:clamp(30px,5vw,38px); line-height:.96; letter-spacing:.08em; text-transform:uppercase; }
+    .account-card p { color:rgba(246,241,227,.78); font-size:16px; line-height:1.45; }
     .account-form { display:grid; gap:11px; margin-top:20px; }
     .account-form label { display:grid; gap:5px; color:rgba(246,241,227,.8); font-weight:600; font-size:12px; }
     .account-form input { width:100%; border:1px solid rgba(199,177,102,.32); border-radius:14px; padding:10px 12px; background:rgba(11,63,64,.82); color:var(--foam); font:inherit; font-size:14px; font-weight:400; }
@@ -635,24 +635,34 @@ ACCOUNT_CSS = """
     .account-link { color:var(--golden-malt); font-weight:800; text-decoration:none; }
     .account-message { margin-top:18px; border-radius:16px; padding:12px 14px; background:rgba(199,177,102,.14); color:var(--foam); }
     .account-message.is-error { background:rgba(115,33,33,.42); color:#ffe6df; }
-    .account-section { margin-top:28px; padding-top:22px; border-top:1px solid rgba(199,177,102,.16); }
-    .account-section h2 { margin:0 0 14px; color:var(--golden-malt); font-size:24px; line-height:1.05; letter-spacing:.04em; text-transform:uppercase; }
-    .account-details { display:grid; gap:12px; margin:26px 0; }
-    .account-detail { display:flex; justify-content:space-between; gap:18px; padding:14px 0; border-bottom:1px solid rgba(199,177,102,.16); color:rgba(246,241,227,.82); }
+    .account-section { margin-top:22px; padding-top:18px; border-top:1px solid rgba(199,177,102,.16); }
+    .account-section h2 { margin:0 0 10px; color:var(--golden-malt); font-size:20px; line-height:1.05; letter-spacing:.04em; text-transform:uppercase; }
+    .account-details { display:grid; gap:8px; margin:18px 0; }
+    .account-detail { display:flex; justify-content:space-between; gap:16px; padding:10px 0; border-bottom:1px solid rgba(199,177,102,.16); color:rgba(246,241,227,.82); }
     .account-detail strong { color:var(--foam); text-align:right; }
-    .account-orders { display:grid; gap:12px; max-height:420px; overflow-y:auto; padding-right:6px; overscroll-behavior:contain; scrollbar-color:rgba(199,177,102,.62) rgba(11,63,64,.34); }
-    .account-order { border:1px solid rgba(199,177,102,.18); border-radius:18px; padding:14px; background:rgba(11,63,64,.35); }
-    .account-order__head, .account-order__meta { display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; }
-    .account-order__head strong { color:var(--foam); }
-    .account-order__head span, .account-order__meta { color:rgba(246,241,227,.72); font-size:13px; }
-    .account-order ul { margin:10px 0 0; padding-left:18px; color:rgba(246,241,227,.78); }
+    .account-orders { display:grid; gap:8px; max-height:360px; overflow-y:auto; padding-right:4px; overscroll-behavior:contain; scrollbar-color:rgba(199,177,102,.62) rgba(11,63,64,.34); }
+    .account-order { border:1px solid rgba(199,177,102,.18); border-radius:16px; background:rgba(11,63,64,.35); overflow:hidden; }
+    .account-order__summary { list-style:none; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; padding:11px 12px; cursor:pointer; }
+    .account-order__summary::-webkit-details-marker { display:none; }
+    .account-order__summary-main { display:flex; gap:10px; align-items:center; flex-wrap:wrap; color:var(--foam); font-size:14px; font-weight:800; }
+    .account-order__summary-meta { display:flex; gap:8px; align-items:center; color:rgba(246,241,227,.74); font-size:12px; }
+    .account-order__chevron { color:var(--golden-malt); font-size:15px; transition:transform .16s ease; }
+    .account-order[open] .account-order__chevron { transform:rotate(180deg); }
+    .account-order__body { display:grid; gap:10px; padding:0 12px 12px; color:rgba(246,241,227,.82); font-size:13px; }
+    .account-order__fields { display:grid; gap:6px; }
+    .account-order__field { display:flex; justify-content:space-between; gap:12px; border-top:1px solid rgba(199,177,102,.12); padding-top:7px; }
+    .account-order__field strong { color:var(--foam); text-align:right; }
+    .account-order__comment { margin:0; padding:9px 10px; border-radius:12px; background:rgba(199,177,102,.1); color:var(--foam); white-space:pre-line; }
+    .account-order__items { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+    .account-order__items li { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:baseline; border-top:1px solid rgba(199,177,102,.12); padding-top:7px; }
+    .account-order__items small { color:rgba(246,241,227,.68); font-size:12px; }
     .account-empty { margin:0; color:rgba(246,241,227,.76); }
     .account-debug { margin:18px 0 24px; border-radius:18px; background:rgba(11,63,64,.42); padding:14px; }
     .account-debug summary { cursor:pointer; color:var(--golden-malt); font-weight:900; }
     .account-debug__rows { display:grid; gap:8px; margin:12px 0; }
     .account-debug__rows div { display:flex; justify-content:space-between; gap:16px; color:rgba(246,241,227,.72); }
     .account-debug pre { overflow:auto; max-height:260px; margin:0; color:rgba(246,241,227,.78); font-size:12px; white-space:pre-wrap; }
-    @media (max-width:680px) { .account-shell { padding:124px 14px 42px; } .account-card { padding:20px; border-radius:22px; } .account-card h1 { font-size:30px; } .account-card p { font-size:15px; } .account-section { margin-top:22px; padding-top:18px; } .account-section h2 { font-size:20px; } .account-detail { display:grid; gap:4px; padding:11px 0; } .account-detail strong { text-align:left; } .account-orders { max-height:340px; } }
+    @media (max-width:680px) { .account-shell { padding:116px 12px 36px; } .account-card { padding:18px; border-radius:20px; } .account-card h1 { font-size:28px; } .account-card p { font-size:14px; } .account-section { margin-top:18px; padding-top:16px; } .account-section h2 { font-size:18px; } .account-detail { display:grid; gap:4px; padding:9px 0; } .account-detail strong { text-align:left; } .account-orders { max-height:320px; } .account-order__summary { grid-template-columns:1fr; gap:6px; } .account-order__summary-meta { justify-content:space-between; } .account-order__items li { grid-template-columns:1fr auto; } .account-order__items small { grid-column:1 / -1; } }
 """
 
 
@@ -912,6 +922,62 @@ def account_date(value: object) -> str:
     return format_moscow_datetime(value)
 
 
+
+def account_quantity(value: object) -> str:
+    try:
+        number = float(value or 0)
+    except (TypeError, ValueError):
+        return str(value or 0)
+    return str(int(number)) if number.is_integer() else f"{number:g}"
+
+def account_status_label(value: object) -> str:
+    labels = {
+        "created": "создан",
+        "sent_to_moysklad": "отправлен",
+        "export_failed": "ошибка отправки",
+        "failed": "ошибка",
+        "completed": "завершён",
+        "cancelled": "отменён",
+    }
+    return labels.get(str(value or "").strip(), str(value or "—"))
+
+
+def account_order_card(order: dict[str, Any]) -> str:
+    items = order.get("items") or []
+    item_rows = "".join(
+        f"<li><span>{escape(str(item.get('name') or 'Позиция'))}</span>"
+        f"<small>{escape(account_quantity(item.get('quantity')))} шт.</small>"
+        f"<strong>{escape(account_money(item.get('line_total_minor'), order.get('currency')))}</strong></li>"
+        for item in items
+    ) or '<li><span>Состав заказа не сохранён</span><small>—</small><strong>—</strong></li>'
+    number = str(order.get("number") or "").strip()
+    number_html = f'<div class="account-order__field"><span>Номер заказа</span><strong>{escape(number)}</strong></div>' if number else ""
+    comment = str(order.get("comment") or "").strip()
+    comment_html = f'<p class="account-order__comment"><strong>Комментарий:</strong> {escape(comment)}</p>' if comment else '<p class="account-order__comment">Комментарий не оставлен.</p>'
+    status = account_status_label(order.get("status"))
+    return f"""
+            <details class="account-order">
+              <summary class="account-order__summary">
+                <span class="account-order__summary-main">
+                  <span>{escape(account_date(order.get('created_at')))}</span>
+                  <span>{escape(account_money(order.get('total_minor'), order.get('currency')))}</span>
+                </span>
+                <span class="account-order__summary-meta"><span>{escape(status)}</span><span class="account-order__chevron" aria-hidden="true">⌄</span></span>
+              </summary>
+              <div class="account-order__body">
+                <div class="account-order__fields">
+                  {number_html}
+                  <div class="account-order__field"><span>Дата и время</span><strong>{escape(account_date(order.get('created_at')))}</strong></div>
+                  <div class="account-order__field"><span>Статус</span><strong>{escape(status)}</strong></div>
+                  <div class="account-order__field"><span>Сумма</span><strong>{escape(account_money(order.get('total_minor'), order.get('currency')))}</strong></div>
+                </div>
+                <ul class="account-order__items">{item_rows}</ul>
+                {comment_html}
+              </div>
+            </details>
+            """
+
+
 def account_dashboard_page(
     customer: Any,
     content: dict[str, Any] | None = None,
@@ -928,21 +994,7 @@ def account_dashboard_page(
     elif password_result:
         notice = f'<div class="account-message">{escape(password_result)}</div>'
     if orders:
-        order_cards = "".join(
-            f"""
-            <article class="account-order">
-              <div class="account-order__head">
-                <strong>Заказ {index}</strong>
-                <span>{escape(account_date(order.get('created_at')))}</span>
-              </div>
-              <div class="account-order__meta">
-                <span>Сумма: {escape(account_money(order.get('total_minor'), order.get('currency')))}</span>
-              </div>
-              <ul>{''.join(f"<li>{escape(str(item.get('name') or 'Позиция'))} · {escape(str(item.get('quantity') or 0))} шт.</li>" for item in (order.get('items') or [])[:4])}</ul>
-            </article>
-            """
-            for index, order in enumerate(orders, start=1)
-        )
+        order_cards = "".join(account_order_card(order) for order in orders)
     else:
         order_cards = '<p class="account-empty">Заказов пока нет. Оформите первый заказ в разделе «Бизнес».</p>'
     discount = float(customer["discount_percent"] or 0)
