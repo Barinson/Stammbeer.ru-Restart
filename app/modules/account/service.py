@@ -264,8 +264,15 @@ def register_customer(conn: sqlite3.Connection, inn: str, email: str, password: 
 
     normalized_email = normalize_email(email)
     normalized_inn = normalize_inn(inn)
-    if _account_by_email(conn, normalized_email) is not None:
-        return RegistrationResult(False, "Этот e-mail уже зарегистрирован.")
+    existing_account = _account_by_email(conn, normalized_email)
+    if existing_account is not None:
+        if existing_account["status"] == "deleted":
+            conn.execute("DELETE FROM customer_sessions WHERE customer_account_id = ?", (existing_account["id"],))
+            conn.execute("UPDATE b2b_orders SET customer_account_id = NULL WHERE customer_account_id = ?", (existing_account["id"],))
+            conn.execute("DELETE FROM customer_accounts WHERE id = ?", (existing_account["id"],))
+            conn.commit()
+        else:
+            return RegistrationResult(False, "Этот e-mail уже зарегистрирован.")
 
     try:
         counterparty = _build_moysklad_client(conn).find_counterparty_by_inn(normalized_inn)
@@ -341,6 +348,76 @@ def authenticate_customer(conn: sqlite3.Connection, email: str, password: str, r
     return refresh_customer_discount(conn, refreshed, force=True)
 
 
+def change_customer_password(conn: sqlite3.Connection, account_id: int, current_password: str, new_password: str, password_confirm: str) -> tuple[bool, str]:
+    account = _account_by_id(conn, account_id)
+    if account is None or account["status"] != "active":
+        return False, "Аккаунт не найден или отключён."
+    if not verify_password(current_password, account["password_hash"]):
+        return False, "Текущий пароль указан неверно."
+    if len(new_password or "") < 8:
+        return False, "Новый пароль должен быть не короче 8 символов."
+    if new_password != password_confirm:
+        return False, "Новый пароль и подтверждение не совпадают."
+    conn.execute(
+        "UPDATE customer_accounts SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (hash_password(new_password), account_id),
+    )
+    conn.commit()
+    return True, "Пароль успешно изменён."
+
+
+def list_customer_orders(conn: sqlite3.Connection, account_id: int, limit: int = 20) -> list[dict[str, Any]]:
+    orders = conn.execute(
+        """
+        SELECT id, number, status, comment, total_minor, currency, created_at, external_order_href
+        FROM b2b_orders
+        WHERE customer_account_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+        """,
+        (account_id, limit),
+    ).fetchall()
+    result: list[dict[str, Any]] = []
+    for order in orders:
+        item_rows = conn.execute(
+            """
+            SELECT quantity, line_total_minor, product_snapshot_json
+            FROM b2b_order_items
+            WHERE order_id = ?
+            ORDER BY id ASC
+            """,
+            (order["id"],),
+        ).fetchall()
+        items: list[dict[str, Any]] = []
+        for item in item_rows:
+            try:
+                snapshot = json.loads(item["product_snapshot_json"] or "{}")
+            except json.JSONDecodeError:
+                snapshot = {}
+            items.append({
+                "name": str(snapshot.get("name") or "Позиция заказа"),
+                "quantity": item["quantity"],
+                "line_total_minor": item["line_total_minor"],
+            })
+        result.append({
+            "id": order["id"],
+            "number": order["number"],
+            "status": order["status"],
+            "comment": order["comment"],
+            "total_minor": order["total_minor"],
+            "currency": order["currency"] or "RUB",
+            "created_at": order["created_at"],
+            "external_order_href": order["external_order_href"],
+            "items": items,
+        })
+    return result
+
+
+def create_customer_account_by_admin(conn: sqlite3.Connection, inn: str, email: str, temporary_password: str) -> RegistrationResult:
+    """Create a B2B customer account from admin after validating the INN in MoySklad."""
+    return register_customer(conn, inn, email, temporary_password, temporary_password)
+
+
 def list_customer_accounts(conn: sqlite3.Connection, query: str | None = None) -> list[sqlite3.Row]:
     normalized = (query or "").strip().lower()
     if normalized:
@@ -359,10 +436,10 @@ def list_customer_accounts(conn: sqlite3.Connection, query: str | None = None) -
 
 
 def set_customer_account_status(conn: sqlite3.Connection, account_id: int, status: str) -> sqlite3.Row | None:
-    if status not in {"active", "disabled"}:
+    if status not in {"active", "suspended"}:
         raise ValueError("Недопустимый статус аккаунта.")
     conn.execute(
-        "UPDATE customer_accounts SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status != 'deleted'",
+        "UPDATE customer_accounts SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (status, account_id),
     )
     if status != "active":
@@ -371,14 +448,22 @@ def set_customer_account_status(conn: sqlite3.Connection, account_id: int, statu
     return _account_by_id(conn, account_id)
 
 
-def soft_delete_customer_account(conn: sqlite3.Connection, account_id: int) -> sqlite3.Row | None:
-    conn.execute(
-        "UPDATE customer_accounts SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        (account_id,),
-    )
+def delete_customer_account(conn: sqlite3.Connection, account_id: int) -> bool:
+    """Permanently delete a customer account while preserving detached order history."""
+    account = _account_by_id(conn, account_id)
+    if account is None:
+        return False
     conn.execute("DELETE FROM customer_sessions WHERE customer_account_id = ?", (account_id,))
+    conn.execute("UPDATE b2b_orders SET customer_account_id = NULL WHERE customer_account_id = ?", (account_id,))
+    conn.execute("DELETE FROM customer_accounts WHERE id = ?", (account_id,))
     conn.commit()
-    return _account_by_id(conn, account_id)
+    return True
+
+
+def soft_delete_customer_account(conn: sqlite3.Connection, account_id: int) -> sqlite3.Row | None:
+    """Backward-compatible alias: user deletion is now a hard delete."""
+    delete_customer_account(conn, account_id)
+    return None
 
 
 def create_customer_session(conn: sqlite3.Connection, account_id: int) -> str:
