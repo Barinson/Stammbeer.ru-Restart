@@ -26,7 +26,8 @@ def money_to_minor(value: Any) -> int | None:
 def infer_container_type(row: dict[str, Any]) -> str | None:
     text = " ".join(str(value or "") for value in (row.get("name"), row.get("article"), row.get("code"))).lower()
     compact = text.replace(" ", "").replace(",", ".")
-    return "can" if "0.45" in compact else "keg"
+    can_markers = ("банка", "can", "0.33", "0.45", "0.5л")
+    return "can" if any(marker in compact for marker in can_markers) else "keg"
 
 
 def extract_description(row: dict[str, Any]) -> str | None:
@@ -387,7 +388,7 @@ def folder_matches(row: dict[str, Any], allowed_folder_hrefs: set[str]) -> bool:
     return bool(folder_href and folder_href in allowed_folder_hrefs)
 
 
-def run_manual_catalog_sync(conn: sqlite3.Connection, user_id: int | None = None, diagnostic_mode: bool = False) -> dict[str, Any]:
+def run_manual_catalog_sync(conn: sqlite3.Connection, user_id: int | None = None, diagnostic_mode: bool = False, trigger_source: str = "manual", job_type: str = "manual_catalog") -> dict[str, Any]:
     settings = get_settings(conn)
     token = decode_token(settings["encrypted_token"])
     if not token:
@@ -401,9 +402,9 @@ def run_manual_catalog_sync(conn: sqlite3.Connection, user_id: int | None = None
     cursor = conn.execute(
         """
         INSERT INTO moysklad_sync_jobs (type, status, trigger_source, started_by_user_id, started_at, stats_json)
-        VALUES ('manual_catalog', 'running', 'manual', ?, ?, '{}')
+        VALUES (?, 'running', ?, ?, ?, '{}')
         """,
-        (user_id, now),
+        (job_type, trigger_source, user_id, now),
     )
     job_id = cursor.lastrowid
     conn.commit()
@@ -637,6 +638,14 @@ def run_manual_catalog_sync(conn: sqlite3.Connection, user_id: int | None = None
         )
         conn.execute(
             """
+            UPDATE moysklad_sync_settings
+            SET last_success_at = ?, last_error_at = NULL, last_known_good_job_id = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = 1
+            """,
+            (finished, job_id),
+        )
+        conn.execute(
+            """
             INSERT INTO moysklad_sync_logs (job_id, level, stage, entity_type, external_href, message, payload_excerpt_json)
             VALUES (?, 'info', 'manual_catalog_sync', 'assortment', ?, ?, ?)
             """,
@@ -647,18 +656,19 @@ def run_manual_catalog_sync(conn: sqlite3.Connection, user_id: int | None = None
                 json.dumps(stats, ensure_ascii=False),
             ),
         )
-        conn.execute(
-            """
-            INSERT INTO moysklad_sync_logs (job_id, level, stage, entity_type, external_href, message, payload_excerpt_json)
-            VALUES (?, 'info', 'stock_matching_debug', 'assortment', ?, ?, ?)
-            """,
-            (
-                job_id,
-                settings["source_product_folder_href"],
-                f"Stock matching diagnostics: {stats['stockMatched']} matched / {stats['missingStockRows']} missing",
-                json.dumps(diagnostic_sample, ensure_ascii=False),
-            ),
-        )
+        if diagnostic_mode:
+            conn.execute(
+                """
+                INSERT INTO moysklad_sync_logs (job_id, level, stage, entity_type, external_href, message, payload_excerpt_json)
+                VALUES (?, 'info', 'stock_matching_debug', 'assortment', ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    settings["source_product_folder_href"],
+                    f"Stock matching diagnostics: {stats['stockMatched']} matched / {stats['missingStockRows']} missing",
+                    json.dumps(diagnostic_sample, ensure_ascii=False),
+                ),
+            )
         if diagnostic_mode:
             conn.execute(
                 """
@@ -683,6 +693,14 @@ def run_manual_catalog_sync(conn: sqlite3.Connection, user_id: int | None = None
             WHERE id = ?
             """,
             (finished, str(exc), job_id),
+        )
+        conn.execute(
+            """
+            UPDATE moysklad_sync_settings
+            SET last_error_at = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = 1
+            """,
+            (finished,),
         )
         conn.execute(
             """
