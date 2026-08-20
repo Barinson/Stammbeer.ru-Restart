@@ -365,7 +365,17 @@ def admin_catalog_page(user_email: str, items: list[dict[str, object]], beer_sty
                 </form>
                 <small>{escape(str(item.get('beer_style_name') or 'Не задан'))}</small>
               </td>
-              <td>{escape(str(item.get('container_type') or '—'))}</td>
+              <td>
+                <form class="admin-catalog-container-form" method="post" action="/admin/catalog/container-assignment">
+                  <input type="hidden" name="product_id" value="{escape(str(item.get('id')))}">
+                  <select name="container_type">
+                    <option value="keg" {'selected' if (item.get('container_type_override') or item.get('container_type')) == 'keg' else ''}>Кег</option>
+                    <option value="can" {'selected' if (item.get('container_type_override') or item.get('container_type')) == 'can' else ''}>Банка</option>
+                  </select>
+                  <button type="submit">OK</button>
+                </form>
+                <small>{'Вручную' if item.get('container_type_override') else 'Автоопределение'}</small>
+              </td>
               <td>{escape(format_price_minor(item.get('price_minor'), item.get('currency')))}</td>
               <td>{escape(format_quantity(item.get('available_quantity') if item.get('available_quantity') is not None else item.get('stock_quantity')))} · {escape(str(item.get('availability_status') or ''))}<br><small>остаток {escape(format_quantity(item.get('latest_stock') if item.get('latest_stock') is not None else item.get('stock_quantity')))}, резерв {escape(format_quantity(item.get('latest_reserve')))}</small></td>
               <td>МойСклад<br><small>{escape(str(item.get('sync_state') or ''))}</small></td>

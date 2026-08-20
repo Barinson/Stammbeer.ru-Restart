@@ -26,6 +26,9 @@ CATALOG_COMPATIBILITY_COLUMNS: dict[str, dict[str, str]] = {
         "price_type_prices_json": "TEXT NOT NULL DEFAULT '{}'",
         "alcohol_percent": "REAL",
     },
+    "product_overrides": {
+        "container_type_override": "TEXT",
+    },
 }
 
 

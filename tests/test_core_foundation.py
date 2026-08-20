@@ -29,7 +29,7 @@ from app.modules.account.service import (
 from app.integrations.moysklad.settings_service import get_settings, refresh_integration_references, save_settings, serialize_settings
 from app.modules.email import service as email_service
 from app.main import StammApp, admin_b2b_orders, admin_stats
-from app.modules.catalog.service import admin_catalog_items, assign_product_beer_style, beer_styles, public_catalog, publish_product, save_beer_style
+from app.modules.catalog.service import admin_catalog_items, assign_product_beer_style, assign_product_container_type, beer_styles, public_catalog, publish_product, save_beer_style
 from app.modules.content.service import get_public_site_content, save_public_content
 from app.modules.admin.views import admin_catalog_page, b2b_orders_page
 from app.modules import public_views as public_views_module
@@ -661,12 +661,34 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertEqual(counterparty["discountDiagnostics"]["selectedPath"], "counterparty.salesDiscount")
         self.assertEqual(counterparty["discountDiagnostics"]["selectedValue"], 9.5)
 
-    def test_moysklad_container_inference_treats_only_045_skus_as_cans(self) -> None:
+    def test_moysklad_container_inference_recognizes_can_markers(self) -> None:
         self.assertEqual(infer_container_type({"name": "Stamm Pale Ale 0,45 can", "article": "PALE-CAN"}), "can")
         self.assertEqual(infer_container_type({"name": "Stamm Lager 0.45 банка", "article": "LAGER-CAN"}), "can")
+        self.assertEqual(infer_container_type({"name": "Urals Eclipse, банка 0,33л"}), "can")
         self.assertEqual(infer_container_type({"name": "Stamm Lager 10л (S)", "article": "LAGER-S"}), "keg")
         self.assertEqual(infer_container_type({"name": "Stamm IPA 20л (A)", "code": "IPA-A"}), "keg")
-        self.assertEqual(infer_container_type({"name": "Stamm IPA can", "code": "IPA-CAN"}), "keg")
+        self.assertEqual(infer_container_type({"name": "Stamm IPA can", "code": "IPA-CAN"}), "can")
+
+    def test_manual_container_override_drives_catalog_and_survives_auto_value_update(self) -> None:
+        app = self.make_app()
+        product_id = self.add_catalog_item(app, "Urals Eclipse, банка 0,33л", "keg", "urals-eclipse")
+        app.conn.execute("UPDATE products SET container_type = 'keg' WHERE id = ?", (product_id,))
+        assign_product_container_type(app.conn, product_id, "can")
+
+        admin_item = next(item for item in admin_catalog_items(app.conn) if item["id"] == product_id)
+        self.assertEqual(admin_item["container_type"], "keg")
+        self.assertEqual(admin_item["container_type_override"], "can")
+        self.assertEqual([item["productId"] for item in public_catalog(app.conn, "can")["items"]], [product_id])
+        self.assertEqual(public_catalog(app.conn, "keg")["items"], [])
+
+        # A later MoySklad sync may refresh the inferred source value, but never the override.
+        app.conn.execute("UPDATE products SET container_type = 'keg' WHERE id = ?", (product_id,))
+        app.conn.commit()
+        self.assertEqual(public_catalog(app.conn, "can")["items"][0]["containerType"], "can")
+        self.assertEqual(
+            app.conn.execute("SELECT container_type_override FROM product_overrides WHERE product_id = ?", (product_id,)).fetchone()[0],
+            "can",
+        )
 
     def test_public_content_settings_drive_home_and_navigation(self) -> None:
         app = self.make_app()
@@ -1166,6 +1188,9 @@ class CoreFoundationTest(unittest.TestCase):
         self.assertIn("Стили пива", html)
         self.assertIn("/admin/catalog/styles", html)
         self.assertIn("/admin/catalog/style-assignment", html)
+        self.assertIn("/admin/catalog/container-assignment", html)
+        self.assertIn('option value="can" selected>Банка</option>', html)
+        self.assertIn("Автоопределение", html)
         self.assertIn("IPA · #2", html)
         self.assertIn("value='7' selected", html)
 

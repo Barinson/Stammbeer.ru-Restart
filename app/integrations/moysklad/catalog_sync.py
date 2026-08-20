@@ -26,7 +26,8 @@ def money_to_minor(value: Any) -> int | None:
 def infer_container_type(row: dict[str, Any]) -> str | None:
     text = " ".join(str(value or "") for value in (row.get("name"), row.get("article"), row.get("code"))).lower()
     compact = text.replace(" ", "").replace(",", ".")
-    return "can" if "0.45" in compact else "keg"
+    has_can_marker = bool(re.search(r"(?:\bcan\b|банк(?:а|и|у|ой|е)\b)", text, flags=re.IGNORECASE))
+    return "can" if "0.45" in compact or has_can_marker else "keg"
 
 
 def extract_description(row: dict[str, Any]) -> str | None:

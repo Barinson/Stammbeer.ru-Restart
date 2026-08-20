@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 import json
+import re
 
 CONTAINER_LABELS = {
     "keg": "Кеги",
@@ -39,9 +40,13 @@ def business_min_order_amount_minor(value: object | None = None) -> int:
 
 
 def normalize_business_container_type(container_type: object = None, *source_values: object) -> str:
-    text = " ".join(str(value or "") for value in (container_type, *source_values)).lower()
+    normalized = str(container_type or "").strip().lower()
+    if normalized in CONTAINER_LABELS:
+        return normalized
+    text = " ".join(str(value or "") for value in source_values).lower()
     compact = text.replace(" ", "").replace(",", ".")
-    return "can" if "0.45" in compact else "keg"
+    has_can_marker = bool(re.search(r"(?:\bcan\b|банк(?:а|и|у|ой|е)\b)", text, flags=re.IGNORECASE))
+    return "can" if "0.45" in compact or has_can_marker else "keg"
 
 
 def order_rules_for_container(container_type: str, min_quantity: object = None, order_step: object = None) -> dict[str, int]:
@@ -159,7 +164,7 @@ def sync_business_catalog_read_model(conn: sqlite3.Connection) -> None:
             coalesce((SELECT keep.price_minor FROM business_catalog_items AS keep WHERE keep.product_id = products.id ORDER BY keep.id LIMIT 1), products.price_minor),
             coalesce((SELECT keep.price_type_prices_json FROM business_catalog_items AS keep WHERE keep.product_id = products.id ORDER BY keep.id LIMIT 1), products.price_type_prices_json),
             products.currency,
-            products.container_type,
+            coalesce(product_overrides.container_type_override, products.container_type),
             products.volume_liters,
             products.alcohol_percent,
             products.availability_status,
@@ -456,6 +461,7 @@ def admin_catalog_items(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             products.article,
             products.code,
             products.container_type,
+            product_overrides.container_type_override,
             products.volume_liters,
             products.price_minor,
             products.currency,
@@ -545,6 +551,32 @@ def assign_product_beer_style(conn: sqlite3.Connection, product_id: int, style_i
             updated_at = CURRENT_TIMESTAMP
         """,
         (product_id, public_name, slug, is_published, normalized_style_id),
+    )
+    sync_business_catalog_read_model(conn)
+    conn.commit()
+
+
+def assign_product_container_type(conn: sqlite3.Connection, product_id: int, container_type: object) -> None:
+    """Persist an administrator-selected container type independently of sync data."""
+    product = conn.execute("SELECT id, accounting_name FROM products WHERE id = ?", (product_id,)).fetchone()
+    if product is None:
+        raise ValueError("Product not found")
+    normalized = str(container_type or "").strip().lower()
+    if normalized not in CONTAINER_LABELS:
+        raise ValueError("Неизвестный тип тары.")
+    existing = conn.execute("SELECT * FROM product_overrides WHERE product_id = ?", (product_id,)).fetchone()
+    public_name = existing["public_name"] if existing and existing["public_name"] else product["accounting_name"]
+    slug = existing["slug"] if existing and existing["slug"] else f"product-{product_id}"
+    is_published = int(existing["is_published"]) if existing else 0
+    conn.execute(
+        """
+        INSERT INTO product_overrides (product_id, public_name, slug, is_published, container_type_override)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(product_id) DO UPDATE SET
+            container_type_override = excluded.container_type_override,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (product_id, public_name, slug, is_published, normalized),
     )
     sync_business_catalog_read_model(conn)
     conn.commit()

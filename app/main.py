@@ -28,7 +28,7 @@ from app.integrations.moysklad.settings_service import (
 )
 from app.modules.admin.views import admin_catalog_page, b2b_orders_page, content_management_page, customer_accounts_page, dashboard, email_management_page, login_page, moysklad_settings_page, page, placeholder, profile_page
 from app.modules.b2b.service import send_order_to_moysklad
-from app.modules.catalog.service import admin_catalog_items, assign_product_beer_style, beer_styles, business_min_order_amount_minor, public_catalog, publish_product, save_beer_style
+from app.modules.catalog.service import admin_catalog_items, assign_product_beer_style, assign_product_container_type, beer_styles, business_min_order_amount_minor, public_catalog, publish_product, save_beer_style
 from app.modules.account.service import (
     DiscountRefreshError,
     authenticate_customer,
@@ -1060,6 +1060,17 @@ class StammApp:
                     try:
                         assign_product_beer_style(app.conn, int(form.get("product_id", "0")), form.get("beer_style_id"))
                         self.redirect("/admin/catalog?result=" + urllib.parse.quote("Стиль SKU обновлён"))
+                    except Exception as exc:
+                        self.redirect("/admin/catalog?error=" + urllib.parse.quote(str(exc)))
+                    return
+                if path == "/admin/catalog/container-assignment":
+                    user = self.require_admin()
+                    if user is None:
+                        return
+                    form = self.read_form()
+                    try:
+                        assign_product_container_type(app.conn, int(form.get("product_id", "0")), form.get("container_type"))
+                        self.redirect("/admin/catalog?result=" + urllib.parse.quote("Тип тары SKU обновлён"))
                     except Exception as exc:
                         self.redirect("/admin/catalog?error=" + urllib.parse.quote(str(exc)))
                     return
