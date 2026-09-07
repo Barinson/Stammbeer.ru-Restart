@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 from app.integrations.moysklad.client import MoyskladClient, normalize_api_reference
 from app.integrations.moysklad.settings_service import decode_token, get_settings
@@ -130,17 +132,25 @@ def image_url_from_image_payload(payload: Any) -> str | None:
         if isinstance(nested, dict):
             url = nested.get("downloadHref") or nested.get("href")
             if url:
-                return str(url)
+                return valid_image_url(url)
     for key in ("downloadHref", "href", "url", "imageUrl"):
         if payload.get(key):
-            return str(payload[key])
+            return valid_image_url(payload[key])
     return None
+
+
+def valid_image_url(value: Any) -> str | None:
+    url = str(value or "").strip()
+    parsed = urlsplit(url)
+    return url if parsed.scheme in {"http", "https"} and bool(parsed.netloc) else None
 
 
 def extract_image_url(row: dict[str, Any]) -> str | None:
     for key in ("imageUrl", "image_url", "picture", "photo"):
         if row.get(key):
-            return str(row[key])
+            url = valid_image_url(row[key])
+            if url:
+                return url
     image = row.get("image")
     if isinstance(image, dict):
         url = image_url_from_image_payload(image)
@@ -157,18 +167,44 @@ def extract_image_url(row: dict[str, Any]) -> str | None:
     return None
 
 
-def product_image_url(client: MoyskladClient, row: dict[str, Any], reference: dict[str, Any]) -> str | None:
+@dataclass(frozen=True)
+class ImageResolution:
+    url: str | None
+    status: str
+    error: str | None = None
+
+
+def resolve_product_image(client: MoyskladClient, row: dict[str, Any], reference: dict[str, Any]) -> ImageResolution:
     embedded = extract_image_url(row)
     if embedded:
-        return embedded
-    try:
-        for image in client.fetch_assortment_images(reference["href"]):
+        return ImageResolution(embedded, "resolved")
+
+    image_hrefs = [reference["href"]]
+    # An assortment variant generally has no image of its own: MoySklad keeps it
+    # on the parent product. Do not let that empty variant response clear the SKU.
+    parent_href = (((row.get("product") or {}).get("meta") or {}).get("href"))
+    if parent_href and parent_href not in image_hrefs:
+        image_hrefs.append(parent_href)
+
+    errors: list[str] = []
+    for image_href in image_hrefs:
+        try:
+            images = client.fetch_assortment_images(image_href)
+        except Exception as exc:
+            errors.append(f"{image_href}: {exc}")
+            continue
+        for image in images:
             url = image_url_from_image_payload(image)
             if url:
-                return url
-    except Exception:
-        return None
-    return None
+                return ImageResolution(url, "resolved")
+    if errors:
+        return ImageResolution(None, "fetch_failed", "; ".join(errors))
+    return ImageResolution(None, "missing")
+
+
+def product_image_url(client: MoyskladClient, row: dict[str, Any], reference: dict[str, Any]) -> str | None:
+    """Compatibility helper for callers that only need the resolved URL."""
+    return resolve_product_image(client, row, reference).url
 
 def number_value(value: Any) -> float:
     try:
@@ -497,12 +533,13 @@ def run_manual_catalog_sync(conn: sqlite3.Connection, user_id: int | None = None
             price_type_prices_json = json.dumps(sale_prices, ensure_ascii=False)
             container_type = infer_container_type(row)
             folder_href = product_folder_href(row)
-            image_url = product_image_url(client, row, reference)
+            image_resolution = resolve_product_image(client, row, reference)
+            image_url = image_resolution.url
             description = extract_description(priced_row)
             alcohol_percent = extract_alcohol_percent(description)
             if image_url:
                 stats["imagesResolved"] += 1
-            existing = conn.execute("SELECT id FROM products WHERE external_href = ?", (href,)).fetchone()
+            existing = conn.execute("SELECT id, image_url FROM products WHERE external_href = ?", (href,)).fetchone()
             if existing:
                 product_id = existing["id"]
                 stats["updated"] += 1
@@ -510,7 +547,7 @@ def run_manual_catalog_sync(conn: sqlite3.Connection, user_id: int | None = None
                     """
                     UPDATE products
                     SET external_id = ?, accounting_name = ?, code = ?, article = ?, external_code = ?,
-                        container_type = ?, price_minor = ?, currency = 'RUB', price_type_prices_json = ?, stock_quantity = ?, image_url = ?,
+                        container_type = ?, price_minor = ?, currency = 'RUB', price_type_prices_json = ?, stock_quantity = ?, image_url = coalesce(?, image_url),
                         description = ?, alcohol_percent = ?, availability_status = ?, source_store_href = ?, source_folder_href = ?, sync_state = 'active',
                         sync_updated_at = ?, last_synced_at = ?
                     WHERE id = ?
@@ -521,6 +558,16 @@ def run_manual_catalog_sync(conn: sqlite3.Connection, user_id: int | None = None
                         settings["store_href"], folder_href, row.get("updated"), now, product_id,
                     ),
                 )
+                if image_url and image_url != existing["image_url"]:
+                    image_message = "catalog sync: image updated"
+                elif not image_url and existing["image_url"]:
+                    image_message = (
+                        "catalog sync: image fetch failed, previous image preserved"
+                        if image_resolution.status == "fetch_failed"
+                        else "catalog sync: image preserved because incoming image missing"
+                    )
+                else:
+                    image_message = None
             else:
                 stats["created"] += 1
                 cursor = conn.execute(
@@ -544,6 +591,31 @@ def run_manual_catalog_sync(conn: sqlite3.Connection, user_id: int | None = None
                     VALUES (?, ?, ?, 0)
                     """,
                     (product_id, row.get("name") or reference["name"], f"product-{product_id}"),
+                )
+                image_message = None
+            if image_message:
+                conn.execute(
+                    """
+                    INSERT INTO moysklad_sync_logs
+                        (job_id, level, stage, entity_type, external_href, message, payload_excerpt_json)
+                    VALUES (?, ?, 'catalog_image', 'assortment', ?, ?, ?)
+                    """,
+                    (
+                        job_id,
+                        "warning" if image_resolution.status == "fetch_failed" else "info",
+                        href,
+                        image_message,
+                        json.dumps(
+                            {
+                                "productId": product_id,
+                                "incomingImageUrl": image_url,
+                                "previousImageUrl": existing["image_url"] if existing else None,
+                                "resolution": image_resolution.status,
+                                "error": image_resolution.error,
+                            },
+                            ensure_ascii=False,
+                        ),
+                    ),
                 )
             conn.execute(
                 """
