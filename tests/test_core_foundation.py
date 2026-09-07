@@ -2124,12 +2124,15 @@ class CoreFoundationTest(unittest.TestCase):
         app.conn.commit()
         original_urlopen = urllib.request.urlopen
         stock_urls: list[str] = []
+        assortment_requests = 0
 
         def fake_urlopen(request, timeout=0):
+            nonlocal assortment_requests
             if "/entity/productfolder" in request.full_url:
                 payload = {"rows": [{"id": "folder-1", "name": "Пиво", "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1"}}]}
                 return FakeMoyskladResponse(json.dumps(payload).encode("utf-8"))
             if "/entity/assortment" in request.full_url:
+                assortment_requests += 1
                 payload = {
                     "rows": [
                         {
@@ -2141,7 +2144,7 @@ class CoreFoundationTest(unittest.TestCase):
                             "updated": "2026-06-01T08:00:00Z",
                             "meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/product/sku-1"},
                             "productFolder": {"meta": {"href": "https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1"}},
-                            "images": {"rows": [{"miniature": {"downloadHref": "https://cdn.example.test/moysklad/ipa-mini.jpg"}}]},
+                            "images": {"rows": [{"miniature": {"downloadHref": "https://cdn.example.test/moysklad/ipa-mini.jpg"}}]} if assortment_requests == 1 else None,
                         },
                         {
                             "id": "sku-zero",
@@ -2182,6 +2185,8 @@ class CoreFoundationTest(unittest.TestCase):
                     ],
                 }
                 return FakeMoyskladResponse(json.dumps(payload).encode("utf-8"))
+            if "/entity/product/sku-1/images" in request.full_url:
+                raise urllib.error.URLError("temporary image endpoint failure")
             if "/report/stock/bystore" in request.full_url:
                 stock_urls.append(request.full_url)
                 payload = {
@@ -2278,7 +2283,13 @@ class CoreFoundationTest(unittest.TestCase):
             publish_product(app.conn, unavailable_id, True)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 1)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_jobs WHERE status = 'success'").fetchone()[0], 2)
-        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_logs").fetchone()[0], 4)
+        self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM moysklad_sync_logs").fetchone()[0], 5)
+        image_log = app.conn.execute(
+            "SELECT level, message, payload_excerpt_json FROM moysklad_sync_logs WHERE stage = 'catalog_image'"
+        ).fetchone()
+        self.assertEqual(image_log["level"], "warning")
+        self.assertEqual(image_log["message"], "catalog sync: image fetch failed, previous image preserved")
+        self.assertEqual(json.loads(image_log["payload_excerpt_json"])["resolution"], "fetch_failed")
 
         publish_product(app.conn, products[0]["id"], True)
         self.assertEqual(app.conn.execute("SELECT COUNT(*) FROM business_catalog_items").fetchone()[0], 1)
